@@ -1,0 +1,1207 @@
+2025-12-10 20:43:17,078 [INFO] pdf_processor - Iniciando processamento em lote de PDFs na pasta NOVAS_NOTAS...
+2025-12-10 20:43:17,079 [INFO] pdf_processor - Conectando ao banco de dados (Neon)...
+2025-12-10 20:43:18,628 [INFO] pdf_processor - Conexão com o banco estabelecida.
+2025-12-10 20:43:18,629 [INFO] pdf_processor - Garantindo existência das tabelas 'produtos' e 'historico_precos'...
+2025-12-10 20:43:19,338 [INFO] pdf_processor - Tabelas verificadas/criadas com sucesso.
+2025-12-10 20:43:19,339 [INFO] pdf_processor - Configurando modelo Gemini (PDF)...
+2025-12-10 20:43:19,340 [INFO] pdf_processor - Modelo Gemini configurado.
+2025-12-10 20:43:19,343 [INFO] pdf_processor - 7 arquivo(s) PDF encontrado(s) para processamento.
+2025-12-10 20:43:19,344 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '0857aad6-3d3b-4a74-901d-723f59fbc2a5.pdf'.
+2025-12-10 20:43:19,345 [INFO] pdf_processor - Extraindo dados do PDF: 0857aad6-3d3b-4a74-901d-723f59fbc2a5.pdf
+2025-12-10 20:43:19,346 [WARNING] pdf_processor - Não há rotina genérica de extração para o PDF '0857aad6-3d3b-4a74-901d-723f59fbc2a5.pdf'. Por enquanto, apenas o template é suportado.
+2025-12-10 20:43:19,347 [ERROR] pdf_processor - Nenhum item extraído do PDF '0857aad6-3d3b-4a74-901d-723f59fbc2a5.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 20:43:19,348 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '22e27403-ec6d-43b9-ae73-6360eb513051.pdf'.
+2025-12-10 20:43:19,349 [INFO] pdf_processor - Extraindo dados do PDF: 22e27403-ec6d-43b9-ae73-6360eb513051.pdf
+2025-12-10 20:43:19,349 [WARNING] pdf_processor - Não há rotina genérica de extração para o PDF '22e27403-ec6d-43b9-ae73-6360eb513051.pdf'. Por enquanto, apenas o template é suportado.
+2025-12-10 20:43:19,350 [ERROR] pdf_processor - Nenhum item extraído do PDF '22e27403-ec6d-43b9-ae73-6360eb513051.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 20:43:19,351 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '26d9b595-8e2e-46ef-b73f-295450268c74.pdf'.
+2025-12-10 20:43:19,352 [INFO] pdf_processor - Extraindo dados do PDF: 26d9b595-8e2e-46ef-b73f-295450268c74.pdf
+2025-12-10 20:43:19,352 [WARNING] pdf_processor - Não há rotina genérica de extração para o PDF '26d9b595-8e2e-46ef-b73f-295450268c74.pdf'. Por enquanto, apenas o template é suportado.
+2025-12-10 20:43:19,353 [ERROR] pdf_processor - Nenhum item extraído do PDF '26d9b595-8e2e-46ef-b73f-295450268c74.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 20:43:19,354 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf'.
+2025-12-10 20:43:19,355 [INFO] pdf_processor - Extraindo dados do PDF: 30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf
+2025-12-10 20:43:19,355 [WARNING] pdf_processor - Não há rotina genérica de extração para o PDF '30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf'. Por enquanto, apenas o template é suportado.
+2025-12-10 20:43:19,356 [ERROR] pdf_processor - Nenhum item extraído do PDF '30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 20:43:19,357 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf'.
+2025-12-10 20:43:19,357 [INFO] pdf_processor - Extraindo dados do PDF: 457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf
+2025-12-10 20:43:19,358 [WARNING] pdf_processor - Não há rotina genérica de extração para o PDF '457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf'. Por enquanto, apenas o template é suportado.
+2025-12-10 20:43:19,359 [ERROR] pdf_processor - Nenhum item extraído do PDF '457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 20:43:19,360 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf'.
+2025-12-10 20:43:19,360 [INFO] pdf_processor - Extraindo dados do PDF: 7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf
+2025-12-10 20:43:19,361 [WARNING] pdf_processor - Não há rotina genérica de extração para o PDF '7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf'. Por enquanto, apenas o template é suportado.
+2025-12-10 20:43:19,362 [ERROR] pdf_processor - Nenhum item extraído do PDF '7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 20:43:19,363 [INFO] pdf_processor - Iniciando processamento do arquivo PDF 'f38065b0-5aa4-4488-880d-5328fa82280b.pdf'.
+2025-12-10 20:43:19,363 [INFO] pdf_processor - Extraindo dados do PDF: f38065b0-5aa4-4488-880d-5328fa82280b.pdf
+2025-12-10 20:43:19,364 [WARNING] pdf_processor - Não há rotina genérica de extração para o PDF 'f38065b0-5aa4-4488-880d-5328fa82280b.pdf'. Por enquanto, apenas o template é suportado.
+2025-12-10 20:43:19,365 [ERROR] pdf_processor - Nenhum item extraído do PDF 'f38065b0-5aa4-4488-880d-5328fa82280b.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 20:43:19,366 [INFO] pdf_processor - Processo concluído. Arquivos processados com sucesso: 0.
+2025-12-10 20:43:19,368 [INFO] pdf_processor - Conexão com o banco encerrada.
+2025-12-10 20:47:07,525 [INFO] pdf_processor - Iniciando processamento em lote de PDFs na pasta NOVAS_NOTAS...
+2025-12-10 20:47:07,526 [INFO] pdf_processor - Conectando ao banco de dados (Neon)...
+2025-12-10 20:47:08,712 [INFO] pdf_processor - Conexão com o banco estabelecida.
+2025-12-10 20:47:08,713 [INFO] pdf_processor - Garantindo existência das tabelas 'produtos' e 'historico_precos'...
+2025-12-10 20:47:09,392 [INFO] pdf_processor - Tabelas verificadas/criadas com sucesso.
+2025-12-10 20:47:09,393 [INFO] pdf_processor - Configurando modelo Gemini (PDF)...
+2025-12-10 20:47:09,394 [INFO] pdf_processor - Modelo Gemini configurado.
+2025-12-10 20:47:09,396 [INFO] pdf_processor - 7 arquivo(s) PDF encontrado(s) para processamento.
+2025-12-10 20:47:09,398 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '0857aad6-3d3b-4a74-901d-723f59fbc2a5.pdf'.
+2025-12-10 20:47:09,399 [INFO] pdf_processor - Extraindo dados do PDF: 0857aad6-3d3b-4a74-901d-723f59fbc2a5.pdf
+2025-12-10 20:48:39,975 [INFO] pdf_processor - Dados gerais extraídos - Mercado: ATACADAO DIA A DIA S.A | Data: 2025-01-14
+2025-12-10 20:48:40,361 [INFO] pdf_processor - IA analisando produto: 'LING CHURR SUPER FRANGO CBACON 800G'
+2025-12-10 20:48:49,650 [INFO] pdf_processor - Produto 'LING CHURR SUPER FRANGO CQUEIJO 800G' (ID=789804) já existia no banco.
+2025-12-10 20:48:50,330 [INFO] pdf_processor - Produto 'LING CHURR SUPER FRANGO CBACON 800G' (ID=789804) já existia no banco.
+2025-12-10 20:48:51,012 [INFO] pdf_processor - IA analisando produto: 'PAO DE QUEIJO FAMILIA MINEIRA TRAD 800G'
+2025-12-10 20:48:59,069 [INFO] pdf_processor - Produto 'FILEZINHO SASSAMI SUPER FRANGO IQF 1KG' (ID=789804) já existia no banco.
+2025-12-10 20:48:59,749 [INFO] pdf_processor - Produto 'FILEZINHO SASSAMI SUPER FRANGO IQF 1KG' (ID=789804) já existia no banco.
+2025-12-10 20:49:00,431 [INFO] pdf_processor - IA analisando produto: 'JARDINEIRA CMILHO CONG DEMARCHI 1,02KG'
+2025-12-10 20:49:04,835 [INFO] pdf_processor - IA analisando produto: 'SOBRECOXA SEARA PCT ZIP 1KG'
+2025-12-10 20:49:16,906 [INFO] pdf_processor - IA analisando produto: 'MORTADELA OURO PERDIGAO FAT 200G'
+2025-12-10 20:49:23,543 [INFO] pdf_processor - IA analisando produto: 'QJO MUSS IMBAUBA FAT 400G'
+2025-12-10 20:49:29,759 [INFO] pdf_processor - Produto 'MINI CHICKEN PERDIGAO 1KG ORIG' (ID=789151) já existia no banco.
+2025-12-10 20:49:30,439 [INFO] pdf_processor - IA analisando produto: 'BATATA CONG UAI 2KG'
+2025-12-10 20:49:30,701 [WARNING] pdf_processor - Erro na IA para 'BATATA CONG UAI 2KG': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 29.584509241s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 29
+}
+]. Usando fallback.
+2025-12-10 20:49:31,901 [INFO] pdf_processor - IA analisando produto: 'IOG TREVINHO 1,100G MOR'
+2025-12-10 20:49:38,647 [INFO] pdf_processor - IA analisando produto: 'FR LITTLE BABY PANTS HIPER L48 P44 XG'
+2025-12-10 20:49:38,919 [WARNING] pdf_processor - Erro na IA para 'FR LITTLE BABY PANTS HIPER L48 P44 XG': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 21.374005276s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 21
+}
+]. Usando fallback.
+2025-12-10 20:49:40,109 [INFO] pdf_processor - IA analisando produto: 'PAPEL HIG COTTON FD 30M L12 P11'
+2025-12-10 20:49:40,371 [WARNING] pdf_processor - Erro na IA para 'PAPEL HIG COTTON FD 30M L12 P11': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 19.917559079s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 19
+}
+]. Usando fallback.
+2025-12-10 20:49:41,560 [INFO] pdf_processor - IA analisando produto: 'PROT DIARIO INTIMUS 80UN ANTIBAC'
+2025-12-10 20:49:41,812 [WARNING] pdf_processor - Erro na IA para 'PROT DIARIO INTIMUS 80UN ANTIBAC': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 18.468638532s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 18
+}
+]. Usando fallback.
+2025-12-10 20:49:43,002 [INFO] pdf_processor - IA analisando produto: 'LIMP PERF VEJA 2L FLORES'
+2025-12-10 20:49:43,264 [WARNING] pdf_processor - Erro na IA para 'LIMP PERF VEJA 2L FLORES': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 17.024268346s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 17
+}
+]. Usando fallback.
+2025-12-10 20:49:44,453 [INFO] pdf_processor - IA analisando produto: 'AGUA SANIT QBOA 5L'
+2025-12-10 20:49:44,724 [WARNING] pdf_processor - Erro na IA para 'AGUA SANIT QBOA 5L': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 15.56231016s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 15
+}
+]. Usando fallback.
+2025-12-10 20:49:45,904 [INFO] pdf_processor - IA analisando produto: 'PORTA TRAV VELVET MATELADO SORT'
+2025-12-10 20:49:46,166 [WARNING] pdf_processor - Erro na IA para 'PORTA TRAV VELVET MATELADO SORT': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 14.121875877s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 14
+}
+]. Usando fallback.
+2025-12-10 20:49:47,356 [INFO] pdf_processor - IA analisando produto: 'DEO AERO NIVEA MASC 150ML DRY'
+2025-12-10 20:49:47,607 [WARNING] pdf_processor - Erro na IA para 'DEO AERO NIVEA MASC 150ML DRY': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 12.671282109s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 12
+}
+]. Usando fallback.
+2025-12-10 20:49:48,797 [INFO] pdf_processor - Produto 'TIRA MANCHAS GEL VANISH SCH 1,2L BCO' (ID=789103) já existia no banco.
+2025-12-10 20:49:49,478 [INFO] pdf_processor - Produto 'TIRA MANCHAS GEL VANISH SCH 1,2L ROSA' (ID=789103) já existia no banco.
+2025-12-10 20:49:50,159 [INFO] pdf_processor - IA analisando produto: 'LAVA ROUPAS LIQ ARIEL 2L SENSITIVE'
+2025-12-10 20:49:50,420 [WARNING] pdf_processor - Erro na IA para 'LAVA ROUPAS LIQ ARIEL 2L SENSITIVE': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 9.865576133s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 9
+}
+]. Usando fallback.
+2025-12-10 20:49:51,611 [INFO] pdf_processor - IA analisando produto: 'DESINF UAU 2L FLORESFR VERM'
+2025-12-10 20:49:51,871 [WARNING] pdf_processor - Erro na IA para 'DESINF UAU 2L FLORESFR VERM': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 8.414109564s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 8
+}
+]. Usando fallback.
+2025-12-10 20:49:53,062 [INFO] pdf_processor - Produto 'DESINF UAU 2L FLORESFR VERM' (ID=789124) já existia no banco.
+2025-12-10 20:49:53,742 [INFO] pdf_processor - IA analisando produto: 'SODA CAUSTICA SOL 1KG'
+2025-12-10 20:49:54,004 [WARNING] pdf_processor - Erro na IA para 'SODA CAUSTICA SOL 1KG': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 6.275083675s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 6
+}
+]. Usando fallback.
+2025-12-10 20:49:55,193 [INFO] pdf_processor - Produto 'AMAC CONC UAU 1L FLORESSONHOS' (ID=789124) já existia no banco.
+2025-12-10 20:49:55,874 [INFO] pdf_processor - IA analisando produto: 'CR DENT SORRISO XTREME 40G FRESH MINT'
+2025-12-10 20:49:56,126 [WARNING] pdf_processor - Erro na IA para 'CR DENT SORRISO XTREME 40G FRESH MINT': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 4.148890859s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 4
+}
+]. Usando fallback.
+2025-12-10 20:49:57,315 [INFO] pdf_processor - IA analisando produto: 'ESPONJA SB NRISCA LARANJA LEVE3 PAGUE2'
+2025-12-10 20:49:57,578 [WARNING] pdf_processor - Erro na IA para 'ESPONJA SB NRISCA LARANJA LEVE3 PAGUE2': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 2.709623005s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 2
+}
+]. Usando fallback.
+2025-12-10 20:49:58,777 [INFO] pdf_processor - IA analisando produto: 'LAVA LOUCAS LIQ LIMPOL LIMAO 500ML'
+2025-12-10 20:49:59,029 [WARNING] pdf_processor - Erro na IA para 'LAVA LOUCAS LIQ LIMPOL LIMAO 500ML': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 1.250705508s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 1
+}
+]. Usando fallback.
+2025-12-10 20:50:00,218 [INFO] pdf_processor - Produto 'SAB LIQ GRANADO BEBE REF 250ML ERVA DOCE' (ID=789651) já existia no banco.
+2025-12-10 20:50:00,899 [INFO] pdf_processor - IA analisando produto: 'GEL DENT TANDY MORANGO 50GR'
+2025-12-10 20:50:01,150 [WARNING] pdf_processor - Erro na IA para 'GEL DENT TANDY MORANGO 50GR': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 59.128607172s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 59
+}
+]. Usando fallback.
+2025-12-10 20:50:02,341 [INFO] pdf_processor - Produto 'CR DENT SORRISO DENTES BRANCOS 90GR' (ID=789152) já existia no banco.
+2025-12-10 20:50:03,021 [INFO] pdf_processor - IA analisando produto: 'PASTILHA SANIT INSPIRA 3UN MARINE'
+2025-12-10 20:50:03,273 [WARNING] pdf_processor - Erro na IA para 'PASTILHA SANIT INSPIRA 3UN MARINE': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 57.007995293s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 57
+}
+]. Usando fallback.
+2025-12-10 20:50:04,462 [INFO] pdf_processor - IA analisando produto: 'SAB NIVEA 85G ORQUIDEA'
+2025-12-10 20:50:04,714 [WARNING] pdf_processor - Erro na IA para 'SAB NIVEA 85G ORQUIDEA': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 55.564601278s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 55
+}
+]. Usando fallback.
+2025-12-10 20:50:05,903 [INFO] pdf_processor - Produto 'PASTILHA SANIT INSPIRA 3UN MARINE' (ID=789602) já existia no banco.
+2025-12-10 20:50:06,585 [INFO] pdf_processor - IA analisando produto: 'BUCHA VEGT FIBRA FORTE UM LUXO CONF'
+2025-12-10 20:50:06,836 [WARNING] pdf_processor - Erro na IA para 'BUCHA VEGT FIBRA FORTE UM LUXO CONF': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 53.442349935s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 53
+}
+]. Usando fallback.
+2025-12-10 20:50:08,026 [INFO] pdf_processor - Produto 'SAB LIQ NIVEA REF 200ML ERVA DOCE' (ID=400590) já existia no banco.
+2025-12-10 20:50:08,707 [INFO] pdf_processor - IA analisando produto: 'SACO PLIXO BOMLIXO AZUL ROLO 20UN 50L'
+2025-12-10 20:50:08,969 [WARNING] pdf_processor - Erro na IA para 'SACO PLIXO BOMLIXO AZUL ROLO 20UN 50L': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 51.315754982s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 51
+}
+]. Usando fallback.
+2025-12-10 20:50:10,159 [INFO] pdf_processor - IA analisando produto: 'PACK SHCOND SKALINHA BEBE UN CAMOMILA'
+2025-12-10 20:50:10,420 [WARNING] pdf_processor - Erro na IA para 'PACK SHCOND SKALINHA BEBE UN CAMOMILA': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 49.862542577s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 49
+}
+]. Usando fallback.
+2025-12-10 20:50:11,610 [INFO] pdf_processor - IA analisando produto: 'DESOD AMB AERO GLADE 432ML LAV'
+2025-12-10 20:50:11,871 [WARNING] pdf_processor - Erro na IA para 'DESOD AMB AERO GLADE 432ML LAV': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 48.411355632s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 48
+}
+]. Usando fallback.
+2025-12-10 20:50:13,061 [INFO] pdf_processor - IA analisando produto: 'BANANA PRATA KG'
+2025-12-10 20:50:13,324 [WARNING] pdf_processor - Erro na IA para 'BANANA PRATA KG': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 46.965336184s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 46
+}
+]. Usando fallback.
+2025-12-10 20:50:14,533 [INFO] pdf_processor - IA analisando produto: 'OVO STA CLARA PVC 30UN PEQ BCO'
+2025-12-10 20:50:14,794 [WARNING] pdf_processor - Erro na IA para 'OVO STA CLARA PVC 30UN PEQ BCO': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 45.489928762s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 45
+}
+]. Usando fallback.
+2025-12-10 20:50:15,984 [INFO] pdf_processor - IA analisando produto: 'BOMBOM CAIXA TORTUGUITA 134,5G'
+2025-12-10 20:50:16,246 [WARNING] pdf_processor - Erro na IA para 'BOMBOM CAIXA TORTUGUITA 134,5G': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 44.039843995s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 44
+}
+]. Usando fallback.
+2025-12-10 20:50:17,445 [INFO] pdf_processor - IA analisando produto: 'CAFE SERRA DE CALDAS ALMOF 500G TRAD'
+2025-12-10 20:50:17,697 [WARNING] pdf_processor - Erro na IA para 'CAFE SERRA DE CALDAS ALMOF 500G TRAD': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 42.581798907s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 42
+}
+]. Usando fallback.
+2025-12-10 20:50:18,887 [INFO] pdf_processor - IA analisando produto: 'BOMBOM CAIXA NESTLE 251G ESPECIALIDADES'
+2025-12-10 20:50:19,148 [WARNING] pdf_processor - Erro na IA para 'BOMBOM CAIXA NESTLE 251G ESPECIALIDADES': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 41.136599793s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 41
+}
+]. Usando fallback.
+2025-12-10 20:50:20,348 [INFO] pdf_processor - IA analisando produto: 'SALG ELMA CHIPS LANCHINHO 98G SORTIDOS'
+2025-12-10 20:50:20,600 [WARNING] pdf_processor - Erro na IA para 'SALG ELMA CHIPS LANCHINHO 98G SORTIDOS': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 39.679268595s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 39
+}
+]. Usando fallback.
+2025-12-10 20:50:21,790 [INFO] pdf_processor - Produto 'SALG SKINY 60G ORIG' (ID=789284) já existia no banco.
+2025-12-10 20:50:22,128 [INFO] pdf_processor - Arquivo '0857aad6-3d3b-4a74-901d-723f59fbc2a5.pdf' processado com sucesso. Itens gravados: 48.
+2025-12-10 20:50:22,131 [INFO] pdf_processor - Arquivo '0857aad6-3d3b-4a74-901d-723f59fbc2a5.pdf' movido para a pasta de arquivamento: C:\GestaoCompras\PROCESSADAS\0857aad6-3d3b-4a74-901d-723f59fbc2a5.pdf
+2025-12-10 20:50:22,133 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '22e27403-ec6d-43b9-ae73-6360eb513051.pdf'.
+2025-12-10 20:50:22,134 [INFO] pdf_processor - Extraindo dados do PDF: 22e27403-ec6d-43b9-ae73-6360eb513051.pdf
+2025-12-10 20:50:24,793 [ERROR] pdf_processor - Erro ao interpretar resposta da IA para o PDF '22e27403-ec6d-43b9-ae73-6360eb513051.pdf': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 35.486923606s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 35
+}
+]
+2025-12-10 20:50:24,794 [ERROR] pdf_processor - Nenhum item extraído do PDF '22e27403-ec6d-43b9-ae73-6360eb513051.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 20:50:24,796 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '26d9b595-8e2e-46ef-b73f-295450268c74.pdf'.
+2025-12-10 20:50:24,796 [INFO] pdf_processor - Extraindo dados do PDF: 26d9b595-8e2e-46ef-b73f-295450268c74.pdf
+2025-12-10 20:50:25,544 [ERROR] pdf_processor - Erro ao interpretar resposta da IA para o PDF '26d9b595-8e2e-46ef-b73f-295450268c74.pdf': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 34.744552298s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 34
+}
+]
+2025-12-10 20:50:25,545 [ERROR] pdf_processor - Nenhum item extraído do PDF '26d9b595-8e2e-46ef-b73f-295450268c74.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 20:50:25,546 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf'.
+2025-12-10 20:50:25,547 [INFO] pdf_processor - Extraindo dados do PDF: 30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf
+2025-12-10 20:50:26,185 [ERROR] pdf_processor - Erro ao interpretar resposta da IA para o PDF '30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 34.09313926s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 34
+}
+]
+2025-12-10 20:50:26,186 [ERROR] pdf_processor - Nenhum item extraído do PDF '30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 20:50:26,186 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf'.
+2025-12-10 20:50:26,187 [INFO] pdf_processor - Extraindo dados do PDF: 457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf
+2025-12-10 20:50:28,727 [ERROR] pdf_processor - Erro ao interpretar resposta da IA para o PDF '457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 31.557788392s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 31
+}
+]
+2025-12-10 20:50:28,729 [ERROR] pdf_processor - Nenhum item extraído do PDF '457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 20:50:28,730 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf'.
+2025-12-10 20:50:28,731 [INFO] pdf_processor - Extraindo dados do PDF: 7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf
+2025-12-10 20:50:29,539 [ERROR] pdf_processor - Erro ao interpretar resposta da IA para o PDF '7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 30.744385433s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 30
+}
+]
+2025-12-10 20:50:29,540 [ERROR] pdf_processor - Nenhum item extraído do PDF '7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 20:50:29,542 [INFO] pdf_processor - Iniciando processamento do arquivo PDF 'f38065b0-5aa4-4488-880d-5328fa82280b.pdf'.
+2025-12-10 20:50:29,542 [INFO] pdf_processor - Extraindo dados do PDF: f38065b0-5aa4-4488-880d-5328fa82280b.pdf
+2025-12-10 20:50:32,991 [ERROR] pdf_processor - Erro ao interpretar resposta da IA para o PDF 'f38065b0-5aa4-4488-880d-5328fa82280b.pdf': 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-2.5-flash
+Please retry in 27.289604716s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.5-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+  quota_value: 20
+}
+, retry_delay {
+  seconds: 27
+}
+]
+2025-12-10 20:50:32,993 [ERROR] pdf_processor - Nenhum item extraído do PDF 'f38065b0-5aa4-4488-880d-5328fa82280b.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 20:50:32,994 [INFO] pdf_processor - Processo concluído. Arquivos processados com sucesso: 1.
+2025-12-10 20:50:32,996 [INFO] pdf_processor - Conexão com o banco encerrada.
+2025-12-10 21:07:50,609 [INFO] pdf_processor - Iniciando processamento em lote de PDFs na pasta NOVAS_NOTAS...
+2025-12-10 21:07:50,610 [INFO] pdf_processor - Conectando ao banco de dados (Neon)...
+2025-12-10 21:07:52,311 [INFO] pdf_processor - Conexão com o banco estabelecida.
+2025-12-10 21:07:52,312 [INFO] pdf_processor - Garantindo existência das tabelas 'produtos' e 'historico_precos'...
+2025-12-10 21:07:52,991 [INFO] pdf_processor - Tabelas verificadas/criadas com sucesso.
+2025-12-10 21:07:52,994 [INFO] pdf_processor - 6 arquivo(s) PDF encontrado(s) para processamento.
+2025-12-10 21:07:52,995 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '22e27403-ec6d-43b9-ae73-6360eb513051.pdf'.
+2025-12-10 21:07:52,996 [INFO] pdf_processor - Extraindo dados do PDF: 22e27403-ec6d-43b9-ae73-6360eb513051.pdf
+2025-12-10 21:07:57,148 [ERROR] pdf_processor - Erro ao interpretar resposta da IA para o PDF '22e27403-ec6d-43b9-ae73-6360eb513051.pdf': Error code: 402 - {'error': {'message': 'Insufficient Balance', 'type': 'unknown_error', 'param': None, 'code': 'invalid_request_error'}}
+2025-12-10 21:07:57,149 [ERROR] pdf_processor - Nenhum item extraído do PDF '22e27403-ec6d-43b9-ae73-6360eb513051.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 21:07:57,151 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '26d9b595-8e2e-46ef-b73f-295450268c74.pdf'.
+2025-12-10 21:07:57,152 [INFO] pdf_processor - Extraindo dados do PDF: 26d9b595-8e2e-46ef-b73f-295450268c74.pdf
+2025-12-10 21:07:58,315 [ERROR] pdf_processor - Erro ao interpretar resposta da IA para o PDF '26d9b595-8e2e-46ef-b73f-295450268c74.pdf': Error code: 402 - {'error': {'message': 'Insufficient Balance', 'type': 'unknown_error', 'param': None, 'code': 'invalid_request_error'}}
+2025-12-10 21:07:58,316 [ERROR] pdf_processor - Nenhum item extraído do PDF '26d9b595-8e2e-46ef-b73f-295450268c74.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 21:07:58,318 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf'.
+2025-12-10 21:07:58,318 [INFO] pdf_processor - Extraindo dados do PDF: 30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf
+2025-12-10 21:07:59,459 [ERROR] pdf_processor - Erro ao interpretar resposta da IA para o PDF '30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf': Error code: 402 - {'error': {'message': 'Insufficient Balance', 'type': 'unknown_error', 'param': None, 'code': 'invalid_request_error'}}
+2025-12-10 21:07:59,459 [ERROR] pdf_processor - Nenhum item extraído do PDF '30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 21:07:59,460 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf'.
+2025-12-10 21:07:59,460 [INFO] pdf_processor - Extraindo dados do PDF: 457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf
+2025-12-10 21:08:02,775 [ERROR] pdf_processor - Erro ao interpretar resposta da IA para o PDF '457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf': Error code: 402 - {'error': {'message': 'Insufficient Balance', 'type': 'unknown_error', 'param': None, 'code': 'invalid_request_error'}}
+2025-12-10 21:08:02,778 [ERROR] pdf_processor - Nenhum item extraído do PDF '457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 21:08:02,779 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf'.
+2025-12-10 21:08:02,780 [INFO] pdf_processor - Extraindo dados do PDF: 7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf
+2025-12-10 21:08:04,675 [ERROR] pdf_processor - Erro ao interpretar resposta da IA para o PDF '7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf': Error code: 402 - {'error': {'message': 'Insufficient Balance', 'type': 'unknown_error', 'param': None, 'code': 'invalid_request_error'}}
+2025-12-10 21:08:04,676 [ERROR] pdf_processor - Nenhum item extraído do PDF '7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 21:08:04,677 [INFO] pdf_processor - Iniciando processamento do arquivo PDF 'f38065b0-5aa4-4488-880d-5328fa82280b.pdf'.
+2025-12-10 21:08:04,678 [INFO] pdf_processor - Extraindo dados do PDF: f38065b0-5aa4-4488-880d-5328fa82280b.pdf
+2025-12-10 21:08:08,748 [ERROR] pdf_processor - Erro ao interpretar resposta da IA para o PDF 'f38065b0-5aa4-4488-880d-5328fa82280b.pdf': Error code: 402 - {'error': {'message': 'Insufficient Balance', 'type': 'unknown_error', 'param': None, 'code': 'invalid_request_error'}}
+2025-12-10 21:08:08,749 [ERROR] pdf_processor - Nenhum item extraído do PDF 'f38065b0-5aa4-4488-880d-5328fa82280b.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 21:08:08,751 [INFO] pdf_processor - Processo concluído. Arquivos processados com sucesso: 0.
+2025-12-10 21:08:08,752 [INFO] pdf_processor - Conexão com o banco encerrada.
+2025-12-10 21:16:29,347 [INFO] pdf_processor - Iniciando processamento em lote de PDFs na pasta NOVAS_NOTAS...
+2025-12-10 21:16:29,347 [INFO] pdf_processor - Conectando ao banco de dados (Neon)...
+2025-12-10 21:16:30,925 [INFO] pdf_processor - Conexão com o banco estabelecida.
+2025-12-10 21:16:30,926 [INFO] pdf_processor - Garantindo existência das tabelas 'produtos' e 'historico_precos'...
+2025-12-10 21:16:31,625 [INFO] pdf_processor - Tabelas verificadas/criadas com sucesso.
+2025-12-10 21:16:31,627 [INFO] pdf_processor - 6 arquivo(s) PDF encontrado(s) para processamento.
+2025-12-10 21:16:31,629 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '22e27403-ec6d-43b9-ae73-6360eb513051.pdf'.
+2025-12-10 21:16:31,630 [INFO] pdf_processor - Extraindo dados do PDF: 22e27403-ec6d-43b9-ae73-6360eb513051.pdf
+2025-12-10 21:16:34,060 [INFO] pdf_processor - Extração concluída para '22e27403-ec6d-43b9-ae73-6360eb513051.pdf'. Data: 2025-06-16 | Mercado: X 1 - SAÍDA 2 - ENTRADA | Itens: 73
+2025-12-10 21:16:34,061 [INFO] pdf_processor - Dados gerais extraídos - Mercado: X 1 - SAÍDA 2 - ENTRADA | Data: 2025-06-16
+2025-12-10 21:16:34,430 [INFO] pdf_processor - Produto 'EMP PERDIGAO BIG CHICKEN 1kg TRAD 000 un 1,000 26,99' (ID=10456) já existia no banco.
+2025-12-10 21:16:35,119 [INFO] pdf_processor - Produto 'FILEZINHO SASSAMI SUPER FRANGO IQF FGO 000 un 1,000 21,99' (ID=4704) já existia no banco.
+2025-12-10 21:16:35,810 [INFO] pdf_processor - Produto 'PETIT SUISSE TREVINHO LANCHE 70G MOR 000 un 4,000 1,99' (ID=1821) já existia no banco.
+2025-12-10 21:16:36,500 [INFO] pdf_processor - Produto 'LING FRANGO LAR FININHA CONG PCT 1K NG PCT 1 De 17,99 por 000 un 1,000 16,49 16,49' (ID=15416) já existia no banco.
+2025-12-10 21:16:37,191 [INFO] pdf_processor - Produto 'QJO MUSS DEALE 400G FAT 000 un 1,000 15,99' (ID=2327) já existia no banco.
+2025-12-10 21:16:37,881 [INFO] pdf_processor - Cadastrando novo produto: ID=10368 | Nome='PATE SADIA 100G PEITO PERU 000 un 1,000 4,39'
+2025-12-10 21:16:39,083 [INFO] pdf_processor - Produto 'QJO MUSS DEALE 400G FAT 000 un 1,000 15,99' (ID=2327) já existia no banco.
+2025-12-10 21:16:39,773 [INFO] pdf_processor - Cadastrando novo produto: ID=15685 | Nome='IOG LIQ TREVINHO 1.100kg MOR 000 un 1,000 7,99'
+2025-12-10 21:16:40,975 [INFO] pdf_processor - Cadastrando novo produto: ID=5284 | Nome='IOG FRUTAP 850G ACAI BAN 000 un 1,000 8,79'
+2025-12-10 21:16:42,186 [INFO] pdf_processor - Cadastrando novo produto: ID=16089 | Nome='CR RICOTA LIGHT TIROLEZ 370G 000 un 1,000 12,49'
+2025-12-10 21:16:43,388 [INFO] pdf_processor - Cadastrando novo produto: ID=5110 | Nome='GRANOLA NATUREZA E CIA 800G MIX 000 un 1,000 14,99'
+2025-12-10 21:16:44,598 [INFO] pdf_processor - Cadastrando novo produto: ID=13495 | Nome='BOLINHO RECH BAUDUCCO 40G CHOC BAUN CHOC BAU 000 un 16,000 1,79'
+2025-12-10 21:16:45,789 [INFO] pdf_processor - Cadastrando novo produto: ID=2952 | Nome='PAO FORMA SEVENBOYS 450G LEITE 000 un 2,000 8,99'
+2025-12-10 21:16:47,000 [INFO] pdf_processor - Cadastrando novo produto: ID=2893 | Nome='PAO FORMA INTG DI NAPOLI 500G TRAD 000 un 2,000 7,79'
+2025-12-10 21:16:48,202 [INFO] pdf_processor - Cadastrando novo produto: ID=20294 | Nome='ROSQUINHA ADORALLE 600G COCO 000 un 1,000 7,39'
+2025-12-10 21:16:49,403 [INFO] pdf_processor - Cadastrando novo produto: ID=12446 | Nome='BISC RECH OREO 36G CHOC 000 un 8,000 2,29'
+2025-12-10 21:16:50,604 [INFO] pdf_processor - Cadastrando novo produto: ID=11383 | Nome='BISC INTG CLUB SOCIAL 288G ORIG 000 un 1,000 8,99'
+2025-12-10 21:16:51,805 [INFO] pdf_processor - Cadastrando novo produto: ID=8099 | Nome='BOMBOM CX LACTA 250.6G BRAND MIX 000 un 1,000 11,99'
+2025-12-10 21:16:53,007 [INFO] pdf_processor - Cadastrando novo produto: ID=918 | Nome='ARROZ PATOSUL 5kg TP1 020 un 1,000 18,99'
+2025-12-10 21:16:54,208 [INFO] pdf_processor - Cadastrando novo produto: ID=8101 | Nome='BOMBOM CX TORTUGUITA 134.5G 000 un 1,000 8,79'
+2025-12-10 21:16:55,409 [INFO] pdf_processor - Cadastrando novo produto: ID=10511 | Nome='MOLHO TOM POMAROLA CASEIRO SCH 300G MANJERIC 000 un 1,000 4,39'
+2025-12-10 21:16:56,610 [INFO] pdf_processor - Cadastrando novo produto: ID=10510 | Nome='MOLHO TOM POMAROLA CASEIRO SCH 300G CLASSIC 000 un 1,000 4,39'
+2025-12-10 21:16:57,811 [INFO] pdf_processor - Cadastrando novo produto: ID=6211 | Nome='SALG ANELITOS 41G CEB 000 un 2,000 2,99'
+2025-12-10 21:16:59,012 [INFO] pdf_processor - Cadastrando novo produto: ID=9008 | Nome='FEIJAO DA MAMAE 1kg CARIOCA 020 un 1,000 4,99'
+2025-12-10 21:17:00,204 [INFO] pdf_processor - Produto 'FEIJAO DA MAMAE 1kg CARIOCA 020 un 1,000 4,99' (ID=9008) já existia no banco.
+2025-12-10 21:17:00,894 [INFO] pdf_processor - Cadastrando novo produto: ID=6235 | Nome='SALG KARITOS 40G BACON 000 un 6,000 1,99'
+2025-12-10 21:17:02,095 [INFO] pdf_processor - Cadastrando novo produto: ID=12351 | Nome='CAFE PILAO POUCH 500G TRAD 020 un 1,000 27,99'
+2025-12-10 21:17:03,297 [INFO] pdf_processor - Cadastrando novo produto: ID=13277 | Nome='BISC RECH CLUB SOCIAL 141G CEB SOUR 000 un 1,000 4,79'
+2025-12-10 21:17:04,507 [INFO] pdf_processor - Cadastrando novo produto: ID=7928 | Nome='BISC MARILAN PIT STOP 137G PAO NA CHAPA 000 un 1,000 4,99'
+2025-12-10 21:17:05,708 [INFO] pdf_processor - Cadastrando novo produto: ID=15577 | Nome='BATATA CRONY 35G CHURR 35G CHURR 000 un 3,000 2,79'
+2025-12-10 21:17:06,900 [INFO] pdf_processor - Cadastrando novo produto: ID=16197 | Nome='SALG SKINY 60G ORIG 000 un 2,000 1,99'
+2025-12-10 21:17:08,091 [INFO] pdf_processor - Produto 'BISC RECH CLUB SOCIAL 141G CEB SOUR 000 un 1,000 4,79' (ID=13277) já existia no banco.
+2025-12-10 21:17:08,781 [INFO] pdf_processor - Cadastrando novo produto: ID=13457 | Nome='GELATINA APTI 20G MARAC 020 un 1,000 1,39'
+2025-12-10 21:17:09,983 [INFO] pdf_processor - Cadastrando novo produto: ID=6899 | Nome='TEMP TEMPERE 30G ANA MARIA 000 un 1,000 2,59'
+2025-12-10 21:17:11,184 [INFO] pdf_processor - Cadastrando novo produto: ID=6898 | Nome='TEMP TEMPERE 30G ALHO CEB TOM 000 un 1,000 3,59'
+2025-12-10 21:17:12,386 [INFO] pdf_processor - Cadastrando novo produto: ID=17992 | Nome='GELATINA DR OETKER SCH C 2 INCOLOR 2 INCOLO De 7,49 por 020 un 1,000 6,79 6,79'
+2025-12-10 21:17:13,596 [INFO] pdf_processor - Produto 'SALG ANELITOS 41G CEB 000 un 1,000 2,99' (ID=6211) já existia no banco.
+2025-12-10 21:17:14,287 [INFO] pdf_processor - Cadastrando novo produto: ID=13003 | Nome='GARFO MESA TRAMONTINA LEME VERM 000 un 6,000 1,99'
+2025-12-10 21:17:15,478 [INFO] pdf_processor - Cadastrando novo produto: ID=3973 | Nome='MOSTARDA BONARE 190G AMARELA 000 un 1,000 6,99'
+2025-12-10 21:17:16,699 [INFO] pdf_processor - Cadastrando novo produto: ID=13415 | Nome='REFR PO TANG 18G UVA 000 un 4,000 0,99'
+2025-12-10 21:17:17,891 [INFO] pdf_processor - Cadastrando novo produto: ID=13414 | Nome='REFR PO TANG 18G MARAC 000 un 6,000 0,99'
+2025-12-10 21:17:19,093 [INFO] pdf_processor - Cadastrando novo produto: ID=12694 | Nome='SARDINHA 88 MANJUBA BOCA TORTA 125G TOM De 6,99 por 6,39 000 un 3,000 6,39'
+2025-12-10 21:17:20,293 [INFO] pdf_processor - Cadastrando novo produto: ID=1052 | Nome='AZEITE PORT ANDORINHA 500ML TP UNICO PURO 000 un 1,000 34,90'
+2025-12-10 21:17:21,494 [INFO] pdf_processor - Cadastrando novo produto: ID=12622 | Nome='OLEO SOJA VILA VELHA 900ML 020 un 1,000 6,49'
+2025-12-10 21:17:22,685 [INFO] pdf_processor - Cadastrando novo produto: ID=3550 | Nome='MEL PIMEL 1kg 000 un 1,000 39,99'
+2025-12-10 21:17:23,877 [INFO] pdf_processor - Cadastrando novo produto: ID=12467 | Nome='MAC INST CUP NOODLES 65G COSTELA CHURR 020 un 1,000 4,29'
+2025-12-10 21:17:25,088 [INFO] pdf_processor - Cadastrando novo produto: ID=12466 | Nome='MAC INST CUP NOODLES 65G GALINHA PIC 020 un 1,000 4,29'
+2025-12-10 21:17:26,289 [INFO] pdf_processor - Produto 'MAC INST CUP NOODLES 65G GALINHA PIC 020 un 1,000 4,29' (ID=12466) já existia no banco.
+2025-12-10 21:17:26,980 [INFO] pdf_processor - Cadastrando novo produto: ID=12457 | Nome='MAC INST CUP NOODLES 65G GALINHA CAIP 020 un 1,000 4,29'
+2025-12-10 21:17:28,181 [INFO] pdf_processor - Cadastrando novo produto: ID=21127 | Nome='EXT TOM ELEFANTE PT 300G CARNE PANELA 000 un 1,000 7,79'
+2025-12-10 21:17:29,392 [INFO] pdf_processor - Cadastrando novo produto: ID=14146 | Nome='SUCO MISTO SUMMER VIBES 1L MARAC UVA BCA 000 un 1,000 9,99'
+2025-12-10 21:17:30,593 [INFO] pdf_processor - Cadastrando novo produto: ID=14105 | Nome='SUCO MISTO SUMMER VIBES 1L ABAC MACA UVA 000 un 1,000 9,99'
+2025-12-10 21:17:31,795 [INFO] pdf_processor - Cadastrando novo produto: ID=6121 | Nome='VINAGRE ALCOOL CASTELO 750ML LIMAO 020 un 1,000 6,79'
+2025-12-10 21:17:32,996 [INFO] pdf_processor - Cadastrando novo produto: ID=4333 | Nome='LENCO UMED SELECT WIPES BABY 100UN 000 un 1,000 9,99'
+2025-12-10 21:17:34,197 [INFO] pdf_processor - Cadastrando novo produto: ID=21723 | Nome='TABUA PLASTICO INGA ESTAMPADA 000 un 1,000 12,99'
+2025-12-10 21:17:35,398 [INFO] pdf_processor - Cadastrando novo produto: ID=2131 | Nome='PRENDEDOR CAB BELLISSIMA 3UN MEDIO 000 un 1,000 5,79'
+2025-12-10 21:17:36,598 [INFO] pdf_processor - Cadastrando novo produto: ID=14878 | Nome='SAND HAVAIANAS SLIM FEM 312 ROSA BALLET 000 un 1,000 28,99'
+2025-12-10 21:17:37,801 [INFO] pdf_processor - Cadastrando novo produto: ID=11405 | Nome='SAB LIQ GRANADO BEBE REF 250ML ERVA DOCE 020 un 1,000 15,49'
+2025-12-10 21:17:39,001 [INFO] pdf_processor - Cadastrando novo produto: ID=10639 | Nome='ESPUMA BARB GILLETTE 150G SENS 000 un 1,000 19,99'
+2025-12-10 21:17:40,202 [INFO] pdf_processor - Cadastrando novo produto: ID=12963 | Nome='DEO AERO NIVEA MASC 200ML BLACK WHITE 000 un 1,000 17,49'
+2025-12-10 21:17:41,403 [INFO] pdf_processor - Cadastrando novo produto: ID=10036 | Nome='ENX BUCAL ORAL B L500 P300 COMPL HORT 000 un 1,000 15,99'
+2025-12-10 21:17:42,615 [INFO] pdf_processor - Cadastrando novo produto: ID=6512 | Nome='SH OX 400ML LISOS 000 un 1,000 23,99'
+2025-12-10 21:17:43,806 [INFO] pdf_processor - Cadastrando novo produto: ID=11055 | Nome='DEO AERO NIVEA MASC 150ML SENS PROT 000 un 1,000 14,99'
+2025-12-10 21:17:45,017 [INFO] pdf_processor - Cadastrando novo produto: ID=11528 | Nome='LIMP PERF VEJA 2L FLORES 000 un 1,000 9,99'
+2025-12-10 21:17:46,218 [INFO] pdf_processor - Cadastrando novo produto: ID=5537 | Nome='PACK TIRA MANCHAS GEL VANISH 1.2L BCO ROSA 000 un 1,000 53,99'
+2025-12-10 21:17:47,420 [INFO] pdf_processor - Cadastrando novo produto: ID=14322 | Nome='PASTILHA SANIT INSPIRA 3UN MARINE 000 un 1,000 5,79'
+2025-12-10 21:17:48,631 [INFO] pdf_processor - Cadastrando novo produto: ID=15609 | Nome='CR DENT SORRISO XTREME 140G FRESH MINT 020 un 1,000 5,99'
+2025-12-10 21:17:49,832 [INFO] pdf_processor - Cadastrando novo produto: ID=16214 | Nome='DIFUSOR COALA 100ML TANG PATCHOULI 000 un 2,000 11,99'
+2025-12-10 21:17:51,033 [INFO] pdf_processor - Cadastrando novo produto: ID=14125 | Nome='SAB FRANCIS BRASILIDADES 80G LARANJA 020 un 1,000 2,79'
+2025-12-10 21:17:52,234 [INFO] pdf_processor - Cadastrando novo produto: ID=5595 | Nome='LAVA ROUPAS LIQ OMO 3L PURO CUIDADO 000 un 1,000 39,99'
+2025-12-10 21:17:53,436 [INFO] pdf_processor - Cadastrando novo produto: ID=11374 | Nome='LIMP LIMPEZA PESADA AJAX 1L LIMAO 000 un 1,000 17,49'
+2025-12-10 21:17:54,646 [INFO] pdf_processor - Produto 'AMAC YPE 2L DELICADO 000 un 1,000 11,49' (ID=13253) já existia no banco.
+2025-12-10 21:17:55,327 [INFO] pdf_processor - Produto 'SODA CAUSTICA SOL 1kg 000 un 1,000 21,99' (ID=6629) já existia no banco.
+2025-12-10 21:17:55,677 [INFO] pdf_processor - Arquivo '22e27403-ec6d-43b9-ae73-6360eb513051.pdf' processado com sucesso. Itens gravados: 73.
+2025-12-10 21:17:55,679 [INFO] pdf_processor - Arquivo '22e27403-ec6d-43b9-ae73-6360eb513051.pdf' movido para a pasta de arquivamento: C:\GestaoCompras\PROCESSADAS\22e27403-ec6d-43b9-ae73-6360eb513051.pdf
+2025-12-10 21:17:55,680 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '26d9b595-8e2e-46ef-b73f-295450268c74.pdf'.
+2025-12-10 21:17:55,680 [INFO] pdf_processor - Extraindo dados do PDF: 26d9b595-8e2e-46ef-b73f-295450268c74.pdf
+2025-12-10 21:17:56,256 [INFO] pdf_processor - Extração concluída para '26d9b595-8e2e-46ef-b73f-295450268c74.pdf'. Data: 2025-01-06 | Mercado: X 1 - SAÍDA 2 - ENTRADA | Itens: 2
+2025-12-10 21:17:56,256 [INFO] pdf_processor - Dados gerais extraídos - Mercado: X 1 - SAÍDA 2 - ENTRADA | Data: 2025-01-06
+2025-12-10 21:17:56,599 [INFO] pdf_processor - Cadastrando novo produto: ID=50156 | Nome='CAFE DOCE ALMOFADA 500G 020 UN 1,000 29,99'
+2025-12-10 21:17:57,804 [INFO] pdf_processor - Cadastrando novo produto: ID=ITEM_2 | Nome='Trib. Aprox. R$:3,36 Federal R$: Estadual R$:;Fonte:'
+2025-12-10 21:17:58,660 [INFO] pdf_processor - Arquivo '26d9b595-8e2e-46ef-b73f-295450268c74.pdf' processado com sucesso. Itens gravados: 2.
+2025-12-10 21:17:58,662 [INFO] pdf_processor - Arquivo '26d9b595-8e2e-46ef-b73f-295450268c74.pdf' movido para a pasta de arquivamento: C:\GestaoCompras\PROCESSADAS\26d9b595-8e2e-46ef-b73f-295450268c74.pdf
+2025-12-10 21:17:58,663 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf'.
+2025-12-10 21:17:58,663 [INFO] pdf_processor - Extraindo dados do PDF: 30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf
+2025-12-10 21:17:59,022 [INFO] pdf_processor - Extração concluída para '30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf'. Data: 2024-12-30 | Mercado: X 1 - SAÍDA 2 - ENTRADA | Itens: 3
+2025-12-10 21:17:59,023 [INFO] pdf_processor - Dados gerais extraídos - Mercado: X 1 - SAÍDA 2 - ENTRADA | Data: 2024-12-30
+2025-12-10 21:17:59,371 [INFO] pdf_processor - Cadastrando novo produto: ID=76442 | Nome='BATATA ONDULADA SINHAC 40GR CEBOLA E SAL 000 UN 4,000 3,98'
+2025-12-10 21:18:00,572 [INFO] pdf_processor - Cadastrando novo produto: ID=76968 | Nome='DONUTS KG 000 KG 0,184 49,00'
+2025-12-10 21:18:01,763 [INFO] pdf_processor - Cadastrando novo produto: ID=26670 | Nome='UVAS PASSAS LA VIOLETERA S SEMENTE 200GR 000 UN 1,000 8,98'
+2025-12-10 21:18:02,624 [INFO] pdf_processor - Arquivo '30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf' processado com sucesso. Itens gravados: 3.
+2025-12-10 21:18:02,626 [INFO] pdf_processor - Arquivo '30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf' movido para a pasta de arquivamento: C:\GestaoCompras\PROCESSADAS\30807683-6d83-4b4b-8b23-ee89e374d7d9.pdf
+2025-12-10 21:18:02,627 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf'.
+2025-12-10 21:18:02,628 [INFO] pdf_processor - Extraindo dados do PDF: 457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf
+2025-12-10 21:18:06,086 [INFO] pdf_processor - Extração concluída para '457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf'. Data: 2025-03-10 | Mercado: X 1 - SAÍDA 2 - ENTRADA | Itens: 70
+2025-12-10 21:18:06,087 [INFO] pdf_processor - Dados gerais extraídos - Mercado: X 1 - SAÍDA 2 - ENTRADA | Data: 2025-03-10
+2025-12-10 21:18:06,427 [INFO] pdf_processor - Cadastrando novo produto: ID=789821 | Nome='OVO DE PASCOA DI ANJU 50G 000 UN 2,000 4,99'
+2025-12-10 21:18:07,619 [INFO] pdf_processor - Cadastrando novo produto: ID=735810 | Nome='PAO P HAMB WFOODS BRIOCHE 350G 000 UN 1,000 8,79'
+2025-12-10 21:18:08,810 [INFO] pdf_processor - Produto 'CAFE SOLUVEL NESCAFE SCH 40G EXT FORTE 020 UN 4,000 6,79' (ID=789100) já existia no banco.
+2025-12-10 21:18:09,494 [INFO] pdf_processor - Produto 'CAFE SOLUVEL NESCAFE SCH 40G EXT FORTE 020 UN 1,000 6,79' (ID=789100) já existia no banco.
+2025-12-10 21:18:10,182 [INFO] pdf_processor - Cadastrando novo produto: ID=789813 | Nome='SNACK KARI KARI 70G BACON 000 UN 4,000 3,59'
+2025-12-10 21:18:11,372 [INFO] pdf_processor - Cadastrando novo produto: ID=789997 | Nome='CHOC HERSHERYS 82G BCO 000 UN 1,000 4,39'
+2025-12-10 21:18:12,564 [INFO] pdf_processor - Produto 'CHOC HERSHEYS 77G COOKIECHOC 000 UN 1,000 4,39' (ID=789997) já existia no banco.
+2025-12-10 21:18:13,245 [INFO] pdf_processor - Produto 'CHOC HERSHEYS 77G CARAMEL SALG 000 UN 1,000 4,39' (ID=789997) já existia no banco.
+2025-12-10 21:18:13,925 [INFO] pdf_processor - Cadastrando novo produto: ID=762221 | Nome='BOMBOM CAIXA LACTA 250,6G BRAND MIX 000 UN 1,000 11,39'
+2025-12-10 21:18:15,117 [INFO] pdf_processor - Cadastrando novo produto: ID=789196 | Nome='BOLINHO BAUDUCCO DUPLO CHOC 40G 000 UN 16,000 1,89'
+2025-12-10 21:18:16,308 [INFO] pdf_processor - Produto 'ROCAMBOLE RECH BAUDUCCO 34G COBERT CHOC 000 UN 15,000 1,79' (ID=789196) já existia no banco.
+2025-12-10 21:18:16,988 [INFO] pdf_processor - Cadastrando novo produto: ID=789603 | Nome='MOLHO TOM POMAROLA CASEIRO MANJE SC 300G 000 UN 1,000 3,99'
+2025-12-10 21:18:18,180 [INFO] pdf_processor - Produto 'MOLHO TOM POMAROLA CASEIRO CLASS SC 300G 000 UN 1,000 3,99' (ID=789603) já existia no banco.
+2025-12-10 21:18:18,870 [INFO] pdf_processor - Cadastrando novo produto: ID=619205 | Nome='BISC POLVILHO VO CHICA 100G TEMP 000 UN 1,000 3,99'
+2025-12-10 21:18:20,061 [INFO] pdf_processor - Cadastrando novo produto: ID=789109 | Nome='MILHO PIPOCA YOKI 400G PREMIUM 000 UN 1,000 5,99'
+2025-12-10 21:18:21,252 [INFO] pdf_processor - Produto 'BISC AMANT BAUDUCCO 335G LEITE 000 UN 1,000 6,49' (ID=789196) já existia no banco.
+2025-12-10 21:18:21,932 [INFO] pdf_processor - Cadastrando novo produto: ID=789838 | Nome='GRANOLA NATUREZA CIA POP MIX NAT 800GR De 15,99 por 000 UN 1,000 14,49 14,49'
+2025-12-10 21:18:23,124 [INFO] pdf_processor - Cadastrando novo produto: ID=789621 | Nome='BISC MAISENA VITARELLA 350G CHOC 000 UN 1,000 6,49'
+2025-12-10 21:18:24,316 [INFO] pdf_processor - Produto 'FEIJAO CARIOCA DONA DE 1KG 000 UN 2,000 5,39' (ID=789892) já existia no banco.
+2025-12-10 21:18:24,995 [INFO] pdf_processor - Produto 'SALG SKINY 60G ORIG 000 UN 5,000 1,69' (ID=789284) já existia no banco.
+2025-12-10 21:18:25,677 [INFO] pdf_processor - Produto 'PETA VO CHICA 150G ORIG 000 UN 1,000 5,49' (ID=619205) já existia no banco.
+2025-12-10 21:18:26,357 [INFO] pdf_processor - Produto 'SALG ELMA CHIPS LANCHINHO 98G SORTIDOS 000 UN 1,000 8,99' (ID=789284) já existia no banco.
+2025-12-10 21:18:27,038 [INFO] pdf_processor - Produto 'SALG ELMA CHIPS LANCHINHO 98G SORTIDOS 000 UN 1,000 8,99' (ID=789284) já existia no banco.
+2025-12-10 21:18:27,718 [INFO] pdf_processor - Produto 'MAC CRISTAL SEMOLA 500G PENNE 020 UN 1,000 3,39' (ID=789621) já existia no banco.
+2025-12-10 21:18:28,431 [INFO] pdf_processor - Produto 'BISC MAISENA VITARELLA 350G LEITE 000 UN 1,000 6,49' (ID=789621) já existia no banco.
+2025-12-10 21:18:29,111 [INFO] pdf_processor - Produto 'BISC MAISENA VITARELLA 350G LEITE 000 UN 1,000 6,49' (ID=789621) já existia no banco.
+2025-12-10 21:18:29,790 [INFO] pdf_processor - Cadastrando novo produto: ID=789107 | Nome='MAC INST CUP NOODLES 68G GALINHA PICANTE 020 UN 2,000 4,99'
+2025-12-10 21:18:30,991 [INFO] pdf_processor - Produto 'MAC INST CUP NOODLES 69G GALINHA CAIPIRA 020 UN 1,000 4,99' (ID=789107) já existia no banco.
+2025-12-10 21:18:31,672 [INFO] pdf_processor - Cadastrando novo produto: ID=789894 | Nome='ARROZ TP1 AGULHINHA PATOSUL 5KG 020 UN 1,000 24,99'
+2025-12-10 21:18:32,863 [INFO] pdf_processor - Produto 'MAC INST NISSIN UFO 98G YAKISSOBACARNE 020 UN 1,000 6,49' (ID=789107) já existia no banco.
+2025-12-10 21:18:33,544 [INFO] pdf_processor - Cadastrando novo produto: ID=789820 | Nome='LEMON PEPPER TEMPERE 20G 000 UN 3,000 2,99'
+2025-12-10 21:18:34,735 [INFO] pdf_processor - Produto 'TEMP TEMPERE ALHOCEBTOM 30G 000 UN 3,000 2,59' (ID=789820) já existia no banco.
+2025-12-10 21:18:35,417 [INFO] pdf_processor - Produto 'TEMP TEMPERE ANA MARIA 30G 000 UN 3,000 2,59' (ID=789820) já existia no banco.
+2025-12-10 21:18:36,097 [INFO] pdf_processor - Produto 'ALHO FRITO TEMPERE 40G 000 UN 1,000 2,99' (ID=789820) já existia no banco.
+2025-12-10 21:18:36,778 [INFO] pdf_processor - Produto 'REFR PO TANG MARACUJA 18G 000 UN 6,000 0,99' (ID=762221) já existia no banco.
+2025-12-10 21:18:37,458 [INFO] pdf_processor - Produto 'REFR PO TANG MOR 18G 000 UN 6,000 0,99' (ID=762221) já existia no banco.
+2025-12-10 21:18:38,139 [INFO] pdf_processor - Produto 'REFR PO TANG LARANJA 18G 000 UN 2,000 0,99' (ID=762221) já existia no banco.
+2025-12-10 21:18:38,819 [INFO] pdf_processor - Cadastrando novo produto: ID=789632 | Nome='ALHO SUPER ALHO TRITURADO 1KG 000 UN 1,000 15,99'
+2025-12-10 21:18:40,012 [INFO] pdf_processor - Produto 'EXT TOM ELEFANTE PT 300G CEBALHO 000 UN 1,000 7,49' (ID=789603) já existia no banco.
+2025-12-10 21:18:40,691 [INFO] pdf_processor - Cadastrando novo produto: ID=602883 | Nome='UVA PASSA REI DAS CASTANHAS PTA 190G 000 UN 1,000 9,99'
+2025-12-10 21:18:41,902 [INFO] pdf_processor - Cadastrando novo produto: ID=736532 | Nome='BATATA CHIRUCA 110G ORIG 000 UN 2,000 9,99'
+2025-12-10 21:18:43,094 [INFO] pdf_processor - Produto 'BATATA CHIRUCA 110G CHEESE 000 UN 1,000 9,99' (ID=736532) já existia no banco.
+2025-12-10 21:18:43,774 [INFO] pdf_processor - Cadastrando novo produto: ID=789626 | Nome='SUCO MISTO SUMMER 1L UVAMACA 000 UN 1,000 9,49'
+2025-12-10 21:18:44,965 [INFO] pdf_processor - Produto 'SUCO MISTO SUMMER 1L ABACMACAUVA BCA 000 UN 1,000 9,49' (ID=789626) já existia no banco.
+2025-12-10 21:18:45,646 [INFO] pdf_processor - Produto 'SUCO MISTO SUMMER 1L MACAUVA BCA 000 UN 1,000 9,49' (ID=789626) já existia no banco.
+2025-12-10 21:18:46,326 [INFO] pdf_processor - Cadastrando novo produto: ID=789604 | Nome='VINAGRE CASTELO LIMAO 750ML 020 UN 1,000 6,99'
+2025-12-10 21:18:47,520 [INFO] pdf_processor - Cadastrando novo produto: ID=789622 | Nome='OLEO SOJA VILA VELHA 900ML 020 UN 2,000 6,59'
+2025-12-10 21:18:48,719 [INFO] pdf_processor - Produto 'DESINF UAU 2L FLORESFR VERM 020 UN 1,000 6,99' (ID=789124) já existia no banco.
+2025-12-10 21:18:49,399 [INFO] pdf_processor - Produto 'SH GRANADO BEBE REF 250ML CAMOMILA 000 UN 1,000 10,79' (ID=789651) já existia no banco.
+2025-12-10 21:18:50,080 [INFO] pdf_processor - Produto 'AMAC CONC MON BIJOU 1L MISTERIO 000 UN 1,000 14,49' (ID=789102) já existia no banco.
+2025-12-10 21:18:50,761 [INFO] pdf_processor - Produto 'AGUA SANIT QBOA 5L 020 UN 1,000 14,99' (ID=789608) já existia no banco.
+2025-12-10 21:18:51,441 [INFO] pdf_processor - Produto 'AMAC CONC MON BIJOU 1L MISTERIO 000 UN 1,000 14,49' (ID=789102) já existia no banco.
+2025-12-10 21:18:52,123 [INFO] pdf_processor - Produto 'LIMP PERF UAU PROM 2L BRISA FRESCOR 000 UN 1,000 14,49' (ID=789124) já existia no banco.
+2025-12-10 21:18:52,803 [INFO] pdf_processor - Produto 'TIRA MANCHAS GEL VANISH SCH 1,2L ROSA 000 UN 1,000 21,99' (ID=789103) já existia no banco.
+2025-12-10 21:18:53,484 [INFO] pdf_processor - Cadastrando novo produto: ID=789115 | Nome='DEO AERO REXONA FEM 200ML FR VERM 000 UN 1,000 17,49'
+2025-12-10 21:18:54,675 [INFO] pdf_processor - Produto 'LAVA ROUPAS LIQ ARIEL 3L CLASSICO 000 UN 1,000 49,99' (ID=750043) já existia no banco.
+2025-12-10 21:18:55,356 [INFO] pdf_processor - Cadastrando novo produto: ID=790998 | Nome='SAND HAV FLORES KIDS 312 PESSEGO 000 UN 1,000 19,99'
+2025-12-10 21:18:56,547 [INFO] pdf_processor - Produto 'PA P LIXO SELETA C CABO CORES 000 UN 1,000 13,49' (ID=789892) já existia no banco.
+2025-12-10 21:18:57,227 [INFO] pdf_processor - Produto 'LING CHURR SUPER FRANGO CPEQUI 800G 000 UN 1,000 15,49' (ID=789804) já existia no banco.
+2025-12-10 21:18:57,908 [INFO] pdf_processor - Produto 'LING SUINA TOSCANA BOUA CONG 800GR 000 UN 1,000 15,99' (ID=789804) já existia no banco.
+2025-12-10 21:18:58,589 [INFO] pdf_processor - Produto 'LING CHURR SUPER FRANGO CQUEIJO 800G 000 UN 1,000 15,49' (ID=789804) já existia no banco.
+2025-12-10 21:18:59,269 [INFO] pdf_processor - Cadastrando novo produto: ID=789605 | Nome='IOG LIQ ITAMBE 1,15KG MARACUJA 000 UN 1,000 14,49'
+2025-12-10 21:19:00,460 [INFO] pdf_processor - Produto 'IOG LIQ ITAMBE 1,15KG COCO 000 UN 1,000 14,49' (ID=789605) já existia no banco.
+2025-12-10 21:19:01,161 [INFO] pdf_processor - Produto 'MORTADELA OURO PERDIGAO FAT 200G 000 UN 1,000 4,99' (ID=789151) já existia no banco.
+2025-12-10 21:19:01,841 [INFO] pdf_processor - Produto 'QJO MUSS DEALE FAT 400G 000 UN 1,000 19,99' (ID=789894) já existia no banco.
+2025-12-10 21:19:02,522 [INFO] pdf_processor - Produto 'LING CHURRASCO SEARA CCHIMICHURRI 600G 000 UN 1,000 15,99' (ID=789490) já existia no banco.
+2025-12-10 21:19:03,203 [INFO] pdf_processor - Produto 'PAO DE QUEIJO FAMILIA MINEIRA TRAD 800G 000 UN 1,000 9,99' (ID=789326) já existia no banco.
+2025-12-10 21:19:03,884 [INFO] pdf_processor - Produto 'BATATA BEM BRASIL CARINHAS 1,05KG 000 UN 1,000 8,99' (ID=789892) já existia no banco.
+2025-12-10 21:19:04,564 [INFO] pdf_processor - Produto 'BATATA BEM BRASIL FININHAS 1,5KG 000 UN 1,000 22,99' (ID=789892) já existia no banco.
+2025-12-10 21:19:05,245 [INFO] pdf_processor - Produto 'FILEZINHO SASSAMI CONG SEARA ZIP 1KG 000 KG 1,000 21,99' (ID=789490) já existia no banco.
+2025-12-10 21:19:05,585 [INFO] pdf_processor - Arquivo '457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf' processado com sucesso. Itens gravados: 70.
+2025-12-10 21:19:05,589 [INFO] pdf_processor - Arquivo '457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf' movido para a pasta de arquivamento: C:\GestaoCompras\PROCESSADAS\457ce021-1d24-4eb3-958d-231a4e2f71f8.pdf
+2025-12-10 21:19:05,591 [INFO] pdf_processor - Iniciando processamento do arquivo PDF '7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf'.
+2025-12-10 21:19:05,591 [INFO] pdf_processor - Extraindo dados do PDF: 7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf
+2025-12-10 21:19:06,056 [INFO] pdf_processor - Extração concluída para '7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf'. Data: 2025-06-03 | Mercado: X 1 - SAÍDA 2 - ENTRADA | Itens: 0
+2025-12-10 21:19:06,057 [ERROR] pdf_processor - Nenhum item identificado no PDF '7f5456c3-b0b5-4834-a85c-6872084f1a38.pdf'. O arquivo será mantido em NOVAS_NOTAS.
+2025-12-10 21:19:06,058 [INFO] pdf_processor - Iniciando processamento do arquivo PDF 'f38065b0-5aa4-4488-880d-5328fa82280b.pdf'.
+2025-12-10 21:19:06,058 [INFO] pdf_processor - Extraindo dados do PDF: f38065b0-5aa4-4488-880d-5328fa82280b.pdf
+2025-12-10 21:19:09,545 [INFO] pdf_processor - Extração concluída para 'f38065b0-5aa4-4488-880d-5328fa82280b.pdf'. Data: 2025-04-07 | Mercado: X 1 - SAÍDA 2 - ENTRADA | Itens: 107
+2025-12-10 21:19:09,545 [INFO] pdf_processor - Dados gerais extraídos - Mercado: X 1 - SAÍDA 2 - ENTRADA | Data: 2025-04-07
+2025-12-10 21:19:09,889 [INFO] pdf_processor - Produto 'LING CHURR SUPER FRANGO CBACON 800G 000 UN 1,000 15,99' (ID=789804) já existia no banco.
+2025-12-10 21:19:10,571 [INFO] pdf_processor - Produto 'LING CHURR SUPER FRANGO CBACON 800G 000 UN 1,000 15,99' (ID=789804) já existia no banco.
+2025-12-10 21:19:11,250 [INFO] pdf_processor - Produto 'STEAK FRANGO CONG SUPER FRANGO 100G 000 UN 8,000 1,39' (ID=789804) já existia no banco.
+2025-12-10 21:19:11,931 [INFO] pdf_processor - Produto 'PAO DE QUEIJO FAMILIA MINEIRA TRAD 800G 000 UN 1,000 9,99' (ID=789326) já existia no banco.
+2025-12-10 21:19:12,613 [INFO] pdf_processor - Cadastrando novo produto: ID=789662 | Nome='REQUEIJAO CANTO DE MINAS LIGHT 400G 020 UN 1,000 15,49'
+2025-12-10 21:19:13,803 [INFO] pdf_processor - Produto 'QJO MUSS IMBAUBA FAT 400G 000 UN 1,000 22,99' (ID=789711) já existia no banco.
+2025-12-10 21:19:14,484 [INFO] pdf_processor - Produto 'MORTADELA OURO PERDIGAO FAT 200G 000 UN 1,000 3,99' (ID=789151) já existia no banco.
+2025-12-10 21:19:15,165 [INFO] pdf_processor - Produto 'BATATA BEM BRASIL CARINHAS 1,05KG 000 UN 1,000 6,99' (ID=789892) já existia no banco.
+2025-12-10 21:19:15,845 [INFO] pdf_processor - Produto 'COXA SEARA ZIP 1KG 000 UN 1,000 12,49' (ID=789490) já existia no banco.
+2025-12-10 21:19:16,526 [INFO] pdf_processor - Produto 'IOG LIQ ITAMBE 1,15KG MARACUJA 000 UN 1,000 13,99' (ID=789605) já existia no banco.
+2025-12-10 21:19:17,207 [INFO] pdf_processor - Produto 'IOG TREVINHO 1,100G MOR 000 UN 1,000 8,49' (ID=789679) já existia no banco.
+2025-12-10 21:19:17,887 [INFO] pdf_processor - Produto 'LAVA ROUPAS LIQ ARIEL 2L SENSITIVE 000 UN 1,000 39,99' (ID=750043) já existia no banco.
+2025-12-10 21:19:18,568 [INFO] pdf_processor - Produto 'LAVA ROUPAS LIQ ARIEL 3L CLASSICO 000 UN 1,000 37,99' (ID=750043) já existia no banco.
+2025-12-10 21:19:19,248 [INFO] pdf_processor - Produto 'TIRA MANCHAS GEL VANISH SCH 1,2L ROSA 000 UN 1,000 21,99' (ID=789103) já existia no banco.
+2025-12-10 21:19:19,929 [INFO] pdf_processor - Produto 'AMAC CONC MON BIJOU 1L MISTERIO 000 UN 1,000 14,49' (ID=789102) já existia no banco.
+2025-12-10 21:19:20,610 [INFO] pdf_processor - Produto 'DESINF UAU 2L FLORESFR VERM 020 UN 1,000 9,99' (ID=789124) já existia no banco.
+2025-12-10 21:19:21,291 [INFO] pdf_processor - Produto 'DESINF UAU 2L FLORESFR VERM 020 UN 1,000 9,99' (ID=789124) já existia no banco.
+2025-12-10 21:19:21,971 [INFO] pdf_processor - Produto 'LIMP PERF VEJA 2L FLORES 000 UN 1,000 12,99' (ID=789103) já existia no banco.
+2025-12-10 21:19:22,652 [INFO] pdf_processor - Produto 'LIMP LIMPEZA PESADA AJAX 1L LIMAO 000 UN 1,000 14,49' (ID=789102) já existia no banco.
+2025-12-10 21:19:23,333 [INFO] pdf_processor - Cadastrando novo produto: ID=789609 | Nome='AMAC YPE 2L DELICADO 000 UN 1,000 9,49'
+2025-12-10 21:19:24,524 [INFO] pdf_processor - Cadastrando novo produto: ID=789794 | Nome='ALCOOL AIDAR 46 1L CITRONELA De 8,79 por 000 UN 1,000 7,99 7,99'
+2025-12-10 21:19:25,715 [INFO] pdf_processor - Produto 'SACO PLIXO BOMLIXO AZUL ROLO 20UN 50L 000 UN 1,000 17,49' (ID=789890) já existia no banco.
+2025-12-10 21:19:26,396 [INFO] pdf_processor - Produto 'BISC POLVILHO VO CHICA 100G TEMP 000 UN 1,000 3,99' (ID=619205) já existia no banco.
+2025-12-10 21:19:27,076 [INFO] pdf_processor - Cadastrando novo produto: ID=789731 | Nome='BISC FORNO MAGICO TORRADINHO 150GR 000 UN 1,000 7,79'
+2025-12-10 21:19:28,267 [INFO] pdf_processor - Cadastrando novo produto: ID=703418 | Nome='PAO BRIOCHE BLISS 350G 000 UN 1,000 5,99'
+2025-12-10 21:19:29,459 [INFO] pdf_processor - Produto 'BISC RECH ARCOR TORTUGUITA 516G MONO MOR 000 UN 1,000 9,99' (ID=789605) já existia no banco.
+2025-12-10 21:19:30,139 [INFO] pdf_processor - Produto 'MOLHO TOM POMAROLA CASEIRO CLASS SC 300G 000 UN 1,000 3,99' (ID=789603) já existia no banco.
+2025-12-10 21:19:30,820 [INFO] pdf_processor - Produto 'MOLHO TOM POMAROLA BOLONHESA SACHE 300G 000 UN 1,000 4,99' (ID=789603) já existia no banco.
+2025-12-10 21:19:31,500 [INFO] pdf_processor - Produto 'CAFE SOLUVEL 3CORACOES REF 40G TRAD 020 UN 1,000 5,79' (ID=789604) já existia no banco.
+2025-12-10 21:19:32,181 [INFO] pdf_processor - Produto 'CAFE SOLUVEL 3CORACOES REF 40G TRAD 020 UN 1,000 5,79' (ID=789604) já existia no banco.
+2025-12-10 21:19:32,862 [INFO] pdf_processor - Produto 'CAFE SOLUVEL 3CORACOES REF 40G TRAD 020 UN 1,000 5,79' (ID=789604) já existia no banco.
+2025-12-10 21:19:33,543 [INFO] pdf_processor - Produto 'SALG KARITOS 40G BACON 000 UN 3,000 1,99' (ID=789813) já existia no banco.
+2025-12-10 21:19:34,224 [INFO] pdf_processor - Produto 'SALG ELMA CHIPS LANCHINHO 98G SORTIDOS 000 UN 1,000 8,99' (ID=789284) já existia no banco.
+2025-12-10 21:19:34,904 [INFO] pdf_processor - Produto 'CAFE SOLUVEL 3CORACOES 40G EXT FORTE 020 UN 1,000 5,79' (ID=789604) já existia no banco.
+2025-12-10 21:19:35,585 [INFO] pdf_processor - Produto 'CANELA EM PO SO PUREZA 500GR 000 UN 1,000 37,99' (ID=789890) já existia no banco.
+2025-12-10 21:19:36,265 [INFO] pdf_processor - Produto 'ACHOC PO ITALAC SHC 700G 000 UN 1,000 9,99' (ID=789808) já existia no banco.
+2025-12-10 21:19:36,946 [INFO] pdf_processor - Produto 'CAFE SOLUVEL 3CORACOES REF 40G TRAD 020 UN 1,000 5,79' (ID=789604) já existia no banco.
+2025-12-10 21:19:37,626 [INFO] pdf_processor - Produto 'SALG SKINY 60G PRESUNTO 000 UN 1,000 1,69' (ID=789284) já existia no banco.
+2025-12-10 21:19:38,307 [INFO] pdf_processor - Produto 'SALG SKINY 60G PRESUNTO 000 UN 1,000 1,69' (ID=789284) já existia no banco.
+2025-12-10 21:19:38,988 [INFO] pdf_processor - Cadastrando novo produto: ID=789893 | Nome='PIPOCA DOCE IEIE 100G 000 UN 1,000 1,99'
+2025-12-10 21:19:40,180 [INFO] pdf_processor - Produto 'CAFE SOLUVEL 3CORACOES REF 40G TRAD 020 UN 1,000 5,79' (ID=789604) já existia no banco.
+2025-12-10 21:19:40,869 [INFO] pdf_processor - Cadastrando novo produto: ID=789635 | Nome='PORTA OVOS SANREMO 000 UN 1,000 10,79'
+2025-12-10 21:19:42,061 [INFO] pdf_processor - Produto 'JARRA LADRINHOS NADIR CTAMPA 1,2L 000 UN 1,000 26,99' (ID=789115) já existia no banco.
+2025-12-10 21:19:42,741 [INFO] pdf_processor - Produto 'MINI BISC RECH OREO 35G BAUN 000 UN 10,000 2,59' (ID=762221) já existia no banco.
+2025-12-10 21:19:43,422 [INFO] pdf_processor - Produto 'SALG KARITOS 40G BACON 000 UN 1,000 1,99' (ID=789813) já existia no banco.
+2025-12-10 21:19:44,102 [INFO] pdf_processor - Produto 'SALG KARITOS 40G BACON 000 UN 1,000 1,99' (ID=789813) já existia no banco.
+2025-12-10 21:19:44,784 [INFO] pdf_processor - Produto 'PIPOCA DOCE IEIE 100G 000 UN 1,000 1,99' (ID=789893) já existia no banco.
+2025-12-10 21:19:45,464 [INFO] pdf_processor - Produto 'MAC INST NISSIN UFO 98G GALINHA CAIPIRA 020 UN 1,000 6,49' (ID=789107) já existia no banco.
+2025-12-10 21:19:46,145 [INFO] pdf_processor - Produto 'PIPOCA DOCE IEIE 100G 000 UN 1,000 1,99' (ID=789893) já existia no banco.
+2025-12-10 21:19:46,825 [INFO] pdf_processor - Produto 'BISC MAISENA VITARELLA 350G LEITE 000 UN 1,000 6,99' (ID=789621) já existia no banco.
+2025-12-10 21:19:47,504 [INFO] pdf_processor - Produto 'SALG KARITOS 40G BACON 000 UN 1,000 1,99' (ID=789813) já existia no banco.
+2025-12-10 21:19:48,185 [INFO] pdf_processor - Produto 'BISC MAISENA VITARELLA 350G CHOC 000 UN 1,000 6,49' (ID=789621) já existia no banco.
+2025-12-10 21:19:48,867 [INFO] pdf_processor - Produto 'MAC INST CUP NOODLES 69G GALINHA CAIPIRA 020 UN 1,000 5,49' (ID=789107) já existia no banco.
+2025-12-10 21:19:49,549 [INFO] pdf_processor - Produto 'BOMBOM CAIXA LACTA 250,6G BRAND MIX 000 UN 1,000 10,99' (ID=762221) já existia no banco.
+2025-12-10 21:19:50,229 [INFO] pdf_processor - Produto 'BISC CHOCOBISC BAUDUCCO 36G AO LEITE 000 UN 18,000 2,59' (ID=789196) já existia no banco.
+2025-12-10 21:19:50,908 [INFO] pdf_processor - Produto 'CHOC HERSHEYS 77G CARAMEL SALG 000 UN 1,000 4,49' (ID=789997) já existia no banco.
+2025-12-10 21:19:51,590 [INFO] pdf_processor - Produto 'CHOC HERSHEYS 77G CARAMEL SALG 000 UN 1,000 4,49' (ID=789997) já existia no banco.
+2025-12-10 21:19:52,283 [INFO] pdf_processor - Produto 'BOMBOM CAIXA LACTA 250,6G BRAND MIX 000 UN 1,000 10,99' (ID=762221) já existia no banco.
+2025-12-10 21:19:52,972 [INFO] pdf_processor - Produto 'LEITE LV UHT SLAC PIRACANJUBA TAMP 1L 000 UN 1,000 5,79' (ID=789821) já existia no banco.
+2025-12-10 21:19:53,652 [INFO] pdf_processor - Produto 'REFR PO TANG LARANJA 18G 000 UN 1,000 1,19' (ID=762221) já existia no banco.
+2025-12-10 21:19:54,333 [INFO] pdf_processor - Produto 'REFR PO TANG MARACUJA 18G 000 UN 1,000 1,19' (ID=762221) já existia no banco.
+2025-12-10 21:19:55,013 [INFO] pdf_processor - Produto 'REFR PO TANG MARACUJA 18G 000 UN 1,000 1,19' (ID=762221) já existia no banco.
+2025-12-10 21:19:55,694 [INFO] pdf_processor - Produto 'REFR PO TANG MARACUJA 18G 000 UN 1,000 1,19' (ID=762221) já existia no banco.
+2025-12-10 21:19:56,374 [INFO] pdf_processor - Produto 'REFR PO TANG LARANJA 18G 000 UN 1,000 1,19' (ID=762221) já existia no banco.
+2025-12-10 21:19:57,056 [INFO] pdf_processor - Produto 'REFR PO TANG MARACUJA 18G 000 UN 1,000 1,19' (ID=762221) já existia no banco.
+2025-12-10 21:19:57,756 [INFO] pdf_processor - Produto 'REFR PO TANG MOR 18G 000 UN 1,000 1,19' (ID=762221) já existia no banco.
+2025-12-10 21:19:58,437 [INFO] pdf_processor - Produto 'REFR PO TANG UVA 18G 000 UN 1,000 1,19' (ID=762221) já existia no banco.
+2025-12-10 21:19:59,118 [INFO] pdf_processor - Produto 'REFR PO TANG UVA 18G 000 UN 1,000 1,19' (ID=762221) já existia no banco.
+2025-12-10 21:19:59,798 [INFO] pdf_processor - Produto 'REFR PO TANG UVA 18G 000 UN 1,000 1,19' (ID=762221) já existia no banco.
+2025-12-10 21:20:00,479 [INFO] pdf_processor - Produto 'REFR PO TANG UVA 18G 000 UN 1,000 1,19' (ID=762221) já existia no banco.
+2025-12-10 21:20:01,159 [INFO] pdf_processor - Produto 'REFR PO TANG UVA 18G 000 UN 1,000 1,19' (ID=762221) já existia no banco.
+2025-12-10 21:20:01,841 [INFO] pdf_processor - Produto 'REFR PO TANG UVA 18G 000 UN 1,000 1,19' (ID=762221) já existia no banco.
+2025-12-10 21:20:02,520 [INFO] pdf_processor - Produto 'REFR PO TANG MOR 18G 000 UN 1,000 1,19' (ID=762221) já existia no banco.
+2025-12-10 21:20:03,202 [INFO] pdf_processor - Produto 'SUCO MISTO SUMMER 1L MACAUVA BCA 000 UN 1,000 9,49' (ID=789626) já existia no banco.
+2025-12-10 21:20:03,882 [INFO] pdf_processor - Produto 'SUCO MISTO SUMMER 1L ABACMACAUVA BCA 000 UN 1,000 9,49' (ID=789626) já existia no banco.
+2025-12-10 21:20:04,563 [INFO] pdf_processor - Produto 'ESC DENT COLGATE PROM UN TANDY 020 UN 1,000 10,79' (ID=789102) já existia no banco.
+2025-12-10 21:20:05,244 [INFO] pdf_processor - Produto 'CR DENT SORRISO DENTES BRANCOS 90GR 020 UN 1,000 3,99' (ID=789152) já existia no banco.
+2025-12-10 21:20:05,923 [INFO] pdf_processor - Produto 'SAB LIQ GRANADO BEBE REF 250ML ERVA DOCE 020 UN 1,000 15,49' (ID=789651) já existia no banco.
+2025-12-10 21:20:06,605 [INFO] pdf_processor - Produto 'BUCHA VEGT FIBRA FORTE UN BOLD 000 UN 1,000 5,49' (ID=789852) já existia no banco.
+2025-12-10 21:20:07,286 [INFO] pdf_processor - Produto 'DOCE LEITE SLAC PIRACANJUBA 350G 000 UN 1,000 9,99' (ID=789821) já existia no banco.
+2025-12-10 21:20:07,966 [INFO] pdf_processor - Cadastrando novo produto: ID=789707 | Nome='COBERT HARALD CONFEIT MAMARGO GTS1,01KG 000 UN 1,000 21,89'
+2025-12-10 21:20:09,157 [INFO] pdf_processor - Cadastrando novo produto: ID=560121 | Nome='AZEITE TP UNICO PORT ANDORINHA PURO500ML 000 UN 1,000 34,99'
+2025-12-10 21:20:10,348 [INFO] pdf_processor - Cadastrando novo produto: ID=789623 | Nome='LOCAO LIMP LEITE DE COLONIA 200ML TRAD 000 UN 1,000 7,49'
+2025-12-10 21:20:11,540 [INFO] pdf_processor - Produto 'SAB LIQ GRANADO BEBE REF 250ML ERVA DOCE 020 UN 1,000 15,49' (ID=789651) já existia no banco.
+2025-12-10 21:20:12,223 [INFO] pdf_processor - Cadastrando novo produto: ID=789721 | Nome='FIO DENT JADEPRO 50M HELLO KITTY 000 UN 1,000 7,99'
+2025-12-10 21:20:13,421 [INFO] pdf_processor - Cadastrando novo produto: ID=789611 | Nome='SH TRA LA LA 2EM1 480ML MENINAS 000 UN 1,000 12,99'
+2025-12-10 21:20:14,613 [INFO] pdf_processor - Produto 'SALG ELMA CHIPS LANCHINHO 98G SORTIDOS 000 UN 1,000 8,99' (ID=789284) já existia no banco.
+2025-12-10 21:20:15,306 [INFO] pdf_processor - Produto 'CR DENT SORRISO XTREME 40G FRESH MINT 020 UN 1,000 6,49' (ID=750954) já existia no banco.
+2025-12-10 21:20:15,994 [INFO] pdf_processor - Produto 'SAB LIQ NUTRY CAP 500ML FLOR LARANJEIRA 020 UN 1,000 8,49' (ID=789892) já existia no banco.
+2025-12-10 21:20:16,674 [INFO] pdf_processor - Cadastrando novo produto: ID=790832 | Nome='SAB FRANCIS BRASILIDADES 80G VERM 020 UN 1,000 2,79'
+2025-12-10 21:20:17,865 [INFO] pdf_processor - Produto 'SAB FRANCIS BRASILIDADES 80G LARANJA 020 UN 1,000 2,79' (ID=790832) já existia no banco.
+2025-12-10 21:20:18,552 [INFO] pdf_processor - Produto 'SAB FRANCIS BRASILIDADES 80G LARANJA 020 UN 1,000 2,79' (ID=790832) já existia no banco.
+2025-12-10 21:20:19,237 [INFO] pdf_processor - Produto 'DEO AERO REXONA FEM 200ML FR VERM 000 UN 1,000 18,49' (ID=789115) já existia no banco.
+2025-12-10 21:20:19,929 [INFO] pdf_processor - Cadastrando novo produto: ID=789896 | Nome='PAPEL HIG MAX FD 30M L12 P11 020 UN 1,000 14,99'
+2025-12-10 21:20:21,119 [INFO] pdf_processor - Produto 'SALG SKINY 60G PRESUNTO 000 UN 1,000 1,69' (ID=789284) já existia no banco.
+2025-12-10 21:20:21,800 [INFO] pdf_processor - Produto 'CAFE SOLUVEL 3CORACOES 40G EXT FORTE 020 UN 1,000 5,79' (ID=789604) já existia no banco.
+2025-12-10 21:20:22,480 [INFO] pdf_processor - Produto 'MAC INST CUP NOODLES 68G GALINHA PICANTE 020 UN 1,000 5,49' (ID=789107) já existia no banco.
+2025-12-10 21:20:23,161 [INFO] pdf_processor - Produto 'SALG SKINY 60G PRESUNTO 000 UN 1,000 1,69' (ID=789284) já existia no banco.
+2025-12-10 21:20:23,842 [INFO] pdf_processor - Produto 'SALG SKINY 60G PRESUNTO 000 UN 1,000 1,69' (ID=789284) já existia no banco.
+2025-12-10 21:20:24,522 [INFO] pdf_processor - Produto 'VINAGRE CASTELO LIMAO 750ML 020 UN 1,000 6,49' (ID=789604) já existia no banco.
+2025-12-10 21:20:25,203 [INFO] pdf_processor - Cadastrando novo produto: ID=789110 | Nome='OLEO SOJA SOYA 900ML 020 UN 1,000 6,79'
+2025-12-10 21:20:26,394 [INFO] pdf_processor - Produto 'MAC INST CUP NOODLES 68G GALINHA PICANTE 020 UN 1,000 5,49' (ID=789107) já existia no banco.
+2025-12-10 21:20:27,075 [INFO] pdf_processor - Cadastrando novo produto: ID=789691 | Nome='SAL REFINADO DA MAMAE 1KG 020 UN 1,000 1,79'
+2025-12-10 21:20:28,266 [INFO] pdf_processor - Produto 'FEIJAO CARIOCA DONA DE 1KG 000 UN 1,000 5,39' (ID=789892) já existia no banco.
+2025-12-10 21:20:28,946 [INFO] pdf_processor - Produto 'FEIJAO CARIOCA DONA DE 1KG 000 UN 1,000 5,39' (ID=789892) já existia no banco.
+2025-12-10 21:20:29,629 [INFO] pdf_processor - Cadastrando novo produto: ID=789624 | Nome='SALG MICOS LANCHINHO 140G 000 UN 1,000 8,49'
+2025-12-10 21:20:30,828 [INFO] pdf_processor - Produto 'ARROZ TP1 AGULHINHA PATOSUL 5KG 020 UN 1,000 24,99' (ID=789894) já existia no banco.
+2025-12-10 21:20:31,169 [INFO] pdf_processor - Arquivo 'f38065b0-5aa4-4488-880d-5328fa82280b.pdf' processado com sucesso. Itens gravados: 107.
+2025-12-10 21:20:31,172 [INFO] pdf_processor - Arquivo 'f38065b0-5aa4-4488-880d-5328fa82280b.pdf' movido para a pasta de arquivamento: C:\GestaoCompras\PROCESSADAS\f38065b0-5aa4-4488-880d-5328fa82280b.pdf
+2025-12-10 21:20:31,173 [INFO] pdf_processor - Processo concluído. Arquivos processados com sucesso: 5.
+2025-12-10 21:20:31,175 [INFO] pdf_processor - Conexão com o banco encerrada.

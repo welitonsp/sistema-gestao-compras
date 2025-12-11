@@ -1,69 +1,116 @@
-import psycopg2
+# ver_relatorio_nuvem.py
+# Visualizador simples em modo texto dos últimos lançamentos gravados no Neon
+# Alinhado ao novo schema:
+#   - produtos(ean, nome_original, nome_limpo, marca, categoria, unidade)
+#   - historico_precos(id, ean, data_compra, mercado, preco_pago, quantidade)
 
-# --- FUNÇÃO PARA LER A SENHA DO ARQUIVO .ENV ---
-def ler_credenciais():
-    link_banco = None
-    try:
-        with open(".env", "r", encoding="utf-8") as f:
-            for linha in f:
-                if "DATABASE_URL" in linha and "=" in linha:
-                    # Pega tudo depois do primeiro igual e limpa aspas/espaços
-                    link_banco = linha.split("=", 1)[1].strip().strip('"').strip("'")
-    except:
-        print("❌ Erro: Não consegui ler o arquivo .env")
+import os
+import psycopg2
+from datetime import date
+from dotenv import load_dotenv
+
+# -------------------------------------------------------------------
+# 1. Carregar .env e ler a DATABASE_URL
+# -------------------------------------------------------------------
+
+load_dotenv()
+
+def ler_link_banco() -> str:
+    """
+    Lê a variável DATABASE_URL do arquivo .env.
+    Exemplo:
+      DATABASE_URL=postgres://usuario:senha@host.neon.tech:5432/banco
+    """
+    link_banco = os.getenv("DATABASE_URL")
+    if not link_banco:
+        print("❌ ERRO: DATABASE_URL não encontrada no .env.")
+        print("   Verifique se o arquivo .env está na mesma pasta deste script")
+        print("   e contém uma linha como:")
+        print('   DATABASE_URL="postgres://usuario:senha@host:5432/banco"')
+        raise SystemExit(1)
     return link_banco
 
-# --- VISUALIZADOR ---
-def mostrar_dados():
-    link = ler_credenciais()
-    if not link:
-        print("❌ ERRO: Link do banco não encontrado no .env")
-        return
+# -------------------------------------------------------------------
+# 2. Função principal de visualização
+# -------------------------------------------------------------------
+
+def mostrar_dados(limit: int = 50) -> None:
+    """
+    Mostra os últimos lançamentos da tabela historico_precos,
+    juntando com produtos para exibir o nome limpo.
+    """
+    link_banco = ler_link_banco()
 
     try:
-        print("🔌 Conectando ao Neon para baixar relatório...")
-        conn = psycopg2.connect(link)
+        conn = psycopg2.connect(link_banco)
         cursor = conn.cursor()
 
-        # 1. Relatório de Categorização (O Trabalho da IA)
-        print("\n" + "="*85)
-        print(f"{'PRODUTO (Original)':<35} | {'CATEGORIA (IA)':<20} | {'NOME LIMPO'}")
-        print("="*85)
+        print("\n📊 ÚLTIMOS LANÇAMENTOS REGISTRADOS NO NEON")
+        print("─" * 90)
+        print("DATA       | MERCADO               | PRODUTO                 | QTD   | PREÇO UNIT")
+        print("─" * 90)
 
-        cursor.execute("SELECT nome_original, categoria, nome_limpo FROM produtos")
-        produtos = cursor.fetchall()
-
-        for p in produtos:
-            # Corta nomes muito longos para não quebrar a linha
-            orig = (p[0][:32] + '..') if len(p[0]) > 32 else p[0]
-            cat = (p[1][:18] + '..') if p[1] and len(p[1]) > 18 else (p[1] or "")
-            limpo = p[2] or ""
-            print(f"{orig:<35} | {cat:<20} | {limpo}")
-
-        # 2. Relatório Financeiro
-        print("\n" + "="*85)
-        print("💰 ÚLTIMAS COMPRAS REGISTRADAS")
-        print("="*85)
-        
-        cursor.execute("""
-            SELECT h.data_compra, h.mercado, p.nome_limpo, h.preco_pago, h.quantidade 
+        # Consulta alinhada ao NOVO schema criado pelo script de importação (ia_groq_utils/importar_pdf)
+        cursor.execute(
+            """
+            SELECT 
+                h.data_compra,
+                h.mercado,
+                p.nome_limpo,
+                h.quantidade,
+                h.preco_pago
             FROM historico_precos h
             JOIN produtos p ON h.ean = p.ean
-            ORDER BY h.data_compra DESC
-        """)
-        
-        historico = cursor.fetchall()
-        for h in historico:
-            data = str(h[0]) # Data
-            mercado = (h[1][:20] + '..') if len(h[1]) > 20 else h[1]
-            nome = (h[2][:20] + '..') if len(h[2]) > 20 else h[2]
-            preco = h[3]
-            print(f"{data} | {mercado:<22} | {nome:<22} | R$ {preco}")
+            ORDER BY h.data_compra DESC, h.id DESC
+            LIMIT %s;
+            """,
+            (limit,),
+        )
+
+        linhas = cursor.fetchall()
+
+        if not linhas:
+            print("⚠️ Nenhum registro encontrado em historico_precos.")
+            print("   Dica: rode primeiro o script de importação (ia_groq_utils.py / importar_pdf.py).")
+            conn.close()
+            return
+
+        for data_compra, mercado, nome_limpo, qtd, preco_unit in linhas:
+            # Data em formato YYYY-MM-DD
+            if isinstance(data_compra, date):
+                data_str = data_compra.strftime("%Y-%m-%d")
+            else:
+                data_str = str(data_compra)[:10]
+
+            mercado_fmt = (mercado[:22] + "..") if len(mercado) > 22 else mercado
+            nome_fmt = (nome_limpo[:24] + "..") if len(nome_limpo) > 24 else nome_limpo
+
+            try:
+                qtd_float = float(qtd)
+            except (TypeError, ValueError):
+                qtd_float = 0.0
+
+            try:
+                preco_float = float(preco_unit)
+            except (TypeError, ValueError):
+                preco_float = 0.0
+
+            print(
+                f"{data_str} | "
+                f"{mercado_fmt:<24} | "
+                f"{nome_fmt:<26} | "
+                f"{qtd_float:5.3f} | "
+                f"R$ {preco_float:6.2f}"
+            )
 
         conn.close()
 
     except Exception as e:
         print(f"❌ Erro ao buscar dados: {e}")
+
+# -------------------------------------------------------------------
+# 3. Ponto de entrada
+# -------------------------------------------------------------------
 
 if __name__ == "__main__":
     mostrar_dados()
