@@ -1,101 +1,111 @@
-# core/database.py
-# Módulo centralizado de acesso ao banco de dados (Neon/PostgreSQL)
+# core/config.py
+# ==========================================================
+# CONFIGURAÇÕES CENTRAIS DO SISTEMA GESTAOCOMPRAS
+# ==========================================================
+# Este arquivo centraliza:
+# - Variáveis de ambiente (.env)
+# - Configurações de banco
+# - Configurações de IA (Groq / Gemini)
+# - Constantes globais
+#
+# Pensado para facilitar manutenção e aprendizado.
+# ==========================================================
 
 import os
-import logging
-from typing import Any, Iterable, Optional
+from dotenv import load_dotenv
 
-import psycopg2
-import pandas as pd
+# ----------------------------------------------------------
+# CARREGAMENTO DO .env
+# ----------------------------------------------------------
 
-logger = logging.getLogger(__name__)
-
-# Conexão global simples reaproveitada entre chamadas
-_connection = None
+# Carrega o arquivo .env da raiz do projeto
+load_dotenv()
 
 
-def get_database_url() -> str:
+# ----------------------------------------------------------
+# BANCO DE DADOS
+# ----------------------------------------------------------
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL não definida. "
+        "Configure corretamente no arquivo .env."
+    )
+
+# Nomes das tabelas (centralizados para evitar erro de digitação)
+TABELA_PRODUTOS = "produtos"
+TABELA_HISTORICO_PRECOS = "historico_precos"
+
+
+# ----------------------------------------------------------
+# GROQ (IA OPERACIONAL)
+# ----------------------------------------------------------
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+
+# A IA Groq é usada para:
+# - Classificação em massa
+# - Processamento rápido
+# - Execuções automáticas
+
+if not GROQ_API_KEY:
+    print(
+        "⚠️ AVISO: GROQ_API_KEY não encontrada no .env. "
+        "Funções de IA Groq não irão funcionar."
+    )
+
+
+# ----------------------------------------------------------
+# GEMINI (IA COGNITIVA)
+# ----------------------------------------------------------
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+
+# A IA Gemini é usada para:
+# - Insights
+# - Auditoria
+# - Consultas em linguagem natural
+# - Explicações
+
+if not GEMINI_API_KEY:
+    print(
+        "⚠️ AVISO: GEMINI_API_KEY não encontrada no .env. "
+        "Funções de IA Gemini não irão funcionar."
+    )
+
+
+# ----------------------------------------------------------
+# CONFIGURAÇÕES GERAIS DO SISTEMA
+# ----------------------------------------------------------
+
+# Quantidade padrão de registros para auditoria
+AUDITORIA_AMOSTRA_PADRAO = 25
+
+# Limite padrão de resultados em consultas automáticas
+LIMITE_RESULTADOS_PADRAO = 100
+
+# Modo debug (pode ser usado no futuro)
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+
+
+# ----------------------------------------------------------
+# FUNÇÃO DE DIAGNÓSTICO (OPCIONAL)
+# ----------------------------------------------------------
+
+def resumo_configuracoes():
     """
-    Retorna a DATABASE_URL a partir das variáveis de ambiente.
-
-    Exemplo de DATABASE_URL:
-      postgresql://usuario:senha@host.neon.tech:5432/nome_banco?sslmode=require
+    Retorna um resumo simples das configurações carregadas.
+    Útil para debug e aprendizado.
     """
-    database_url = os.getenv("DATABASE_URL")
-
-    if not database_url:
-        raise RuntimeError(
-            "Variável de ambiente DATABASE_URL não configurada. "
-            "Defina a URL de conexão do Neon antes de executar o sistema."
-        )
-
-    return database_url
-
-
-def get_connection():
-    """
-    Retorna uma conexão psycopg2 reutilizável com o banco Neon.
-    Lança exceção em caso de erro (tratada pela camada chamadora).
-    """
-    global _connection
-
-    # Reaproveita conexão existente, se ainda estiver aberta
-    if _connection is not None and getattr(_connection, "closed", 1) == 0:
-        return _connection
-
-    database_url = get_database_url()
-
-    try:
-        _connection = psycopg2.connect(
-            database_url,
-            connect_timeout=10,
-            application_name="gestao_compras_dashboard",
-        )
-        # Testa rapidamente a conexão
-        with _connection.cursor() as cur:
-            cur.execute("SELECT 1")
-
-        logger.info("Conexão com o banco estabelecida com sucesso.")
-        return _connection
-    except Exception as e:
-        logger.exception("Erro ao conectar ao banco de dados.")
-        _connection = None
-        raise RuntimeError(f"Erro ao conectar ao banco de dados: {e}") from e
-
-
-def run_query(sql: str, params: Optional[Iterable[Any]] = None) -> pd.DataFrame:
-    """
-    Executa uma consulta SQL (SELECT) e retorna um DataFrame do pandas.
-    """
-    conn = get_connection()
-    try:
-        df = pd.read_sql_query(sql, conn, params=params)
-        return df
-    except Exception as e:
-        logger.exception("Erro ao executar consulta SQL.")
-        raise RuntimeError(f"Erro ao executar consulta SQL: {e}") from e
-
-
-def execute_sql(sql: str, params: Optional[Iterable[Any]] = None) -> None:
-    """
-    Executa um comando SQL (INSERT, UPDATE, DELETE) com commit automático.
-    """
-    conn = get_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        logger.exception("Erro ao executar comando SQL.")
-        raise RuntimeError(f"Erro ao executar comando SQL: {e}") from e
-
-
-def close_connection() -> None:
-    """
-    Fecha explicitamente a conexão, se existir.
-    """
-    global _connection
-    if _connection is not None and getattr(_connection, "closed", 1) == 0:
-        _connection.close()
-    _connection = None
+    return {
+        "DATABASE_URL_configurada": bool(DATABASE_URL),
+        "GROQ_configurado": bool(GROQ_API_KEY),
+        "GEMINI_configurado": bool(GEMINI_API_KEY),
+        "DEBUG": DEBUG,
+        "GROQ_MODEL": GROQ_MODEL,
+        "GEMINI_MODEL": GEMINI_MODEL,
+    }
