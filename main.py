@@ -45,6 +45,7 @@ def menu():
     print("8  - Testar ambiente (.env)")
     print("9  - Testar conexão com Groq")
     print("10 - Gerar insights inteligentes (Gemini)")
+    print("11 - Importar NFC-e/CF-e (SEFAZ GO) por chave")
     print("0  - Sair")
     print("=" * 80)
     return input("Escolha uma opção: ").strip()
@@ -102,6 +103,10 @@ def main():
             elif opcao == "10":
                 from services.gemini_insights import main as gemini_insights_main
                 gemini_insights_main()
+
+            elif opcao == "11":
+                import importador_cfe
+                importador_cfe.main()
 
             elif opcao == "0":
                 logger.info("Encerrando sistema")
