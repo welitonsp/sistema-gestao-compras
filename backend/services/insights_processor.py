@@ -19,65 +19,75 @@ class PriceInsightsService:
     async def detectar_variacoes_anomalas(self, threshold_percent: float = 15.0) -> List[Dict[str, Any]]:
         """
         Detecta produtos cujo preço na última compra variou significativamente 
-        em relação à média histórica.
+        em relação à média histórica (Otimizado para evitar N+1).
         """
         logger.info(f"Iniciando detecção de anomalias (limiar: {threshold_percent}%)")
         
-        # 1. Obter a média de preço por produto
-        # Usamos uma subquery ou fazemos em passos.
-        # Para performance, vamos buscar as médias e depois as últimas compras.
-        
-        stmt_medias = (
+        # 1. Subquery para a média histórica
+        sub_medias = (
             select(
                 HistoricoPreco.ean,
-                func.avg(HistoricoPreco.preco_pago).label("preco_medio"),
-                func.count(HistoricoPreco.id).label("total_compras")
+                func.avg(HistoricoPreco.preco_pago).label("preco_medio")
             )
             .group_by(HistoricoPreco.ean)
-            .having(func.count(HistoricoPreco.id) > 1)
+            .subquery()
+        )
+
+        # 2. Query principal: Pega a última compra de cada produto usando Row Number
+        sub_ultima = (
+            select(
+                HistoricoPreco.ean,
+                HistoricoPreco.preco_pago,
+                HistoricoPreco.data_compra,
+                HistoricoPreco.local,
+                Produto.nome_limpo,
+                func.row_number().over(
+                    partition_by=HistoricoPreco.ean,
+                    order_by=[desc(HistoricoPreco.data_compra), desc(HistoricoPreco.id)]
+                ).label("rn")
+            )
+            .join(Produto, Produto.ean == HistoricoPreco.ean)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                sub_ultima.c.ean,
+                sub_ultima.c.preco_pago,
+                sub_ultima.c.data_compra,
+                sub_ultima.c.local,
+                sub_ultima.c.nome_limpo,
+                sub_medias.c.preco_medio
+            )
+            .join(sub_medias, sub_medias.c.ean == sub_ultima.c.ean)
+            .where(sub_ultima.c.rn == 1)
         )
         
-        result_medias = await self.db.execute(stmt_medias)
-        medias = {row.ean: (row.preco_medio, row.total_compras) for row in result_medias}
-        
+        result = await self.db.execute(stmt)
         alertas = []
         
-        for ean, (preco_medio, total_compras) in medias.items():
-            # Buscar a última compra deste EAN
-            stmt_ultima = (
-                select(HistoricoPreco, Produto.nome_limpo)
-                .join(Produto, Produto.ean == HistoricoPreco.ean)
-                .where(HistoricoPreco.ean == ean)
-                .order_by(desc(HistoricoPreco.data_compra), desc(HistoricoPreco.id))
-                .limit(1)
-            )
-            result_ultima = await self.db.execute(stmt_ultima)
-            row_ultima = result_ultima.fetchone()
+        for row in result.fetchall():
+            preco_atual = row.preco_pago
+            preco_medio = row.preco_medio
             
-            if not row_ultima:
-                continue
-                
-            ultima_compra, nome_produto = row_ultima
-            preco_atual = ultima_compra.preco_pago
+            if not preco_medio: continue
             
             # Calcular variação
             variacao = ((preco_atual / preco_medio) - 1) * 100
             
             if abs(variacao) >= Decimal(str(threshold_percent)):
                 alertas.append({
-                    "ean": ean,
-                    "produto": nome_produto,
+                    "ean": row.ean,
+                    "produto": row.nome_limpo,
                     "preco_medio": float(preco_medio),
                     "preco_atual": float(preco_atual),
                     "variacao_percentual": float(variacao),
-                    "data_ultima_compra": ultima_compra.data_compra.isoformat(),
-                    "local": ultima_compra.local
+                    "data_ultima_compra": row.data_compra.isoformat(),
+                    "local": row.local
                 })
         
-        # Ordenar por maior variação (valor absoluto)
+        # Ordenar por maior variação
         alertas.sort(key=lambda x: abs(x["variacao_percentual"]), reverse=True)
-        
-        logger.info(f"Detectados {len(alertas)} alertas de variação de preço.")
         return alertas
 
     async def obter_resumo_gastos_por_categoria(self) -> List[Dict[str, Any]]:
