@@ -4,27 +4,28 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class FornecedorDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     cnpj: str
     razao_social: str
     nome_fantasia: str | None = None
 
 
 class ItemNotaDTO(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
     codigo_produto: str = Field(..., alias="ean")
     descricao: str
     quantidade: Decimal
     valor_unitario: Decimal
     valor_total: Decimal
 
-    class Config:
-        populate_by_name = True
-
 
 class NotaFiscalDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    chave_acesso: str
     numero_nota: str
     data_emissao: date
     valor_total: Decimal

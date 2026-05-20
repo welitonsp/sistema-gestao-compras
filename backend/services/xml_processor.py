@@ -61,8 +61,9 @@ class XMLProcessorService:
 
         data_emissao = self._detectar_data_compra(root)
         mercado_nome = self._detectar_mercado(root)
-        # CNPJ can be extracted too
+        # CNPJ e Número da Nota
         cnpj = root.findtext(".//emit/CNPJ") or "00.000.000/0000-00"
+        numero_nota = root.findtext(".//ide/nNF") or root.findtext(".//ide/nCFe") or "0"
 
         itens = []
         for det in root.findall(".//det"):
@@ -97,7 +98,8 @@ class XMLProcessorService:
 
         return NotaFiscalDTO(
             chave_acesso=chave,
-            data_emissao=data_emissao,
+            numero_nota=numero_nota,
+            data_emissao=data_emissao.date() if isinstance(data_emissao, datetime) else data_emissao,
             fornecedor=FornecedorDTO(razao_social=mercado_nome, cnpj=cnpj),
             itens=itens,
             valor_total=sum(i.valor_total for i in itens)
