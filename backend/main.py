@@ -15,6 +15,7 @@ from arq.connections import RedisSettings
 from backend.api.dependencies import AppSettings, DbSession
 from backend.api.v1.notas import router as notas_router
 from backend.api.v1.dashboard import router as dashboard_router
+from backend.api.v1.auth import router as auth_router
 from backend.core.config import settings
 
 
@@ -38,18 +39,15 @@ api_v1_router = APIRouter(prefix=settings.api_v1_prefix, tags=["v1"])
 @api_v1_router.get(
     "/health",
     status_code=status.HTTP_200_OK,
-    summary="Health check avançado",
-    description="Valida o estado operacional de todos os componentes críticos (DB, Redis, IA).",
+    summary="Health check (Liveness/Readiness)",
+    description="Valida o estado básico da API e conexões locais (DB, Redis).",
 )
 async def health_check(
     db: DbSession,
-    app_settings: AppSettings,
+    request: Request,
 ) -> dict[str, Any]:
-    """Retorna o estado operacional detalhado do sistema."""
+    """Retorna o estado operacional básico do sistema."""
     import time
-    from arq import create_pool
-    from arq.connections import RedisSettings
-    import httpx
 
     results = {
         "status": "ok",
@@ -69,28 +67,41 @@ async def health_check(
         results["status"] = "degraded"
         results["components"]["database"] = {"status": "unhealthy", "error": str(e)}
 
-    # 2. Redis / Fila de Tarefas
+    # 2. Redis / Fila de Tarefas (Reuso do pool da app)
     try:
         start = time.perf_counter()
-        # Timeout curto e sem retries para o health check não travar
-        redis = await asyncio.wait_for(
-            create_pool(RedisSettings.from_dsn(app_settings.redis_url)),
-            timeout=1.0
-        )
+        redis = request.app.state.redis
         await redis.ping()
-        await redis.close()
         results["components"]["redis"] = {
             "status": "healthy",
             "latency_ms": round((time.perf_counter() - start) * 1000, 2)
         }
     except Exception as e:
         results["status"] = "degraded"
-        results["components"]["redis"] = {"status": "unhealthy", "error": "Redis unreachable (Timeout or Connection Error)"}
+        results["components"]["redis"] = {"status": "unhealthy", "error": str(e)}
 
-    # 3. Groq API (Connectivity only)
+    return results
+
+
+@api_v1_router.get(
+    "/health/deep",
+    status_code=status.HTTP_200_OK,
+    summary="Health check profundo (Integridade Externa)",
+    include_in_schema=False,
+)
+async def deep_health_check(
+    db: DbSession,
+    request: Request,
+) -> dict[str, Any]:
+    """Testa dependências internas e externas (Groq)."""
+    import httpx
+    
+    # Começa com o health básico
+    results = await health_check(db, request)
+    
+    # 3. Groq API (External Connectivity)
     try:
-        async with httpx.AsyncClient(timeout=2.0) as client:
-            # Apenas verifica se o host é resolvível e responde algo
+        async with httpx.AsyncClient(timeout=3.0) as client:
             r = await client.get("https://api.groq.com/openai/v1/models")
             results["components"]["groq_api"] = {
                 "status": "healthy" if r.status_code in [200, 401] else "degraded",
@@ -137,6 +148,7 @@ def create_application() -> FastAPI:
     )
 
     application.include_router(api_v1_router)
+    application.include_router(auth_router, prefix=settings.api_v1_prefix)
     return application
 
 
