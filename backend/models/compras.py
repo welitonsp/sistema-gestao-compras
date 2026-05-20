@@ -10,11 +10,28 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import Date, ForeignKey, Numeric, String, UniqueConstraint, Text
+from sqlalchemy import Date, ForeignKey, Numeric, String, UniqueConstraint, Text, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.models.base import Base, TimestampMixin
+
+
+class AuditLog(TimestampMixin, Base):
+    """Trilha de auditoria para operações críticas (Importação, Deleção)."""
+    __tablename__ = "audit_logs"
+
+    id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    usuario: Mapped[str] = mapped_column(String(100), index=True)
+    operacao: Mapped[str] = mapped_column(String(50))  # ex: "IMPORT_SEFAZ", "IMPORT_XML"
+    entidade: Mapped[str] = mapped_column(String(50))  # ex: "NotaFiscal"
+    entidade_id: Mapped[str] = mapped_column(String(100)) # Chave de acesso ou UUID
+    detalhes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ip_origem: Mapped[str | None] = mapped_column(String(45), nullable=True)
 
 
 class Fornecedor(TimestampMixin, Base):
