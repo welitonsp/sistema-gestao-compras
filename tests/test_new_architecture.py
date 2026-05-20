@@ -2,6 +2,7 @@
 
 import asyncio
 import sys
+import time
 from datetime import date
 from decimal import Decimal
 
@@ -21,6 +22,9 @@ async def setup_db():
     print("✅ Tabelas prontas.")
 
 
+import pytest
+
+@pytest.mark.asyncio
 async def test_manual_persistence():
     print("\n📝 Testando persistência manual via Repository (interno)...")
     async with SessionLocal() as db:
@@ -28,6 +32,7 @@ async def test_manual_persistence():
         
         # Simula um DTO que viria da IA
         dto = NotaFiscalDTO(
+            chave_acesso="52250612345678000199550010000123451000123456",
             numero_nota="12345",
             data_emissao=date.today(),
             valor_total=Decimal("100.50"),
@@ -53,7 +58,9 @@ async def test_manual_persistence():
             ]
         )
         
-        chave = "52250612345678000199550010000123451000123456"
+        chave = f"TEST{int(time.time())}5225061234567800019955001"[:44]
+        # Garante que o DTO use a mesma chave
+        dto.chave_acesso = chave
         nota = await service.repo.salvar_nota_completa(chave, dto)
         await db.commit()
         

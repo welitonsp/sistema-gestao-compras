@@ -14,7 +14,7 @@ from sqlalchemy import select, text
 
 from backend.core.database import SessionLocal
 from backend.models.compras import Produto, HistoricoPreco, ClassificacaoCache
-from classificador_regras import aplicar_regras_nome_categoria, _normalizar
+from core.classificador_regras import aplicar_regras_nome_categoria, _normalizar
 from core.logger import get_logger
 
 logger = get_logger(__name__)

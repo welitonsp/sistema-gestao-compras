@@ -8,7 +8,7 @@ from typing import Any
 
 from backend.schemas.internal import NotaFiscalDTO
 from core.logger import get_logger
-from ia_groq_utils import extrair_json_com_groq_async, consultar_ia_async
+from .ia_groq_utils import extrair_json_com_groq_async, consultar_ia_async
 
 logger = get_logger("services.ai")
 
