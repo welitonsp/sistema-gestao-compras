@@ -1,128 +1,67 @@
-# ver_relatorio_categorias.py
-# Relatório de gastos por categoria usando os dados do Neon
-
+import asyncio
 import os
 import sys
 from decimal import Decimal
-
-import psycopg2
-from psycopg2.extras import DictCursor
+from sqlalchemy import select, func
+from backend.core.database import SessionLocal
+from backend.models.compras import Produto, HistoricoPreco
 from dotenv import load_dotenv
-
-
-def carregar_variaveis():
-    """Carrega DATABASE_URL do .env"""
-    load_dotenv()
-    db_url = os.getenv("DATABASE_URL")
-
-    if not db_url:
-        print("❌ ERRO: DATABASE_URL não encontrada no .env.")
-        print("   Verifique se o arquivo .env contém a linha:")
-        print("   DATABASE_URL=postgres://usuario:senha@host:5432/banco")
-        sys.exit(1)
-
-    return db_url
-
-
-def conectar(db_url: str):
-    """Abre conexão com o PostgreSQL (Neon)."""
-    try:
-        conn = psycopg2.connect(db_url)
-        return conn
-    except Exception as e:
-        print(f"❌ ERRO ao conectar no banco: {e}")
-        sys.exit(1)
-
-
-def obter_resumo_por_categoria(conn):
-    """
-    Retorna lista de categorias com o total gasto (preço_pago * quantidade).
-    """
-    sql = """
-        SELECT
-            COALESCE(NULLIF(TRIM(p.categoria), ''), 'Outros') AS categoria,
-            SUM(h.preco_pago * h.quantidade) AS total_gasto
-        FROM historico_precos h
-        JOIN produtos p ON p.ean = h.ean
-        GROUP BY categoria
-        ORDER BY total_gasto DESC;
-    """
-    with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute(sql)
-        return cur.fetchall()
-
-
-def obter_total_geral(conn):
-    """
-    Retorna o total geral gasto em todos os lançamentos.
-    """
-    sql = """
-        SELECT SUM(preco_pago * quantidade) AS total_geral
-        FROM historico_precos;
-    """
-    with conn.cursor() as cur:
-        cur.execute(sql)
-        row = cur.fetchone()
-        return row[0] or Decimal("0.00")
-
 
 def formatar_moeda(valor):
     """Formata Decimal como R$ 1.234,56"""
     if valor is None:
         valor = Decimal("0.00")
     valor = Decimal(valor).quantize(Decimal("0.01"))
-    s = f"{valor:,.2f}"
-    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
-    return f"R$ {s}"
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+async def obter_dados_relatorio():
+    async with SessionLocal() as session:
+        # 1. Total Geral
+        stmt_total = select(func.sum(HistoricoPreco.preco_pago * HistoricoPreco.quantidade))
+        total_geral = await session.scalar(stmt_total) or Decimal("0.00")
 
-def exibir_relatorio(resumo, total_geral):
-    print()
-    print("📊 RESUMO DE GASTOS POR CATEGORIA")
-    print("─" * 80)
+        # 2. Resumo por Categoria
+        stmt_cat = (
+            select(
+                func.coalesce(Produto.categoria, "Sem Categoria").label("categoria"),
+                func.sum(HistoricoPreco.preco_pago * HistoricoPreco.quantidade).label("total_gasto")
+            )
+            .join(Produto, Produto.ean == HistoricoPreco.ean)
+            .group_by("categoria")
+            .order_by(func.sum(HistoricoPreco.preco_pago * HistoricoPreco.quantidade).desc())
+        )
+        result = await session.execute(stmt_cat)
+        resumo = result.all()
+
+        return total_geral, resumo
+
+def exibir_relatorio(total_geral, resumo):
+    print("\n" + "=" * 60)
+    print("📊 RELATÓRIO – GASTOS POR CATEGORIA (ESTRUTURA UNIFICADA)")
+    print("=" * 60)
+    
+    if total_geral == 0:
+        print("⚠️ Nenhum dado encontrado para gerar o relatório.")
+        return
+
     print(f"{'CATEGORIA':<30} | {'TOTAL GASTO':>15} | {'% DO TOTAL':>10}")
-    print("─" * 80)
+    print("-" * 60)
 
-    for linha in resumo:
-        categoria = linha["categoria"]
-        total = linha["total_gasto"] or Decimal("0.00")
-        perc = (total / total_geral * 100) if total_geral > 0 else Decimal("0.00")
-        print(f"{categoria:<30} | {formatar_moeda(total):>15} | {perc:6.2f}%")
+    for row in resumo:
+        perc = (row.total_gasto / total_geral * 100) if total_geral > 0 else 0
+        print(f"{row.categoria:<30} | {formatar_moeda(row.total_gasto):>15} | {perc:6.2f}%")
 
-    print("─" * 80)
-    print(f"{'TOTAL GERAL':<30} | {formatar_moeda(total_geral):>15} | {100:6.2f}%")
-    print("─" * 80)
-    print()
+    print("-" * 60)
+    print(f"{'TOTAL GERAL':<30} | {formatar_moeda(total_geral):>15} | 100.00%")
+    print("=" * 60 + "\n")
 
-
-def main():
-    print()
-    print("============================================================")
-    print("📊 RELATÓRIO – GASTOS POR CATEGORIA")
-    print("============================================================")
-
-    db_url = carregar_variaveis()
-    conn = conectar(db_url)
-
+async def main():
+    load_dotenv()
     try:
-        total_geral = obter_total_geral(conn)
-        if total_geral == 0:
-            print("⚠️  Nenhum lançamento encontrado em historico_precos.")
-            print("   Rode primeiro o importador (ia_groq_utils.py).")
-            return
-
-        resumo = obter_resumo_por_categoria(conn)
-        if not resumo:
-            print("⚠️  Não foi possível agrupar por categoria.")
-            print("   Verifique se há dados nas tabelas 'produtos' e 'historico_precos'.")
-            return
-
-        exibir_relatorio(resumo, total_geral)
-
-    finally:
-        conn.close()
-        print("🔌 Conexão com o banco encerrada.")
-
+        total, resumo = await obter_dados_relatorio()
+        exibir_relatorio(total, resumo)
+    except Exception as e:
+        print(f"❌ Erro ao gerar relatório: {e}")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

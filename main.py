@@ -1,140 +1,117 @@
 # main.py
 # ==========================================================
-# GESTAOCOMPRAS - ORQUESTRADOR PRINCIPAL DO SISTEMA
-# ==========================================================
-# Este e o ponto unico de entrada do sistema.
-# Ele orquestra:
-# - pipelines (execucao)
-# - services (IA / inteligencia)
-# - utilitarios e relatorios
+# GESTAOCOMPRAS - ORQUESTRADOR PRINCIPAL DO SISTEMA (V2)
 # ==========================================================
 
 import os
 import sys
+import asyncio
+from pathlib import Path
+
+# Garante execução a partir da raiz
+ROOT_DIR = Path(__file__).resolve().parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from core.logger import get_logger
 
-# ----------------------------------------------------------
-# GARANTE EXECUCAO A PARTIR DA RAIZ DO PROJETO
-# ----------------------------------------------------------
-
-ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-if ROOT_DIR not in sys.path:
-    sys.path.insert(0, ROOT_DIR)
-
 logger = get_logger("main")
-
-
-# ----------------------------------------------------------
-# MENU
-# ----------------------------------------------------------
 
 def menu():
     print("\n" + "=" * 80)
-    print("GESTAOCOMPRAS - SISTEMA INTELIGENTE DE GESTAO DE COMPRAS")
+    print(" 📊 GESTAOCOMPRAS - SISTEMA INTELIGENTE (MODO UNIFICADO)")
     print("=" * 80)
-    print("1  - Resetar banco de dados (CUIDADO)")
-    print("2  - Importar nota fiscal (PDF)")
-    print("3  - Importar compras manualmente (TXT)")
-    print("4  - Processar XML NFC-e (pipeline completo)")
-    print("5  - Classificar produtos pendentes (IA Groq)")
-    print("6  - Relatorio: gastos por categoria")
-    print("7  - Relatorio: ultimos lancamentos")
-    print("8  - Testar ambiente (.env)")
-    print("9  - Testar conexao com Groq")
-    print("10 - Gerar insights inteligentes (Gemini)")
-    print("11 - Importar NFC-e/CF-e (SEFAZ GO) por chave")
-    print("0  - Sair")
+    print("  1 - [SISTEMA] Resetar Banco de Dados (Zerar Tudo)")
+    print("  2 - [IMPORT ] Importar Nota Fiscal (PDF)")
+    print("  3 - [IMPORT ] Importar Compras Manualmente (CLI)")
+    print("  4 - [IMPORT ] Processar XML (NFe/NFCe/CFe)")
+    print("  5 - [LOTE   ] Processar todos os PDFs da pasta NOVAS_NOTAS")
+    print("  6 - [REPORT ] Ver Gastos por Categoria")
+    print("  7 - [REPORT ] Ver Últimos Lançamentos (Nuvem)")
+    print("  8 - [INSIGHT] Ver Alertas de Preço (Anomalias)")
+    print("  9 - [DEBUG  ] Testar Ambiente e IA (Groq)")
+    print("  10- [IMPORT ] Buscar NFC-e (SEFAZ GO) por Chave")
+    print("  0 - Sair")
     print("=" * 80)
-    return input("Escolha uma opcao: ").strip()
+    return input("Escolha uma opção: ").strip()
 
+async def executar_opcao(opcao):
+    try:
+        if opcao == "1":
+            import reset_tabelas
+            await reset_tabelas.reset_database()
 
-# ----------------------------------------------------------
-# MAIN LOOP
-# ----------------------------------------------------------
+        elif opcao == "2":
+            import importar_pdf
+            await importar_pdf.main()
 
-def main():
-    logger.info("Sistema GestaoCompras iniciado")
+        elif opcao == "3":
+            import importar_manual
+            await importar_manual.main()
 
-    while True:
-        opcao = menu()
+        elif opcao == "4":
+            import importador_cfe
+            await importador_cfe.main()
 
-        try:
-            if opcao == "1":
-                logger.warning("Reset de banco solicitado")
-                import reset_tabelas
+        elif opcao == "5":
+            import processar_notas
+            await processar_notas.processar_pdfs_em_lote()
 
-                reset_tabelas.main()
+        elif opcao == "6":
+            import ver_relatorio_categorias
+            total, resumo = await ver_relatorio_categorias.obter_dados_relatorio()
+            ver_relatorio_categorias.exibir_relatorio(total, resumo)
 
-            elif opcao == "2":
-                from pipelines.importar_pdf import executar
+        elif opcao == "7":
+            import ver_relatorio_nuvem
+            await ver_relatorio_nuvem.mostrar_dados()
 
-                caminho = input("Informe o caminho do PDF: ").strip()
-                executar(caminho)
+        elif opcao == "8":
+            import ver_alertas_preco
+            await ver_alertas_preco.exibir_alertas()
 
-            elif opcao == "3":
-                from pipelines.importar_manual import executar
+        elif opcao == "9":
+            import test_env
+            import testar_groq
+            test_env.main()
 
-                caminho = input("Informe o caminho do TXT: ").strip()
-                executar(caminho)
-
-            elif opcao == "4":
-                import sistema_completo
-
-                sistema_completo.main()
-
-            elif opcao == "5":
-                from classificar_produtos_ia import classificar_produtos_pendentes
-
-                classificar_produtos_pendentes()
-
-            elif opcao == "6":
-                import ver_relatorio_categorias
-
-                ver_relatorio_categorias.main()
-
-            elif opcao == "7":
-                import ver_relatorio_nuvem
-
-                ver_relatorio_nuvem.mostrar_dados()
-
-            elif opcao == "8":
-                import test_env
-
-                test_env.main()
-
-            elif opcao == "9":
-                import testar_groq  # noqa: F401
-
-            elif opcao == "10":
-                from services.gemini_insights import main as gemini_insights_main
-
-                gemini_insights_main()
-
-            elif opcao == "11":
-                import importador_cfe
-
-                importador_cfe.main()
-
-            elif opcao == "0":
-                logger.info("Encerrando sistema")
-                print("\nEncerrando o sistema GestaoCompras.")
-                sys.exit(0)
-
+        elif opcao == "10":
+            chave = input("Digite a chave de 44 dígitos: ").strip()
+            if len(chave) == 44:
+                from backend.core.database import SessionLocal
+                from backend.services.importador_sefaz import ImportadorSefazService
+                async with SessionLocal() as session:
+                    async with ImportadorSefazService(session) as service:
+                        await service.importar_por_chave(chave)
+                        print("✅ Nota importada com sucesso via SEFAZ!")
             else:
-                print("\nOpcao invalida.")
+                print("❌ Chave inválida.")
 
-        except Exception as exc:
-            logger.exception("Erro durante execucao")
-            print("\nERRO DURANTE A EXECUCAO")
-            print("-" * 80)
-            print(str(exc))
-            print("-" * 80)
+        elif opcao == "0":
+            return False
 
+        else:
+            print("\n⚠️ Opção inválida.")
 
-# ----------------------------------------------------------
-# ENTRYPOINT
-# ----------------------------------------------------------
+    except Exception as exc:
+        logger.error(f"Erro na execução da opção {opcao}: {exc}", exc_info=True)
+        print(f"\n❌ ERRO: {exc}")
+    
+    return True
+
+async def main():
+    logger.info("Main menu started.")
+    print("\nBem-vindo ao Gestão Compras V2.0")
+    
+    continuar = True
+    while continuar:
+        opcao = menu()
+        continuar = await executar_opcao(opcao)
+
+    print("\nEncerrando o sistema. Até logo!")
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nInterrompido pelo usuário.")

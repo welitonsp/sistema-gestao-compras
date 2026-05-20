@@ -1,28 +1,25 @@
-# reset_tabelas.py
-# Apaga as tabelas produtos e historico_precos no Neon
-# para que possam ser recriadas pelo processar_notas.py (versão nova).
+import asyncio
+from backend.core.database import engine
+from backend.models.base import Base
+from core.logger import get_logger
 
-import os
-import psycopg2
-from dotenv import load_dotenv
+logger = get_logger("reset_db")
 
-# Carrega .env (onde está o DATABASE_URL)
-load_dotenv()
+async def reset_database():
+    print("⚠️  AVISO: Isso irá apagar TODAS as tabelas do banco de dados.")
+    confirmacao = input("Deseja continuar? (s/N): ").strip().lower()
+    
+    if confirmacao != 's':
+        print("Cancelado.")
+        return
 
-database_url = os.getenv("DATABASE_URL")
-if not database_url:
-    raise RuntimeError("DATABASE_URL não configurado no .env")
+    async with engine.begin() as conn:
+        print("🗑️  Apagando tabelas...")
+        await conn.run_sync(Base.metadata.drop_all)
+        print("🏗️  Recriando tabelas...")
+        await conn.run_sync(Base.metadata.create_all)
+    
+    print("✅ Banco de dados resetado com sucesso!")
 
-print("Conectando ao banco Neon...")
-conn = psycopg2.connect(database_url)
-cur = conn.cursor()
-
-print("Apagando tabelas historico_precos e produtos (se existirem)...")
-cur.execute("DROP TABLE IF EXISTS historico_precos;")
-cur.execute("DROP TABLE IF EXISTS produtos;")
-
-conn.commit()
-cur.close()
-conn.close()
-print("✅ Tabelas apagadas com sucesso.")
-print("Agora rode novamente: python processar_notas.py")
+if __name__ == "__main__":
+    asyncio.run(reset_database())
