@@ -8,7 +8,8 @@ from pathlib import Path
 from fastapi import APIRouter, Body, HTTPException, status
 from pydantic import ValidationError
 
-from backend.api.dependencies import DbSession, ArqPool
+from backend.api.dependencies import DbSession, ArqPool, CurrentUser
+from backend.core.fiscal import validar_chave_acesso
 from backend.schemas.importacao import ImportacaoChaveRequest, ImportacaoNotaResponse, ProcessamentoLoteResponse
 from backend.services.importador_sefaz import (
     ExtracaoDadosNotaError,
@@ -25,7 +26,10 @@ router = APIRouter(prefix="/notas", tags=["Notas Fiscais"])
     status_code=status.HTTP_202_ACCEPTED,
     summary="Processar todos os arquivos em NOVAS_NOTAS em background",
 )
-async def processar_lote_background(arq: ArqPool) -> ProcessamentoLoteResponse:
+async def processar_lote_background(
+    arq: ArqPool,
+    user: CurrentUser,
+) -> ProcessamentoLoteResponse:
     """Detecta arquivos PDF/XML na pasta de entrada e enfileira para processamento."""
     pasta_input = Path("NOVAS_NOTAS")
     if not pasta_input.exists():
@@ -59,12 +63,19 @@ async def processar_lote_background(arq: ArqPool) -> ProcessamentoLoteResponse:
 )
 async def importar_nota_por_chave(
     db: DbSession,
+    user: CurrentUser,
     payload_bruto: dict[str, Any] = Body(...),
 ) -> ImportacaoNotaResponse:
     """Executa o fluxo unico de importacao por chave de acesso."""
 
     try:
         payload = ImportacaoChaveRequest.model_validate(payload_bruto)
+        # Validação P5: Dígito Verificador
+        if not validar_chave_acesso(payload.chave_acesso):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Dígito verificador da chave de acesso inválido."
+            )
     except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -8,25 +8,51 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, Request, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from arq.connections import ArqRedis
+from jose import JWTError, jwt
 
 from backend.core.config import Settings, get_settings
 from backend.core.database import get_db
+from backend.core.security import TokenData
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 
 async def get_redis_pool(request: Request) -> ArqRedis:
     """Provides the shared ARQ Redis pool from application state."""
     return request.app.state.redis
 
+async def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    settings: Annotated[Settings, Depends(get_settings)]
+) -> TokenData:
+    """Valida o token JWT e retorna os dados do usuário autenticado."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(
+            token, 
+            settings.secret_key.get_secret_value(), 
+            algorithms=[settings.algorithm]
+        )
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username)
+    except JWTError:
+        raise credentials_exception
+        
+    return token_data
+
 DbSession = Annotated[AsyncSession, Depends(get_db)]
-"""Standard dependency alias for an async database session."""
-
 ArqPool = Annotated[ArqRedis, Depends(get_redis_pool)]
-"""Dependency alias for the ARQ Redis connection pool."""
-
 AppSettings = Annotated[Settings, Depends(get_settings)]
-"""Standard dependency alias for application settings."""
+CurrentUser = Annotated[TokenData, Depends(get_current_user)]
 
 
 def get_app_settings() -> Settings:
