@@ -68,3 +68,5 @@ def get_settings() -> Settings:
         gemini_model=GEMINI_MODEL,
         debug=DEBUG,
     )
+
+settings = get_settings()

@@ -91,6 +91,12 @@ class Settings(BaseSettings):
         description="Validates pooled connections before use.",
     )
 
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        alias="REDIS_URL",
+        description="Redis connection string for the task queue.",
+    )
+
     secret_key: SecretStr = Field(
         ...,
         alias="SECRET_KEY",
