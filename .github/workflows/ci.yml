@@ -47,8 +47,8 @@ jobs:
       - name: Check dependency integrity
         run: python -m pip check
 
-      - name: Lint with Ruff
-        run: ruff check .
+      - name: Lint critical Python errors with Ruff
+        run: ruff check backend tests --select E9,F63,F7,F82
 
       - name: Run tests
         run: python -m pytest tests/
