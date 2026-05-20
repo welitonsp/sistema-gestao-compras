@@ -3,16 +3,32 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+from arq import create_pool
+from arq.connections import RedisSettings
 
 from backend.api.dependencies import AppSettings, DbSession
 from backend.api.v1.notas import router as notas_router
 from backend.api.v1.dashboard import router as dashboard_router
 from backend.core.config import settings
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """Manage application-level resources lifecycle."""
+    
+    # Setup Redis Pool
+    application.state.redis = await create_pool(
+        RedisSettings.from_dsn(settings.redis_url)
+    )
+    yield
+    # Close Redis Pool
+    await application.state.redis.close()
 
 
 api_v1_router = APIRouter(prefix=settings.api_v1_prefix, tags=["v1"])
@@ -101,9 +117,17 @@ def create_application() -> FastAPI:
             "e analise de precos."
         ),
         debug=settings.debug,
+        lifespan=lifespan,
     )
 
-    cors_origins: list[str] = settings.cors_origins or ["*"]
+    cors_origins: list[str] = settings.cors_origins
+    if settings.is_production and not cors_origins:
+        # Segurança P1: Bloqueia inicialização se CORS estiver aberto em produção
+        raise RuntimeError("CORS_ORIGINS deve ser configurado explicitamente em producao.")
+
+    if not cors_origins:
+        cors_origins = ["*"]
+
     application.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
