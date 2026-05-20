@@ -1,6 +1,8 @@
+import pytest
 import httpx
 import asyncio
 
+@pytest.mark.asyncio
 async def test_resumo():
     chave = "52260517457404001183655110000409351275118105"
     url = f"https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/resumoNFCe?p={chave}"

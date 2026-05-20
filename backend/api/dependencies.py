@@ -22,7 +22,13 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 
 async def get_redis_pool(request: Request) -> ArqRedis:
     """Provides the shared ARQ Redis pool from application state."""
-    return request.app.state.redis
+    redis = request.app.state.redis
+    if not redis:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Servico de fila (Redis) temporariamente indisponivel."
+        )
+    return redis
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],

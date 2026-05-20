@@ -6,7 +6,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, status
+from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from arq import create_pool
@@ -17,19 +17,31 @@ from backend.api.v1.notas import router as notas_router
 from backend.api.v1.dashboard import router as dashboard_router
 from backend.api.v1.auth import router as auth_router
 from backend.core.config import settings
+from core.logger import get_logger
+
+logger = get_logger("backend.main")
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     """Manage application-level resources lifecycle."""
     
-    # Setup Redis Pool
-    application.state.redis = await create_pool(
-        RedisSettings.from_dsn(settings.redis_url)
-    )
+    # Setup Redis Pool with resilience
+    application.state.redis = None
+    try:
+        application.state.redis = await create_pool(
+            RedisSettings.from_dsn(settings.redis_url)
+        )
+        logger.info("Conexao com pool Redis estabelecida.")
+    except Exception as exc:
+        logger.error(f"Falha ao iniciar pool Redis (Modo Degradado): {exc}")
+
     yield
-    # Close Redis Pool
-    await application.state.redis.close()
+
+    # Close Redis Pool safely
+    if application.state.redis:
+        await application.state.redis.close()
+        logger.info("Pool Redis encerrado.")
 
 
 api_v1_router = APIRouter(prefix=settings.api_v1_prefix, tags=["v1"])
@@ -71,6 +83,9 @@ async def health_check(
     try:
         start = time.perf_counter()
         redis = request.app.state.redis
+        if not redis:
+            raise RuntimeError("Redis pool not initialized")
+            
         await redis.ping()
         results["components"]["redis"] = {
             "status": "healthy",
