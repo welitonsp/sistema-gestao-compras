@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
-from fastapi import APIRouter, HTTPException, status, Query
+from typing import Any, Annotated
+from fastapi import APIRouter, HTTPException, status, Query, Depends
 from fastapi.responses import StreamingResponse
 import io
 import pandas as pd
 from sqlalchemy import select, or_
 from backend.api.dependencies import DbSession, CurrentUser, RoleChecker
-from backend.models.compras import Produto, ClassificacaoCache, UserRole
+from backend.models.compras import Produto, ClassificacaoCache, UserRole, User
 from backend.schemas.produtos import ProdutoResponse, ProdutoUpdate
 
 from backend.services.catalog_healer import CatalogHealerService
@@ -148,6 +148,7 @@ async def atualizar_produto(
                 if "marca" in update_data:
                     cache_entry.marca = update_data["marca"]
                 cache_entry.produto_canonico = produto.nome_limpo
+                cache_entry.verificado_usuario = True
             else:
                 # Se não existia no cache, cria para blindar futuras importações
                 new_cache = ClassificacaoCache(
@@ -155,7 +156,8 @@ async def atualizar_produto(
                     produto_canonico=produto.nome_limpo,
                     categoria=update_data["categoria"],
                     marca=update_data.get("marca", produto.marca),
-                    unidade=produto.unidade
+                    unidade=produto.unidade,
+                    verificado_usuario=True
                 )
                 db.add(new_cache)
 

@@ -288,6 +288,7 @@ class ClassificacaoCache(TimestampMixin, Base):
     marca: Mapped[str | None] = mapped_column(String(100), nullable=True)
     categoria: Mapped[str] = mapped_column(String(100), nullable=False)
     unidade: Mapped[str] = mapped_column(String(20), default="un")
+    verificado_usuario: Mapped[bool] = mapped_column(Boolean, default=False)
 
 class Webhook(TimestampMixin, Base):
     """Configuration for external automated notifications."""

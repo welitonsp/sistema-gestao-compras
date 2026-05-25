@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import re
+import asyncio
 from html import unescape
 from typing import Any
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from backend.models.compras import NotaFiscal
 from backend.services.ai_processor import AIStructuredExtractor
 from backend.services.repository import ProcurementRepository
 from backend.services.parsers.sefaz_go import SefazGoParser
@@ -107,23 +111,37 @@ class ImportadorSefazService:
         chave_final = chave_acesso or nota_dto.chave_acesso
 
         # 4. Persistência Atômica com Auditoria
-        async with self.repo.db.begin():
-            # Re-valida existência dentro da transação
-            if await self.repo.nota_existe(chave_final):
-                raise NotaJaCadastradaError(f"Nota {chave_final} já cadastrada.")
-            
-            nota_db = await self.repo.salvar_nota_completa(chave_final, nota_dto, department_id=department_id)
-            
-            # Registrar auditoria
-            await self.repo.registrar_auditoria(
-                usuario=usuario,
-                operacao=operacao_tipo,
-                entidade="NotaFiscal",
-                entidade_id=chave_final,
-                detalhes=f"Importação de {len(nota_dto.itens)} itens. Total: {nota_dto.valor_total}",
-                ip=ip_origem,
-                department_id=department_id
-            )
+        # Removemos o begin() explícito daqui, pois a transação deve ser gerenciada
+        # preferencialmente no nível do Caller (API ou script de teste) 
+        # ou usamos a sessão injetada.
+        
+        # Re-valida existência
+        if await self.repo.nota_existe(chave_final):
+            raise NotaJaCadastradaError(f"Nota {chave_final} já cadastrada.")
+        
+        nota_db = await self.repo.salvar_nota_completa(chave_final, nota_dto, department_id=department_id)
+        
+        # Registrar auditoria
+        await self.repo.registrar_auditoria(
+            usuario=usuario,
+            operacao=operacao_tipo,
+            entidade="NotaFiscal",
+            entidade_id=chave_final,
+            detalhes=f"Importação de {len(nota_dto.itens)} itens. Total: {nota_dto.valor_total}",
+            ip=ip_origem,
+            department_id=department_id
+        )
+
+        # Flush garante que os IDs foram gerados sem fechar a transação
+        await self.repo.db.flush()
+
+        # Recarrega a nota com relacionamentos para evitar erro de lazy-loading no async
+        stmt = select(NotaFiscal).where(NotaFiscal.id == nota_db.id).options(
+            selectinload(NotaFiscal.fornecedor),
+            selectinload(NotaFiscal.itens)
+        )
+        res = await self.repo.db.execute(stmt)
+        nota_db = res.scalar_one()
 
         self._log.info(f"Nota {chave_final} importada e auditada com sucesso.")
 
@@ -163,8 +181,11 @@ class ImportadorSefazService:
         return "" # Unreachable
 
     def _limpar_html(self, html: str) -> str:
-        """Sanitização básica do HTML para reduzir tokens."""
+        """Sanitização equilibrada do HTML para reduzir tokens mantendo contexto."""
+        # Remove scripts e estilos
         texto = re.sub(r"<(script|style).*?>.*?</\1>", " ", html, flags=re.DOTALL | re.IGNORECASE)
+        # Mantém algumas tags de estrutura ou apenas remove tags e colapsa espaços
         texto = re.sub(r"<[^>]+>", " ", texto)
         texto = unescape(texto)
-        return re.sub(r"\s+", " ", texto).strip()[:16000]
+        # Limita a 20.000 caracteres para dar mais margem à IA
+        return re.sub(r"\s+", " ", texto).strip()[:20000]

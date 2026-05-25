@@ -10,6 +10,7 @@ python-dotenv>=1.0
 pandas>=2.2
 groq>=0.9
 google-generativeai>=0.5
+google-genai>=1.0.0
 arq>=0.26
 redis>=5.0
 pdf2image>=1.17

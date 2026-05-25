@@ -16,16 +16,15 @@ from backend.core.database import SessionLocal
 from backend.models.compras import Produto, HistoricoPreco, ClassificacaoCache
 from core.classificador_regras import aplicar_regras_nome_categoria, _normalizar
 from core.logger import get_logger
+from backend.core.config import settings
 
 logger = get_logger(__name__)
 
-load_dotenv()
-
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+GROQ_API_KEY = settings.groq_api_key
+GROQ_MODEL = "llama-3.1-8b-instant"
 
 if not GROQ_API_KEY:
-    raise RuntimeError("GROQ_API_KEY não encontrada no .env")
+    raise RuntimeError("GROQ_API_KEY não encontrada nas configurações")
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 async_groq_client = AsyncGroq(api_key=GROQ_API_KEY)
@@ -51,6 +50,21 @@ async def buscar_no_cache(descricao: str) -> dict | None:
                 "unidade": cached.unidade
             }
     return None
+
+async def obter_exemplos_verificados(limit: int = 10) -> str:
+    """Busca as classificações verificadas por humanos para injetar no prompt."""
+    async with SessionLocal() as db:
+        stmt = select(ClassificacaoCache).where(ClassificacaoCache.verificado_usuario == True).limit(limit)
+        res = await db.execute(stmt)
+        exemplos = res.scalars().all()
+        
+        if not exemplos:
+            return ""
+            
+        texto = "\nEXEMPLOS DE CLASSIFICAÇÕES CORRETAS (CONFIRMADAS POR HUMANO):\n"
+        for ex in exemplos:
+            texto += f"- \"{ex.descricao_original}\" -> PRODUTO: {ex.produto_canonico}, CATEGORIA: {ex.categoria}\n"
+        return texto
 
 async def salvar_no_cache(descricao_original: str, dados: dict):
     """Salva o resultado da IA no cache."""
@@ -122,7 +136,7 @@ async def consultar_ia_async(nome_sujo: str) -> dict:
         "Sua tarefa é extrair:\n"
         "1. PRODUTO: Nome simplificado e genérico (ex: ARROZ, LEITE INTEGRAL).\n"
         "2. MARCA: Nome CANÔNICO da marca. Unifique variações (ex: 'Coca-Cola', 'Coca Cola' e 'Coke' devem ser 'COCA-COLA'). Se não houver marca clara, retorne vazio.\n"
-        "3. CATEGORIA: Escolha entre [ALIMENTOS BÁSICOS, LATICÍNIOS, CARNES, HORTIFRUTI, BEBIDAS, LIMPEZA, HIGIENE PESSOAL, LANCHE, OUTROS].\n"
+        "3. CATEGORIA: Use estritamente as categorias do padrão IBGE/POF (ex: ALIMENTAÇÃO - GRÃOS, LIMPEZA - LAVANDERIA, etc).\n"
         "4. UNIDADE: A unidade de medida (un, kg, g, l, ml, pct).\n\n"
         "Retorne APENAS um JSON válido."
     )
@@ -160,7 +174,7 @@ async def consultar_ia_async(nome_sujo: str) -> dict:
 
 async def extrair_json_com_groq_async(
     *, conteudo: str, prompt_sistema: str, model: str | None = None,
-    max_tokens: int = 2000, temperature: float = 0.1,
+    max_tokens: int = 6000, temperature: float = 0.1,
 ) -> dict:
     try:
         resposta = await async_groq_client.chat.completions.create(
@@ -184,6 +198,3 @@ async def extrair_json_com_groq_async(
 
 async def classificar_produto_async(descricao: str, contexto: dict | None = None) -> dict:
     return await consultar_ia_async(descricao)
-
-
-
