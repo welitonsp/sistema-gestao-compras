@@ -185,13 +185,5 @@ async def extrair_json_com_groq_async(
 async def classificar_produto_async(descricao: str, contexto: dict | None = None) -> dict:
     return await consultar_ia_async(descricao)
 
-async def criar_tabelas_se_nao_existirem():
-    """Garante a existência das tabelas via metadados do SQLAlchemy (Seguro)."""
-    from backend.models.base import Base
-    from backend.core.database import engine
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Tabelas verificadas/criadas via SQLAlchemy Metadata.")
-
 
 

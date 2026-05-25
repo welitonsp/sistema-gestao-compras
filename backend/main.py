@@ -6,7 +6,9 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, FastAPI, Request, status
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from arq import create_pool
@@ -16,6 +18,12 @@ from backend.api.dependencies import AppSettings, DbSession
 from backend.api.v1.notas import router as notas_router
 from backend.api.v1.dashboard import router as dashboard_router
 from backend.api.v1.auth import router as auth_router
+from backend.api.v1.health import router as health_router
+from backend.api.v1.produtos import router as produtos_router
+from backend.api.v1.users import router as users_router
+from backend.api.v1.webhooks import router as webhooks_router
+from backend.api.v1.chat import router as chat_router
+from backend.api.v1.integrations import router as integrations_router
 from backend.core.config import settings
 from core.logger import get_logger
 
@@ -26,6 +34,14 @@ logger = get_logger("backend.main")
 async def lifespan(application: FastAPI):
     """Manage application-level resources lifecycle."""
     
+    # Setup HTTP Client Pool
+    application.state.http_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(30.0),
+        follow_redirects=True,
+        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20)
+    )
+    logger.info("Pool de conexoes HTTP (httpx) iniciado.")
+
     # Setup Redis Pool with resilience
     application.state.redis = None
     try:
@@ -38,7 +54,10 @@ async def lifespan(application: FastAPI):
 
     yield
 
-    # Close Redis Pool safely
+    # Clean up
+    await application.state.http_client.aclose()
+    logger.info("Pool HTTP encerrado.")
+    
     if application.state.redis:
         await application.state.redis.close()
         logger.info("Pool Redis encerrado.")
@@ -130,8 +149,12 @@ async def deep_health_check(
 
 api_v1_router.include_router(notas_router)
 api_v1_router.include_router(dashboard_router)
-
-
+api_v1_router.include_router(health_router)
+api_v1_router.include_router(produtos_router)
+api_v1_router.include_router(users_router)
+api_v1_router.include_router(webhooks_router)
+api_v1_router.include_router(chat_router)
+api_v1_router.include_router(integrations_router)
 def create_application() -> FastAPI:
     """Create and configure the FastAPI application instance."""
 
@@ -164,6 +187,14 @@ def create_application() -> FastAPI:
 
     application.include_router(api_v1_router)
     application.include_router(auth_router, prefix=settings.api_v1_prefix)
+
+    # Suporte a arquivos estáticos do Frontend (React)
+    # Em produção, o frontend compilado ficará em /app/static
+    import os
+    static_path = "static"
+    if os.path.exists(static_path):
+        application.mount("/", StaticFiles(directory=static_path, html=True), name="static")
+
     return application
 
 

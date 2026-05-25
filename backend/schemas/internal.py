@@ -21,6 +21,8 @@ class ItemNotaDTO(BaseModel):
     quantidade: Decimal
     valor_unitario: Decimal
     valor_total: Decimal
+    marca: str | None = None
+    categoria: str | None = None
 
 
 class NotaFiscalDTO(BaseModel):

@@ -6,16 +6,15 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 from pydantic import BaseModel
 
 from backend.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 class TokenData(BaseModel):
     username: str | None = None
+    role: str | None = None
     scopes: list[str] = []
 
 
@@ -37,10 +36,19 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain text password against its hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify a plain text password against its hash using bcrypt."""
+    try:
+        return bcrypt.checkpw(
+            plain_password.encode('utf-8'), 
+            hashed_password.encode('utf-8')
+        )
+    except Exception:
+        return False
 
 
 def get_password_hash(password: str) -> str:
     """Generate a bcrypt hash from a password."""
-    return pwd_context.hash(password)
+    # bcrypt.hashpw expects bytes
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')

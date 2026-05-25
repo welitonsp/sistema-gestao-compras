@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Annotated
 from pathlib import Path
 
-from fastapi import APIRouter, Body, HTTPException, status
+from fastapi import APIRouter, Body, HTTPException, status, Request, Depends
 from pydantic import ValidationError
 
-from backend.api.dependencies import DbSession, ArqPool, CurrentUser
+from backend.api.dependencies import DbSession, ArqPool, CurrentUser, HttpClient, RoleChecker
+from backend.models.compras import User, UserRole
 from backend.core.fiscal import validar_chave_acesso
 from backend.schemas.importacao import ImportacaoChaveRequest, ImportacaoNotaResponse, ProcessamentoLoteResponse
 from backend.services.importador_sefaz import (
@@ -18,7 +19,31 @@ from backend.services.importador_sefaz import (
     SefazComunicacaoError,
 )
 
+from arq.jobs import Job
+
 router = APIRouter(prefix="/notas", tags=["Notas Fiscais"])
+
+@router.get(
+    "/jobs/{job_id}",
+    summary="Consultar status de uma tarefa de background",
+)
+async def consultar_job(
+    job_id: str,
+    arq: ArqPool,
+    user: CurrentUser,
+) -> dict[str, Any]:
+    """Retorna o estado atual de um job no processador de tarefas (ARQ)."""
+    job = Job(job_id, arq)
+    status_job = await job.status()
+    result = await job.result_info()
+    
+    return {
+        "job_id": job_id,
+        "status": status_job,
+        "success": result.success if result else None,
+        "result": result.result if result else None,
+        "start_time": result.enqueue_time if result else None,
+    }
 
 @router.post(
     "/processar-lote",
@@ -28,7 +53,7 @@ router = APIRouter(prefix="/notas", tags=["Notas Fiscais"])
 )
 async def processar_lote_background(
     arq: ArqPool,
-    user: CurrentUser,
+    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER]))],
 ) -> ProcessamentoLoteResponse:
     """Detecta arquivos PDF/XML na pasta de entrada e enfileira para processamento."""
     pasta_input = Path("NOVAS_NOTAS")
@@ -41,8 +66,8 @@ async def processar_lote_background(
     job_ids = []
     
     for arquivo in arquivos:
-        # Enfileira a tarefa no worker
-        job = await arq.enqueue_job("processar_arquivo_background", str(arquivo))
+        # Enfileira a tarefa no worker com o department_id
+        job = await arq.enqueue_job("processar_arquivo_background", str(arquivo), user.department_id)
         job_ids.append(job.job_id)
         
     return ProcessamentoLoteResponse(
@@ -62,7 +87,9 @@ async def processar_lote_background(
     ),
 )
 async def importar_nota_por_chave(
+    request: Request,
     db: DbSession,
+    client: HttpClient,
     user: CurrentUser,
     payload_bruto: dict[str, Any] = Body(...),
 ) -> ImportacaoNotaResponse:
@@ -86,8 +113,13 @@ async def importar_nota_por_chave(
         ) from exc
 
     try:
-        async with ImportadorSefazService(db=db) as servico:
-            return await servico.importar_por_chave(payload.chave_acesso)
+        servico = ImportadorSefazService(db=db, http_client=client)
+        return await servico.importar_por_chave(
+            identificador=payload.chave_acesso,
+            usuario=user.username,
+            ip_origem=request.client.host if request.client else None,
+            department_id=user.department_id
+        )
     except NotaJaCadastradaError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

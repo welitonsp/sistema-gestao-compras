@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gestao-compras-api
+  labels:
+    app: gestao-compras
+    component: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gestao-compras
+      component: api
+  template:
+    metadata:
+      labels:
+        app: gestao-compras
+        component: api
+    spec:
+      containers:
+      - name: api
+        image: your-registry/gestao-compras-api:latest
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - secretRef:
+            name: gestao-compras-secrets
+        - configMapRef:
+            name: gestao-compras-config
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gestao-compras-api
+spec:
+  type: ClusterIP
+  selector:
+    app: gestao-compras
+    component: api
+  ports:
+  - port: 80
+    targetPort: 8000

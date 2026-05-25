@@ -41,23 +41,20 @@ class ImportadorSefazService:
     URL_BASE_CONSULTA = "https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}"
     USER_AGENT = "SistemaGestaoCompras/2.0 (Procurement AI Agent)"
 
-    def __init__(self, db: AsyncSession, timeout: float = 30.0) -> None:
+    def __init__(self, db: AsyncSession, http_client: httpx.AsyncClient) -> None:
         self.repo = ProcurementRepository(db)
         self.ai = AIStructuredExtractor()
         self.parser = SefazGoParser()
-        self.timeout = timeout
-        self._client: httpx.AsyncClient | None = None
+        self._client = http_client
         self._log = logger
 
-    async def __aenter__(self) -> ImportadorSefazService:
-        self._client = httpx.AsyncClient(timeout=httpx.Timeout(self.timeout), follow_redirects=True)
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb) -> None:
-        if self._client:
-            await self._client.aclose()
-
-    async def importar_por_chave(self, identificador: str) -> ImportacaoNotaResponse:
+    async def importar_por_chave(
+        self, 
+        identificador: str, 
+        usuario: str = "sistema", 
+        ip_origem: str | None = None,
+        department_id: str | None = None
+    ) -> ImportacaoNotaResponse:
         """Executa o fluxo completo de importação (Chave, URL ou HTML Bruto)."""
         
         # 1. Identificação e Sanitização
@@ -66,78 +63,69 @@ class ImportadorSefazService:
         html_pasted = ""
 
         if identificador.startswith("<html") or "<html>" in identificador.lower() or "<body" in identificador.lower():
-            # Caso 2: Usuário colou o HTML bruto (após consulta manual com CAPTCHA)
+            # Caso 2: Usuário colou o HTML bruto
             html_pasted = identificador
-            self._log.info("Processando importação via HTML colado (Pasted HTML).")
-        elif identificador.startswith("http"):
-            # Caso 1: É uma URL do QR Code
-            url_consulta = identificador
-            match = re.search(r"p=([0-9]{44})", identificador)
-            if match:
-                chave_acesso = match.group(1)
+            self._log.info("Processando importação via HTML colado.")
+            operacao_tipo = "IMPORT_HTML_PASTE"
+        else:
+            operacao_tipo = "IMPORT_SEFAZ_GO"
+            if identificador.startswith("http"):
+                url_consulta = identificador
+                match = re.search(r"p=([0-9]{44})", identificador)
+                chave_acesso = match.group(1) if match else ""
             else:
-                match_digits = re.search(r"(\d{44})", identificador)
-                if match_digits:
-                    chave_acesso = match_digits.group(1)
-                else:
-                    raise ExtracaoDadosNotaError("URL inválida ou chave de acesso não encontrada na URL.")
-        else:
-            # Caso 3: É apenas a chave (gera URL de consulta padrão)
-            chave_acesso = re.sub(r"\D", "", identificador)
-            if len(chave_acesso) != 44:
-                raise ExtracaoDadosNotaError(f"Chave de acesso inválida (tamanho: {len(chave_acesso)}).")
-            url_consulta = self.URL_BASE_CONSULTA.format(chave=chave_acesso)
+                chave_acesso = re.sub(r"\D", "", identificador)
+                url_consulta = self.URL_BASE_CONSULTA.format(chave=chave_acesso)
 
-        # 2. Fetch/Preparação do HTML
-        if html_pasted:
-            html_content = html_pasted
-        else:
-            # Contextualiza os logs para esta importação
+        # 2. Fetch/Preparação e Validação de Idempotência
+        categorias_contexto = await self.repo.obter_categorias_unicas()
+        
+        if chave_acesso:
             self._log = ContextAdapter(logger, {"chave_acesso": chave_acesso})
-            # Validação de Idempotência
             if await self.repo.nota_existe(chave_acesso):
-                self._log.warning("Nota fiscal já cadastrada no sistema.")
                 raise NotaJaCadastradaError(f"Nota {chave_acesso} já cadastrada.")
             
-            self._log.debug(f"Consultando portal SEFAZ GO. URL: {url_consulta[:60]}...")
-            html_content = await self._fetch_url(url_consulta)
+            if not html_pasted:
+                html_content = await self._fetch_url(url_consulta)
+            else:
+                html_content = html_pasted
+        else:
+            html_content = html_pasted
 
-        # 3. Extração (Tentativa Determinística -> Fallback IA)
-        self._log.debug("Iniciando extração de dados.")
-        
+        # 3. Extração (Parser Determinístico -> Fallback IA)
         nota_dto = self.parser.parse(html_content)
         
-        # Se for HTML colado, a chave_acesso pode ter vindo do parser
-        if not chave_acesso and nota_dto:
-            chave_acesso = nota_dto.chave_acesso
-
-        # Validação de Idempotência para HTML colado
-        if html_pasted and chave_acesso and await self.repo.nota_existe(chave_acesso):
-            self._log.warning("Nota fiscal (do HTML colado) já cadastrada.")
-            raise NotaJaCadastradaError(f"Nota {chave_acesso} já cadastrada.")
-
-        if nota_dto:
-            self._log.info(f"Dados extraídos via Parser Determinístico. Fornecedor: {nota_dto.fornecedor.razao_social}")
-        else:
-            self._log.info("Parser determinístico falhou ou incompleto. Iniciando processamento via IA.")
+        if not nota_dto:
             texto_limpo = self._limpar_html(html_content)
-            try:
-                nota_dto = await self.ai.extrair_nota(texto_limpo)
-                if chave_acesso: nota_dto.chave_acesso = chave_acesso
-                self._log.info(f"Dados extraídos via IA. Fornecedor: {nota_dto.fornecedor.razao_social}")
-            except Exception as exc:
-                self._log.error(f"Falha crítica na extração via IA: {exc}", exc_info=True)
-                raise ExtracaoDadosNotaError(f"Falha na extração por IA: {exc}") from exc
+            nota_dto = await self.ai.extrair_nota(texto_limpo, categorias_contexto=categorias_contexto)
+            if chave_acesso: nota_dto.chave_acesso = chave_acesso
+        else:
+            # Enriquecimento: O parser determinístico não categoriza, chamamos IA para os itens
+            # Isso garante que mesmo notas parseadas via CSS tenham categorias inteligentes
+            nota_dto.itens = await self.ai.classificar_itens_lote(nota_dto.itens, categorias_contexto)
 
-        # 4. Persistência Atômica
         chave_final = chave_acesso or nota_dto.chave_acesso
-        self._log.debug(f"Persistindo dados da nota {chave_final}.")
+
+        # 4. Persistência Atômica com Auditoria
         async with self.repo.db.begin():
+            # Re-valida existência dentro da transação
             if await self.repo.nota_existe(chave_final):
                 raise NotaJaCadastradaError(f"Nota {chave_final} já cadastrada.")
-            nota_db = await self.repo.salvar_nota_completa(chave_final, nota_dto)
+            
+            nota_db = await self.repo.salvar_nota_completa(chave_final, nota_dto, department_id=department_id)
+            
+            # Registrar auditoria
+            await self.repo.registrar_auditoria(
+                usuario=usuario,
+                operacao=operacao_tipo,
+                entidade="NotaFiscal",
+                entidade_id=chave_final,
+                detalhes=f"Importação de {len(nota_dto.itens)} itens. Total: {nota_dto.valor_total}",
+                ip=ip_origem,
+                department_id=department_id
+            )
 
-        self._log.info("Nota fiscal e itens importados com sucesso para o banco de dados.")
+        self._log.info(f"Nota {chave_final} importada e auditada com sucesso.")
 
         # 6. Resposta Formatada
         return ImportacaoNotaResponse(
@@ -153,15 +141,26 @@ class ImportadorSefazService:
 
     async def _fetch_url(self, url: str) -> str:
         if not self._client:
-            raise RuntimeError("Cliente HTTP não iniciado. Use 'async with'.")
+            raise RuntimeError("Cliente HTTP não iniciado.")
         
-        try:
-            resp = await self._client.get(url)
-            resp.raise_for_status()
-            return resp.text
-        except Exception as exc:
-            self._log.error(f"Erro de comunicação com SEFAZ GO: {exc}")
-            raise SefazComunicacaoError(f"Falha ao consultar SEFAZ: {exc}")
+        max_retries = 3
+        backoff_factor = 2.0
+        
+        for attempt in range(max_retries):
+            try:
+                resp = await self._client.get(url)
+                resp.raise_for_status()
+                return resp.text
+            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                if attempt == max_retries - 1:
+                    self._log.error(f"Falha definitiva após {max_retries} tentativas: {exc}")
+                    raise SefazComunicacaoError(f"Falha ao consultar SEFAZ (Tentativas esgotadas): {exc}")
+                
+                wait_time = backoff_factor ** attempt
+                self._log.warning(f"Erro na tentativa {attempt + 1}. Retentando em {wait_time}s... Erro: {exc}")
+                await asyncio.sleep(wait_time)
+        
+        return "" # Unreachable
 
     def _limpar_html(self, html: str) -> str:
         """Sanitização básica do HTML para reduzir tokens."""

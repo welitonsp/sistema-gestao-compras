@@ -41,5 +41,20 @@ services:
       - "6379:6379"
     restart: unless-stopped
 
+  worker:
+    build: .
+    container_name: gestao-compras-worker
+    command: arq backend.core.worker.WorkerSettings
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: started
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
 volumes:
   postgres_data:

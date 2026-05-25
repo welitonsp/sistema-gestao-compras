@@ -23,7 +23,7 @@ class PDFProcessorService:
         self.ocr = ocr_service
         self._log = logger
 
-    async def processar_arquivo(self, caminho: Path) -> bool:
+    async def processar_arquivo(self, caminho: Path, department_id: str | None = None) -> bool:
         """Process a PDF or Image file and persist its data."""
         self._log = ContextAdapter(logger, {"arquivo": caminho.name})
         self._log.info(f"Iniciando processamento OCR: {caminho.name}")
@@ -48,7 +48,7 @@ class PDFProcessorService:
                     self._log.warning(f"Nota {nota_dto.chave_acesso} já processada.")
                     return True
                 
-                await self.repo.salvar_nota_completa(nota_dto.chave_acesso, nota_dto)
+                await self.repo.salvar_nota_completa(nota_dto.chave_acesso, nota_dto, department_id=department_id)
             
             self._log.info(f"Arquivo processado com sucesso. Chave: {nota_dto.chave_acesso}")
             return True

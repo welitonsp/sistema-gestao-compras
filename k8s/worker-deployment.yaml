@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gestao-compras-worker
+  labels:
+    app: gestao-compras
+    component: worker
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: gestao-compras
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: gestao-compras
+        component: worker
+    spec:
+      containers:
+      - name: worker
+        image: your-registry/gestao-compras-api:latest
+        command: ["arq", "backend.core.worker.WorkerSettings"]
+        envFrom:
+        - secretRef:
+            name: gestao-compras-secrets
+        - configMapRef:
+            name: gestao-compras-config
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"

@@ -24,7 +24,7 @@ class XMLProcessorService:
         self.repo = repo
         self._log = logger
 
-    async def processar_arquivo(self, caminho_xml: Path) -> bool:
+    async def processar_arquivo(self, caminho_xml: Path, department_id: str | None = None) -> bool:
         """Process a single XML file and persist its data."""
         self._log = ContextAdapter(logger, {"arquivo": caminho_xml.name})
         self._log.info(f"Iniciando processamento de XML: {caminho_xml.name}")
@@ -38,7 +38,7 @@ class XMLProcessorService:
                     self._log.warning(f"Nota {nota_dto.chave_acesso} já processada.")
                     return True
                 
-                await self.repo.salvar_nota_completa(nota_dto.chave_acesso, nota_dto)
+                await self.repo.salvar_nota_completa(nota_dto.chave_acesso, nota_dto, department_id=department_id)
             
             self._log.info(f"XML processado com sucesso. Chave: {nota_dto.chave_acesso}")
             return True

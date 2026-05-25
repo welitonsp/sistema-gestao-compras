@@ -131,6 +131,22 @@ class Settings(BaseSettings):
         description="Allowed CORS origins. Can be set as JSON array or comma-separated values.",
     )
 
+    # Cloud Storage Settings
+    storage_type: Literal["local", "s3"] = Field(
+        default="local",
+        alias="STORAGE_TYPE",
+        description="Storage provider to use.",
+    )
+    s3_bucket: str | None = Field(default=None, alias="S3_BUCKET")
+    s3_region: str = Field(default="us-east-1", alias="S3_REGION")
+    s3_endpoint: str | None = Field(default=None, alias="S3_ENDPOINT") # For MinIO
+    s3_access_key: str | None = Field(default=None, alias="S3_ACCESS_KEY")
+    s3_secret_key: SecretStr | None = Field(default=None, alias="S3_SECRET_KEY")
+
+    # AI Keys (Required for processing)
+    groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
+    gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
+
     @computed_field(return_type=bool)
     @property
     def is_production(self) -> bool:

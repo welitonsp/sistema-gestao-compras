@@ -1,0 +1,164 @@
+"""Routes for product catalog management."""
+
+from __future__ import annotations
+
+from typing import Any
+from fastapi import APIRouter, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
+import io
+import pandas as pd
+from sqlalchemy import select, or_
+from backend.api.dependencies import DbSession, CurrentUser, RoleChecker
+from backend.models.compras import Produto, ClassificacaoCache, UserRole
+from backend.schemas.produtos import ProdutoResponse, ProdutoUpdate
+
+from backend.services.catalog_healer import CatalogHealerService
+
+router = APIRouter(prefix="/produtos", tags=["Produtos"])
+
+@router.get(
+    "/maintenance",
+    summary="Obter sugestões de manutenção do catálogo",
+    dependencies=[Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER]))]
+)
+async def obter_sugestoes_manutencao(db: DbSession):
+    """Retorna inconsistências detectadas pela IA no catálogo."""
+    service = CatalogHealerService(db)
+    return await service.get_maintenance_suggestions()
+
+@router.post(
+    "/{ean}/heal",
+    summary="Aplicar correção de autocura",
+    dependencies=[Depends(RoleChecker([UserRole.ADMIN]))]
+)
+async def aplicar_autocura(ean: str, payload: dict, db: DbSession):
+    """Aplica uma sugestão de unificação ou correção sugerida pela IA."""
+    service = CatalogHealerService(db)
+    await service.apply_healing(ean, payload)
+    return {"status": "success"}
+
+@router.get(
+    "/export",
+    summary="Exportar catálogo de produtos (CSV - Streamed)",
+)
+async def exportar_produtos(
+    db: DbSession, 
+    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.AUDITOR, UserRole.MANAGER]))]
+) -> StreamingResponse:
+    """Exporta o catálogo de produtos via streaming (Zero-OOM)."""
+    
+    async def generate_csv():
+        yield "EAN/Codigo;Descricao Canonica;Marca;Categoria;Unidade\n"
+        
+        stmt = select(Produto).order_by(Produto.nome_limpo)
+        result = await db.stream(stmt)
+        
+        async for row in result:
+            p = row[0]
+            marca = (p.marca or "").replace(";", ",")
+            nome = p.nome_limpo.replace(";", ",")
+            yield f"{p.ean};{nome};{marca};{p.categoria};{p.unidade}\n"
+
+    return StreamingResponse(
+        generate_csv(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=catalogo_produtos.csv"}
+    )
+
+@router.get(
+    "",
+    response_model=list[ProdutoResponse],
+    summary="Listar catálogo de produtos",
+)
+async def listar_produtos(
+    db: DbSession,
+    user: CurrentUser,
+    search: str | None = Query(None, description="Busca por nome ou EAN"),
+    categoria: str | None = Query(None, description="Filtrar por categoria"),
+    limit: int = 100,
+    offset: int = 0,
+) -> Any:
+    """Retorna a lista de produtos cadastrados no sistema."""
+    stmt = select(Produto)
+    
+    if search:
+        stmt = stmt.where(
+            or_(
+                Produto.nome_limpo.ilike(f"%{search}%"),
+                Produto.ean.ilike(f"%{search}%")
+            )
+        )
+    
+    if categoria:
+        stmt = stmt.where(Produto.categoria == categoria)
+        
+    stmt = stmt.order_by(Produto.nome_limpo).limit(limit).offset(offset)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+@router.patch(
+    "/{ean}",
+    response_model=ProdutoResponse,
+    summary="Atualizar dados de um produto",
+)
+async def atualizar_produto(
+    ean: str,
+    payload: ProdutoUpdate,
+    db: DbSession,
+    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER]))],
+) -> Any:
+    """Atualiza categoria, marca ou nome de um produto e limpa o cache de IA relacionado."""
+    stmt = select(Produto).where(Produto.ean == ean)
+    result = await db.execute(stmt)
+    produto = result.scalar_one_or_none()
+    
+    if not produto:
+        raise HTTPException(status_code=404, detail="Produto não encontrado.")
+    
+    # Atualiza campos
+    update_data = payload.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(produto, field, value)
+    
+    # Sincroniza com ClassificacaoCache
+    # Isso garante que futuras importações do mesmo item já venham corrigidas.
+    # Como o cache é baseado na 'descricao_original', e um produto pode vir de várias descrições,
+    # limpamos as entradas antigas no cache que resultavam neste EAN para que a IA re-classifique
+    # ou simplesmente atualizamos o cache para a nova categoria preferida.
+    
+    if "categoria" in update_data:
+        # Busca descrições originais vinculadas a este EAN através dos itens de nota
+        from backend.models.compras import ItemNotaFiscal
+        from core.classificador_regras import _normalizar
+        
+        # Encontra descrições originais que levaram a este produto
+        stmt_desc = select(ItemNotaFiscal.descricao_original).where(ItemNotaFiscal.ean == ean).distinct()
+        res_desc = await db.execute(stmt_desc)
+        descricoes = res_desc.scalars().all()
+        
+        for desc in descricoes:
+            desc_norm = _normalizar(desc)
+            # Atualiza ou insere no cache com a nova verdade definida pelo humano
+            cache_stmt = select(ClassificacaoCache).where(ClassificacaoCache.descricao_original == desc_norm)
+            cache_res = await db.execute(cache_stmt)
+            cache_entry = cache_res.scalar_one_or_none()
+            
+            if cache_entry:
+                cache_entry.categoria = update_data["categoria"]
+                if "marca" in update_data:
+                    cache_entry.marca = update_data["marca"]
+                cache_entry.produto_canonico = produto.nome_limpo
+            else:
+                # Se não existia no cache, cria para blindar futuras importações
+                new_cache = ClassificacaoCache(
+                    descricao_original=desc_norm,
+                    produto_canonico=produto.nome_limpo,
+                    categoria=update_data["categoria"],
+                    marca=update_data.get("marca", produto.marca),
+                    unidade=produto.unidade
+                )
+                db.add(new_cache)
+
+    await db.commit()
+    await db.refresh(produto)
+    return produto

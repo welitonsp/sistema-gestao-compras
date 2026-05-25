@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from decimal import Decimal
 from typing import List, Dict, Any
+from uuid import UUID
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.compras import Produto, HistoricoPreco
+from backend.models.compras import Produto, HistoricoPreco, NotaFiscal, ItemNotaFiscal
 from core.logger import get_logger
 
 logger = get_logger("services.insights")
@@ -16,14 +17,12 @@ class PriceInsightsService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def detectar_variacoes_anomalas(self, threshold_percent: float = 15.0) -> List[Dict[str, Any]]:
+    async def detectar_variacoes_anomalas(self, threshold_percent: float = 15.0, department_id: UUID | None = None) -> List[Dict[str, Any]]:
         """
         Detecta produtos cujo preço na última compra variou significativamente 
-        em relação à média histórica (Otimizado para evitar N+1).
+        em relação à média histórica (Otimizado via Pushdown Filter).
         """
-        logger.info(f"Iniciando detecção de anomalias (limiar: {threshold_percent}%)")
-        
-        # 1. Subquery para a média histórica
+        # Subquery para a média histórica (Global ou por Dept)
         sub_medias = (
             select(
                 HistoricoPreco.ean,
@@ -33,7 +32,7 @@ class PriceInsightsService:
             .subquery()
         )
 
-        # 2. Query principal: Pega a última compra de cada produto usando Row Number
+        # Query para a última compra
         sub_ultima = (
             select(
                 HistoricoPreco.ean,
@@ -41,14 +40,20 @@ class PriceInsightsService:
                 HistoricoPreco.data_compra,
                 HistoricoPreco.local,
                 Produto.nome_limpo,
+                NotaFiscal.department_id,
                 func.row_number().over(
                     partition_by=HistoricoPreco.ean,
                     order_by=[desc(HistoricoPreco.data_compra), desc(HistoricoPreco.id)]
                 ).label("rn")
             )
             .join(Produto, Produto.ean == HistoricoPreco.ean)
+            .join(ItemNotaFiscal, ItemNotaFiscal.ean == Produto.ean)
+            .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
             .subquery()
         )
+
+        # Calcula a variação percentual diretamente no banco usando nullif para prevenir Divisão por Zero
+        variacao_calc = ((sub_ultima.c.preco_pago / func.nullif(sub_medias.c.preco_medio, 0)) - 1) * 100
 
         stmt = (
             select(
@@ -57,49 +62,268 @@ class PriceInsightsService:
                 sub_ultima.c.data_compra,
                 sub_ultima.c.local,
                 sub_ultima.c.nome_limpo,
-                sub_medias.c.preco_medio
+                sub_medias.c.preco_medio,
+                variacao_calc.label("variacao")
             )
             .join(sub_medias, sub_medias.c.ean == sub_ultima.c.ean)
             .where(sub_ultima.c.rn == 1)
+            .where(func.abs(variacao_calc) >= threshold_percent)
+            .order_by(desc(func.abs(variacao_calc)))
         )
+        
+        if department_id:
+            stmt = stmt.where(sub_ultima.c.department_id == department_id)
         
         result = await self.db.execute(stmt)
         alertas = []
-        
         for row in result.fetchall():
-            preco_atual = row.preco_pago
-            preco_medio = row.preco_medio
-            
-            if not preco_medio: continue
-            
-            # Calcular variação
-            variacao = ((preco_atual / preco_medio) - 1) * 100
-            
-            if abs(variacao) >= Decimal(str(threshold_percent)):
-                alertas.append({
-                    "ean": row.ean,
-                    "produto": row.nome_limpo,
-                    "preco_medio": float(preco_medio),
-                    "preco_atual": float(preco_atual),
-                    "variacao_percentual": float(variacao),
-                    "data_ultima_compra": row.data_compra.isoformat(),
-                    "local": row.local
-                })
-        
-        # Ordenar por maior variação
-        alertas.sort(key=lambda x: abs(x["variacao_percentual"]), reverse=True)
+            alertas.append({
+                "ean": row.ean,
+                "produto": row.nome_limpo,
+                "preco_medio": float(row.preco_medio),
+                "preco_atual": float(row.preco_pago),
+                "variacao_percentual": float(row.variacao),
+                "data_ultima_compra": row.data_compra.isoformat(),
+                "local": row.local
+            })
         return alertas
 
-    async def obter_resumo_gastos_por_categoria(self) -> List[Dict[str, Any]]:
-        """Retorna o total gasto por categoria."""
+    async def detectar_anomalias_estatisticas(self, z_threshold: float = 2.0, department_id: UUID | None = None) -> List[Dict[str, Any]]:
+        """Detecta anomalias usando Z-Score com isolamento de departamento."""
+        sub_stats = (
+            select(
+                HistoricoPreco.ean,
+                func.avg(HistoricoPreco.preco_pago).label("avg_price"),
+                func.stddev(HistoricoPreco.preco_pago).label("stddev_price")
+            )
+            .group_by(HistoricoPreco.ean)
+            .having(func.count(HistoricoPreco.id) >= 3)
+            .subquery()
+        )
+
+        sub_ultima = (
+            select(
+                HistoricoPreco.ean,
+                HistoricoPreco.preco_pago,
+                Produto.nome_limpo,
+                NotaFiscal.department_id,
+                func.row_number().over(
+                    partition_by=HistoricoPreco.ean,
+                    order_by=[desc(HistoricoPreco.data_compra), desc(HistoricoPreco.id)]
+                ).label("rn")
+            )
+            .join(Produto, Produto.ean == HistoricoPreco.ean)
+            .join(ItemNotaFiscal, ItemNotaFiscal.ean == Produto.ean)
+            .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+            .subquery()
+        )
+
+        stmt = (
+            select(sub_ultima, sub_stats.c.avg_price, sub_stats.c.stddev_price)
+            .join(sub_stats, sub_stats.c.ean == sub_ultima.c.ean)
+            .where(sub_ultima.c.rn == 1)
+        )
+        
+        if department_id:
+            stmt = stmt.where(sub_ultima.c.department_id == department_id)
+
+        result = await self.db.execute(stmt)
+        anomalias = []
+        for row in result.fetchall():
+            if not row.stddev_price: continue
+            z = abs((row.preco_pago - row.avg_price) / row.stddev_price)
+            if z >= Decimal(str(z_threshold)):
+                anomalias.append({
+                    "ean": row.ean, "produto": row.nome_limpo, "preco_atual": float(row.preco_pago),
+                    "media_historica": float(row.avg_price), "z_score": float(z),
+                    "confianca": "Alta" if z > 3 else "Média"
+                })
+        return sorted(anomalias, key=lambda x: x["z_score"], reverse=True)
+
+    async def obter_resumo_gastos_por_categoria(self, department_id: UUID | None = None) -> List[Dict[str, Any]]:
+        """Retorna o total gasto agrupado por categoria com isolamento."""
         stmt = (
             select(
                 Produto.categoria,
-                func.sum(HistoricoPreco.preco_pago * HistoricoPreco.quantidade).label("total")
+                func.sum(ItemNotaFiscal.valor_total).label("total")
             )
-            .join(HistoricoPreco, HistoricoPreco.ean == Produto.ean)
-            .group_by(Produto.categoria)
-            .order_by(desc("total"))
+            .join(ItemNotaFiscal, Produto.ean == ItemNotaFiscal.ean)
+            .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
         )
+        
+        if department_id:
+            stmt = stmt.where(NotaFiscal.department_id == department_id)
+            
+        stmt = stmt.group_by(Produto.categoria).order_by(desc("total"))
         result = await self.db.execute(stmt)
         return [{"categoria": row.categoria or "Outros", "total": float(row.total)} for row in result.fetchall()]
+
+    async def obter_forecast_gastos(self, department_id: UUID | None = None) -> List[Dict[str, Any]]:
+        """Previsão de gastos usando tendência baseada em regressão linear simples."""
+        from datetime import datetime, timedelta
+        inicio = (datetime.now() - timedelta(days=180)).date() # Últimos 6 meses
+        
+        stmt = (
+            select(
+                Produto.categoria,
+                func.date_trunc('month', NotaFiscal.data_emissao).label("mes"),
+                func.sum(ItemNotaFiscal.valor_total).label("total")
+            )
+            .join(ItemNotaFiscal, Produto.ean == ItemNotaFiscal.ean)
+            .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+            .where(NotaFiscal.data_emissao >= inicio)
+        )
+        if department_id:
+            stmt = stmt.where(NotaFiscal.department_id == department_id)
+            
+        stmt = stmt.group_by(Produto.categoria, "mes").order_by(Produto.categoria, "mes")
+        result = await self.db.execute(stmt)
+        
+        # Agrupa por categoria para calcular a tendência
+        cat_data = {}
+        for row in result.fetchall():
+            cat = row.categoria or "Outros"
+            if cat not in cat_data: cat_data[cat] = []
+            cat_data[cat].append(float(row.total))
+
+        forecasts = []
+        for cat, values in cat_data.items():
+            if len(values) < 2:
+                projecao = values[0] * 1.02 # Fallback
+                tendencia = "Insuferiente"
+            else:
+                # Regressão Linear Simples (x = indices do mês, y = valores)
+                n = len(values)
+                x = list(range(n))
+                y = values
+                
+                sum_x = sum(x)
+                sum_y = sum(y)
+                sum_xx = sum(i*i for i in x)
+                sum_xy = sum(i*j for i, j in zip(x, y))
+                
+                # Inclinação (slope) = (n*sum_xy - sum_x*sum_y) / (n*sum_xx - sum_x**2)
+                denom = (n * sum_xx - sum_x**2)
+                slope = (n * sum_xy - sum_x * sum_y) / denom if denom != 0 else 0
+                
+                projecao = y[-1] + slope
+                if slope > 0.05 * (sum_y/n): tendencia = "Alta"
+                elif slope < -0.05 * (sum_y/n): tendencia = "Queda"
+                else: tendencia = "Estável"
+
+            forecasts.append({
+                "categoria": cat,
+                "media_atual": sum(values)/len(values),
+                "projeção_proximo_mes": max(projecao, 0),
+                "tendencia": tendencia
+            })
+            
+        return sorted(forecasts, key=lambda x: x["projeção_proximo_mes"], reverse=True)
+
+    async def obter_tendencia_precos(self, department_id: UUID | None = None) -> List[Dict[str, Any]]:
+        """Retorna a evolução dos preços médios globais por mês para o gráfico de linhas."""
+        from datetime import datetime, timedelta
+        inicio = (datetime.now() - timedelta(days=180)).date()
+        
+        stmt = (
+            select(
+                func.date_trunc('month', NotaFiscal.data_emissao).label("mes"),
+                func.avg(ItemNotaFiscal.valor_unitario).label("preco_medio")
+            )
+            .join(ItemNotaFiscal, ItemNotaFiscal.nota_fiscal_id == NotaFiscal.id)
+            .where(NotaFiscal.data_emissao >= inicio)
+        )
+        if department_id:
+            stmt = stmt.where(NotaFiscal.department_id == department_id)
+            
+        stmt = stmt.group_by("mes").order_by("mes")
+        result = await self.db.execute(stmt)
+        
+        return [
+            {
+                "mes": row.mes.strftime("%b/%y"),
+                "valor": float(row.preco_medio)
+            }
+            for row in result.fetchall()
+        ]
+
+    async def detectar_notas_duplicadas_suspeitas(self, department_id: UUID | None = None) -> List[Dict[str, Any]]:
+        """Detecta duplicatas com isolamento de departamento e dispara webhooks. (Otimizado sem N+1)"""
+        from backend.models.compras import Fornecedor
+        from backend.services.webhook_service import webhook_service
+        
+        # Subquery para encontrar os grupos duplicados
+        subq = (
+            select(NotaFiscal.fornecedor_id, NotaFiscal.data_emissao, NotaFiscal.valor_total)
+            .group_by(NotaFiscal.fornecedor_id, NotaFiscal.data_emissao, NotaFiscal.valor_total)
+            .having(func.count(NotaFiscal.id) > 1)
+        )
+        
+        if department_id:
+            subq = subq.where(NotaFiscal.department_id == department_id)
+            
+        subq = subq.subquery("dups")
+        
+        # Query principal juntando com a subquery para pegar os detalhes
+        stmt = (
+            select(NotaFiscal.chave_acesso, NotaFiscal.data_emissao, NotaFiscal.valor_total, Fornecedor.razao_social)
+            .join(Fornecedor, Fornecedor.id == NotaFiscal.fornecedor_id)
+            .join(
+                subq, 
+                (NotaFiscal.fornecedor_id == subq.c.fornecedor_id) & 
+                (NotaFiscal.data_emissao == subq.c.data_emissao) & 
+                (NotaFiscal.valor_total == subq.c.valor_total)
+            )
+        )
+        
+        if department_id:
+            stmt = stmt.where(NotaFiscal.department_id == department_id)
+            
+        result = await self.db.execute(stmt)
+        
+        # Agrupa os resultados em memória
+        grupos_dict = {}
+        for row in result.fetchall():
+            key = (row.razao_social, row.data_emissao, row.valor_total)
+            if key not in grupos_dict:
+                grupos_dict[key] = {
+                    "fornecedor": row.razao_social,
+                    "data": row.data_emissao.isoformat(),
+                    "valor": float(row.valor_total),
+                    "chaves": []
+                }
+            grupos_dict[key]["chaves"].append(row.chave_acesso)
+            
+        alertas = list(grupos_dict.values())
+        
+        # Dispara Webhooks (Idealmente faríamos batching, mas webhooks são poucos)
+        for alerta in alertas:
+            await webhook_service.trigger_event(
+                "invoice.duplicate_detected",
+                department_id,
+                alerta
+            )
+            
+        return alertas
+
+    async def obter_produtos_mais_volateis(self, limit: int = 10, department_id: UUID | None = None) -> List[Dict[str, Any]]:
+        """Top volatilidade com isolamento."""
+        stmt = (
+            select(
+                Produto.nome_limpo,
+                func.min(HistoricoPreco.preco_pago).label("min_p"),
+                func.max(HistoricoPreco.preco_pago).label("max_p"),
+                ((func.max(HistoricoPreco.preco_pago) - func.min(HistoricoPreco.preco_pago)) / 
+                 func.nullif(func.min(HistoricoPreco.preco_pago), 0) * 100).label("v")
+            )
+            .join(HistoricoPreco, Produto.ean == HistoricoPreco.ean)
+            .join(ItemNotaFiscal, ItemNotaFiscal.ean == Produto.ean)
+            .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+        )
+        
+        if department_id:
+            stmt = stmt.where(NotaFiscal.department_id == department_id)
+            
+        stmt = stmt.group_by(Produto.ean, Produto.nome_limpo).having(func.count(HistoricoPreco.id) > 1).order_by(desc("v")).limit(limit)
+        result = await self.db.execute(stmt)
+        return [{"produto": r.nome_limpo, "min": float(r.min_p), "max": float(r.max_p), "variacao": float(r.v)} for r in result.fetchall()]
