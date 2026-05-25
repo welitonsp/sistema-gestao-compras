@@ -36,4 +36,36 @@ export const apiClient = {
     if (!response.ok) throw new Error('Falha na requisição');
     return response.json();
   },
+
+  patch: async <T>(endpoint: string, body: any): Promise<T> => {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify(body),
+    });
+
+    if (response.status === 401) {
+      return handleUnauthorized();
+    }
+
+    if (!response.ok) throw new Error('Falha na requisição');
+    return response.json();
+  },
+
+  delete: async <T>(endpoint: string): Promise<T> => {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+
+    if (response.status === 401) {
+      return handleUnauthorized();
+    }
+
+    if (!response.ok) throw new Error('Falha na requisição');
+    return response.json();
+  },
 };
