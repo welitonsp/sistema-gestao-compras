@@ -23,8 +23,10 @@ export interface AlertasPrecoResponse {
 }
 
 export interface FornecedorImportado {
+  id: string;
   cnpj: string;
   razao_social: string;
+  nome_fantasia: string | null;
 }
 
 export interface NotaFiscalImportada {
@@ -35,10 +37,24 @@ export interface NotaFiscalImportada {
   valor_total: number;
 }
 
+export interface ItemNotaFiscalImportado {
+  id: string;
+  codigo_produto: string;
+  descricao: string;
+  quantidade: number;
+  valor_unitario: number;
+  valor_total: number;
+}
+
+export interface ImportacaoChaveRequest {
+  chave_acesso: string;
+}
+
 export interface ImportacaoNotaResponse {
   mensagem: string;
   fornecedor: FornecedorImportado;
   nota_fiscal: NotaFiscalImportada;
+  itens: ItemNotaFiscalImportado[];
   total_itens: number;
 }
 
