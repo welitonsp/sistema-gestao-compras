@@ -1,12 +1,15 @@
 import pytest
 from datetime import date
 from decimal import Decimal
+from uuid import uuid4
+
 from sqlalchemy import select
-from backend.models.compras import NotaFiscal, AuditLog, Produto
+
+from backend.models.compras import AuditLog, Produto
 from backend.services.repository import ProcurementRepository
 from backend.schemas.internal import NotaFiscalDTO, FornecedorDTO, ItemNotaDTO
 from backend.core.database import SessionLocal
-import time
+
 
 @pytest.mark.asyncio
 async def test_bulk_persistence_and_audit():
@@ -15,8 +18,8 @@ async def test_bulk_persistence_and_audit():
     """
     async with SessionLocal() as db:
         repo = ProcurementRepository(db)
-        
-        chave_unica = f"TEST{int(time.time())}5225061234567800019955001"[:44]
+
+        chave_unica = f"TEST{uuid4().hex}5225061234567800019955001"[:44]
 
         # 1. Prepara DTO com vários itens (alguns repetidos para testar cache)
         dto = NotaFiscalDTO(
@@ -34,7 +37,7 @@ async def test_bulk_persistence_and_audit():
                 ItemNotaDTO(ean="ITEM_A", descricao="PRODUTO A (CACHE)", quantidade=1, valor_unitario=100, valor_total=100),
             ]
         )
-        
+
         # 2. Executa salvamento e auditoria na mesma transação
         async with db.begin():
             nota = await repo.salvar_nota_completa(dto.chave_acesso, dto)
@@ -47,12 +50,14 @@ async def test_bulk_persistence_and_audit():
                 ip="127.0.0.1"
             )
 
+        assert nota.chave_acesso == dto.chave_acesso
+
         # 3. Verificações no Banco
         # Deve ter criado apenas 2 produtos únicos apesar de 3 itens
         res_prod = await db.execute(select(Produto).where(Produto.ean.in_(["ITEM_A", "ITEM_B"])))
         produtos = res_prod.scalars().all()
         assert len(produtos) == 2
-        
+
         # Verifica se o log de auditoria foi persistido
         res_audit = await db.execute(select(AuditLog).where(AuditLog.entidade_id == dto.chave_acesso))
         log = res_audit.scalar_one()
