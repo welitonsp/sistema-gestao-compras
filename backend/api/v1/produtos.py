@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from typing import Any, Annotated
 from fastapi import APIRouter, HTTPException, status, Query, Depends
 from fastapi.responses import StreamingResponse
@@ -10,7 +11,7 @@ import io
 import pandas as pd
 from sqlalchemy import select, or_
 from backend.api.dependencies import DbSession, CurrentUser, RoleChecker
-from backend.models.compras import Produto, ClassificacaoCache, UserRole, User, ItemNotaFiscal, NotaFiscal
+from backend.models.compras import AuditLog, Produto, ClassificacaoCache, UserRole, User, ItemNotaFiscal, NotaFiscal
 from backend.schemas.produtos import ProdutoResponse, ProdutoUpdate
 
 from backend.services.catalog_healer import CatalogHealerService
@@ -18,6 +19,11 @@ from backend.services.catalog_healer import CatalogHealerService
 router = APIRouter(prefix="/produtos", tags=["Produtos"])
 
 ACTIVE_INVOICE_STATUS = "active"
+CATEGORY_CONFIRMED_OPERATION = "CATEGORY_CONFIRMED"
+
+
+def _categoria_para_comparacao(categoria: str | None) -> str:
+    return (categoria or "").strip()
 
 
 def _produto_operacional_filter():
@@ -134,6 +140,13 @@ async def atualizar_produto(
     
     # Atualiza campos
     update_data = payload.model_dump(exclude_unset=True)
+    categoria_anterior = produto.categoria
+    categoria_nova = update_data.get("categoria")
+    categoria_alterada = (
+        "categoria" in update_data
+        and _categoria_para_comparacao(categoria_anterior) != _categoria_para_comparacao(categoria_nova)
+    )
+
     for field, value in update_data.items():
         setattr(produto, field, value)
 
@@ -183,6 +196,37 @@ async def atualizar_produto(
                     verificado_usuario=True
                 )
                 db.add(new_cache)
+
+    if categoria_alterada:
+        stmt_sugestoes = (
+            select(ItemNotaFiscal.categoria_sugerida)
+            .where(
+                ItemNotaFiscal.ean == ean,
+                ItemNotaFiscal.categoria_sugerida.is_not(None),
+            )
+            .distinct()
+            .limit(5)
+        )
+        res_sugestoes = await db.execute(stmt_sugestoes)
+        categorias_sugeridas = [categoria for categoria in res_sugestoes.scalars().all() if categoria]
+        detalhes = {
+            "categoria_anterior": categoria_anterior,
+            "categoria_nova": categoria_nova,
+            "origem": "manual",
+            "usuario": user.username,
+            "produto": produto.nome_limpo,
+            "categorias_sugeridas_relacionadas": categorias_sugeridas,
+        }
+        db.add(
+            AuditLog(
+                usuario=user.username,
+                operacao=CATEGORY_CONFIRMED_OPERATION,
+                entidade="Produto",
+                entidade_id=ean,
+                detalhes=json.dumps(detalhes, ensure_ascii=True, default=str),
+                department_id=user.department_id,
+            )
+        )
 
     await db.commit()
     await db.refresh(produto)
