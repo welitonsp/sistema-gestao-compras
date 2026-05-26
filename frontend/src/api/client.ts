@@ -1,8 +1,38 @@
 const API_BASE = '/api/v1';
 
+export class ApiError extends Error {
+  status: number;
+  detail: unknown;
+
+  constructor(status: number, message: string, detail?: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 const handleUnauthorized = () => {
   window.dispatchEvent(new Event('auth:expired'));
   throw new Error('Sessão expirada');
+};
+
+const extractErrorMessage = async (response: Response): Promise<{ message: string; detail?: unknown }> => {
+  try {
+    const body = await response.json();
+    const detail = body?.detail;
+    if (typeof detail === 'string') return { message: detail, detail };
+    if (typeof body?.message === 'string') return { message: body.message, detail };
+    if (typeof body?.mensagem === 'string') return { message: body.mensagem, detail };
+    return { message: 'Falha na requisicao', detail };
+  } catch {
+    return { message: 'Falha na requisicao' };
+  }
+};
+
+const throwApiError = async (response: Response): Promise<never> => {
+  const { message, detail } = await extractErrorMessage(response);
+  throw new ApiError(response.status, message, detail);
 };
 
 export const apiClient = {
@@ -15,7 +45,7 @@ export const apiClient = {
       return handleUnauthorized();
     }
     
-    if (!response.ok) throw new Error('Falha na requisição');
+    if (!response.ok) return throwApiError(response);
     return response.json();
   },
 
@@ -33,7 +63,7 @@ export const apiClient = {
       return handleUnauthorized();
     }
 
-    if (!response.ok) throw new Error('Falha na requisição');
+    if (!response.ok) return throwApiError(response);
     return response.json();
   },
 
@@ -51,7 +81,7 @@ export const apiClient = {
       return handleUnauthorized();
     }
 
-    if (!response.ok) throw new Error('Falha na requisição');
+    if (!response.ok) return throwApiError(response);
     return response.json();
   },
 
@@ -65,7 +95,7 @@ export const apiClient = {
       return handleUnauthorized();
     }
 
-    if (!response.ok) throw new Error('Falha na requisição');
+    if (!response.ok) return throwApiError(response);
     return response.json();
   },
 };

@@ -58,6 +58,19 @@ export interface ImportacaoNotaResponse {
   total_itens: number;
 }
 
+export interface ArchiveImportacaoRequest {
+  motivo: string;
+}
+
+export interface ArchiveImportacaoResponse {
+  mensagem: string;
+  status: string;
+  chave_acesso: string;
+  archived_at: string;
+  archived_by: string;
+  archive_reason: string;
+}
+
 export interface AuditLog {
   id: string;
   usuario: string;
