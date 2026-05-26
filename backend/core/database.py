@@ -8,21 +8,39 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import AsyncAdaptedQueuePool
 
 from backend.core.config import settings
 
 
+def _build_engine_kwargs() -> dict[str, object]:
+    """Build SQLAlchemy engine options compatible with the configured dialect."""
+
+    database_url = make_url(settings.database_url)
+
+    engine_kwargs: dict[str, object] = {
+        "echo": settings.database_echo,
+        "future": True,
+    }
+
+    if database_url.get_backend_name() != "sqlite":
+        engine_kwargs.update(
+            {
+                "pool_pre_ping": settings.database_pool_pre_ping,
+                "pool_size": settings.database_pool_size,
+                "max_overflow": settings.database_max_overflow,
+                "pool_timeout": settings.database_pool_timeout,
+                "pool_recycle": settings.database_pool_recycle,
+            }
+        )
+
+    return engine_kwargs
+
+
 engine = create_async_engine(
     settings.database_url,
-    echo=settings.database_echo,
-    pool_pre_ping=settings.database_pool_pre_ping,
-    pool_size=settings.database_pool_size,
-    max_overflow=settings.database_max_overflow,
-    pool_timeout=settings.database_pool_timeout,
-    pool_recycle=settings.database_pool_recycle,
-    future=True,
+    **_build_engine_kwargs(),
 )
 """Shared asynchronous SQLAlchemy engine for the application."""
 
