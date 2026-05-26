@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.core.config import settings
 from backend.models.compras import NotaFiscal
 from backend.services.ai_processor import AIStructuredExtractor
 from backend.services.extraction_quality import build_extraction_quality
@@ -26,6 +27,7 @@ from backend.schemas.importacao import (
 )
 
 logger = get_logger("services.importador")
+RETRYABLE_SEFAZ_STATUS_CODES = {429, 502, 503, 504}
 
 
 def _mascarar_chave(chave: str) -> str:
@@ -180,24 +182,57 @@ class ImportadorSefazService:
     async def _fetch_url(self, url: str) -> str:
         if not self._client:
             raise RuntimeError("Cliente HTTP não iniciado.")
-        
-        max_retries = 3
-        backoff_factor = 2.0
-        
-        for attempt in range(max_retries):
+
+        max_retries = settings.sefaz_max_retries
+        timeout_seconds = settings.sefaz_request_timeout_seconds
+        backoff_base = settings.sefaz_backoff_base_seconds
+
+        for attempt in range(1, max_retries + 1):
             try:
-                resp = await self._client.get(url)
+                resp = await self._client.get(
+                    url,
+                    timeout=timeout_seconds,
+                    headers={"User-Agent": self.USER_AGENT},
+                )
                 resp.raise_for_status()
                 return resp.text
-            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                if attempt == max_retries - 1:
-                    self._log.error(f"Falha definitiva após {max_retries} tentativas: {_redigir_chaves(str(exc))}")
-                    raise SefazComunicacaoError("Falha ao consultar SEFAZ (Tentativas esgotadas).")
-                
-                wait_time = backoff_factor ** attempt
-                self._log.warning(f"Erro na tentativa {attempt + 1}. Retentando em {wait_time}s... Erro: {_redigir_chaves(str(exc))}")
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code
+                if status_code not in RETRYABLE_SEFAZ_STATUS_CODES:
+                    self._log.warning(
+                        "Falha nao transitoria ao consultar SEFAZ "
+                        f"(tentativa {attempt}/{max_retries}, status={status_code}): {_redigir_chaves(str(exc))}"
+                    )
+                    raise SefazComunicacaoError("Falha ao consultar SEFAZ.")
+                if attempt == max_retries:
+                    self._log.error(
+                        "Falha transitoria definitiva ao consultar SEFAZ "
+                        f"apos {max_retries} tentativas (status={status_code}): {_redigir_chaves(str(exc))}"
+                    )
+                    raise SefazComunicacaoError("Falha ao consultar SEFAZ (tentativas esgotadas).")
+            except httpx.TimeoutException as exc:
+                if attempt == max_retries:
+                    self._log.error(
+                        "Timeout definitivo ao consultar SEFAZ "
+                        f"apos {max_retries} tentativas: {_redigir_chaves(str(exc))}"
+                    )
+                    raise SefazComunicacaoError("Falha ao consultar SEFAZ (timeout).")
+            except httpx.RequestError as exc:
+                if attempt == max_retries:
+                    self._log.error(
+                        "Falha de conexao definitiva ao consultar SEFAZ "
+                        f"apos {max_retries} tentativas: {_redigir_chaves(str(exc))}"
+                    )
+                    raise SefazComunicacaoError("Falha ao consultar SEFAZ (tentativas esgotadas).")
+
+            wait_time = backoff_base * (2 ** (attempt - 1))
+            self._log.warning(
+                f"Falha transitoria ao consultar SEFAZ na tentativa {attempt}/{max_retries}. "
+                f"Retentando em {wait_time}s."
+            )
+            if wait_time > 0:
                 await asyncio.sleep(wait_time)
-        
+
         return "" # Unreachable
 
     def _limpar_html(self, html: str) -> str:

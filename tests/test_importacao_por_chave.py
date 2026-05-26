@@ -861,6 +861,46 @@ async def test_importacao_por_chave_reimportacao_retorna_409_sem_duplicar(monkey
 
 
 @pytest.mark.anyio
+async def test_importacao_por_chave_duplicidade_local_nao_chama_sefaz(monkeypatch):
+    chave = _valid_access_key("5226051745740400118365511000040935127519920")
+    token = await _create_user("import_duplicate_no_fetch_admin")
+
+    async with SessionLocal() as db:
+        fornecedor = Fornecedor(
+            cnpj="17457404001993",
+            razao_social="MERCADO DUPLICIDADE LOCAL LTDA",
+        )
+        db.add(fornecedor)
+        await db.flush()
+        db.add(
+            NotaFiscal(
+                fornecedor_id=fornecedor.id,
+                numero_nota="40945",
+                chave_acesso=chave,
+                data_emissao=date(2026, 5, 26),
+                valor_total=Decimal("1.00"),
+            )
+        )
+        await db.commit()
+
+    async def fail_fetch_url(self, url: str) -> str:
+        raise AssertionError("SEFAZ nao deveria ser chamada para chave duplicada localmente")
+
+    monkeypatch.setattr(ImportadorSefazService, "_fetch_url", fail_fetch_url)
+    app.state.http_client = AsyncMock()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-por-chave",
+            json={"chave_acesso": chave},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 409
+    assert chave not in response.text
+
+
+@pytest.mark.anyio
 async def test_importacao_por_chave_integrity_error_retorna_409_sem_traceback(monkeypatch):
     chave = _valid_access_key("5226051745740400118365511000040935127511840")
     token = await _create_user("import_integrity_admin")
