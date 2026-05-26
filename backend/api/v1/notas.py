@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Body, HTTPException, status, Request, Depends
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 
 from backend.api.dependencies import DbSession, ArqPool, CurrentUser, HttpClient, RoleChecker
 from backend.models.compras import User, UserRole
@@ -22,6 +23,21 @@ from backend.services.importador_sefaz import (
 from arq.jobs import Job
 
 router = APIRouter(prefix="/notas", tags=["Notas Fiscais"])
+
+DUPLICATE_NOTA_DETAIL = "Nota fiscal ja cadastrada."
+
+
+def _is_chave_acesso_integrity_error(exc: IntegrityError) -> bool:
+    """Return whether an IntegrityError came from the invoice access-key uniqueness guard."""
+
+    constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", "") or ""
+    message = f"{constraint_name} {exc}".lower()
+    return (
+        "uq_notas_fiscais_chave_acesso" in message
+        or "notas_fiscais.chave_acesso" in message
+        or "notas_fiscais_chave_acesso" in message
+        or ("unique" in message and "chave_acesso" in message)
+    )
 
 @router.get(
     "/jobs/{job_id}",
@@ -126,8 +142,16 @@ async def importar_nota_por_chave(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
+            detail=DUPLICATE_NOTA_DETAIL,
         ) from exc
+    except IntegrityError as exc:
+        await db.rollback()
+        if _is_chave_acesso_integrity_error(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=DUPLICATE_NOTA_DETAIL,
+            ) from exc
+        raise
     except SefazComunicacaoError as exc:
         await db.rollback()
         raise HTTPException(

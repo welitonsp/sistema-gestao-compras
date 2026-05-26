@@ -27,6 +27,17 @@ from backend.schemas.importacao import (
 logger = get_logger("services.importador")
 
 
+def _mascarar_chave(chave: str) -> str:
+    chave = re.sub(r"\D", "", chave or "")
+    if len(chave) < 8:
+        return "<chave-redigida>"
+    return f"{chave[:4]}...{chave[-4:]}"
+
+
+def _redigir_chaves(texto: str) -> str:
+    return re.sub(r"\d{44}", "<chave-redigida>", str(texto))
+
+
 class NotaJaCadastradaError(Exception):
     """Erro levantado quando a chave de acesso ja existe na base."""
 
@@ -85,9 +96,9 @@ class ImportadorSefazService:
         categorias_contexto = await self.repo.obter_categorias_unicas()
         
         if chave_acesso:
-            self._log = ContextAdapter(logger, {"chave_acesso": chave_acesso})
+            self._log = ContextAdapter(logger, {"chave_acesso": _mascarar_chave(chave_acesso)})
             if await self.repo.nota_existe(chave_acesso):
-                raise NotaJaCadastradaError(f"Nota {chave_acesso} já cadastrada.")
+                raise NotaJaCadastradaError("Nota fiscal ja cadastrada.")
             
             if not html_pasted:
                 html_content = await self._fetch_url(url_consulta)
@@ -117,7 +128,7 @@ class ImportadorSefazService:
         
         # Re-valida existência
         if await self.repo.nota_existe(chave_final):
-            raise NotaJaCadastradaError(f"Nota {chave_final} já cadastrada.")
+            raise NotaJaCadastradaError("Nota fiscal ja cadastrada.")
         
         nota_db = await self.repo.salvar_nota_completa(chave_final, nota_dto, department_id=department_id)
         
@@ -143,7 +154,7 @@ class ImportadorSefazService:
         res = await self.repo.db.execute(stmt)
         nota_db = res.scalar_one()
 
-        self._log.info(f"Nota {chave_final} importada e auditada com sucesso.")
+        self._log.info(f"Nota {_mascarar_chave(chave_final)} importada e auditada com sucesso.")
 
         # 6. Resposta Formatada
         return ImportacaoNotaResponse(
@@ -171,11 +182,11 @@ class ImportadorSefazService:
                 return resp.text
             except (httpx.HTTPStatusError, httpx.RequestError) as exc:
                 if attempt == max_retries - 1:
-                    self._log.error(f"Falha definitiva após {max_retries} tentativas: {exc}")
-                    raise SefazComunicacaoError(f"Falha ao consultar SEFAZ (Tentativas esgotadas): {exc}")
+                    self._log.error(f"Falha definitiva após {max_retries} tentativas: {_redigir_chaves(str(exc))}")
+                    raise SefazComunicacaoError("Falha ao consultar SEFAZ (Tentativas esgotadas).")
                 
                 wait_time = backoff_factor ** attempt
-                self._log.warning(f"Erro na tentativa {attempt + 1}. Retentando em {wait_time}s... Erro: {exc}")
+                self._log.warning(f"Erro na tentativa {attempt + 1}. Retentando em {wait_time}s... Erro: {_redigir_chaves(str(exc))}")
                 await asyncio.sleep(wait_time)
         
         return "" # Unreachable

@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import delete, func, select
 from unittest.mock import AsyncMock
 
@@ -20,6 +21,12 @@ from backend.models.compras import (
     Produto,
     User,
     UserRole,
+)
+from backend.schemas.importacao import (
+    FornecedorImportadoResponse,
+    ImportacaoNotaResponse,
+    ItemNotaFiscalImportadoResponse,
+    NotaFiscalImportadaResponse,
 )
 from backend.schemas.internal import FornecedorDTO, ItemNotaDTO, NotaFiscalDTO
 from backend.services.ai_processor import AIStructuredExtractor
@@ -57,6 +64,19 @@ async def _count(model) -> int:
         return await db.scalar(select(func.count()).select_from(model)) or 0
 
 
+def _mock_import_dependencies(monkeypatch, dto: NotaFiscalDTO) -> None:
+    async def fake_fetch_url(self, url: str) -> str:
+        return "<html>nota fiscal mockada</html>"
+
+    async def fake_classificar_itens_lote(self, itens, categorias_contexto):
+        return itens
+
+    monkeypatch.setattr(ImportadorSefazService, "_fetch_url", fake_fetch_url)
+    monkeypatch.setattr(SefazGoParser, "parse", lambda self, html: dto)
+    monkeypatch.setattr(AIStructuredExtractor, "classificar_itens_lote", fake_classificar_itens_lote)
+    app.state.http_client = AsyncMock()
+
+
 @pytest.mark.anyio
 async def test_importacao_por_chave_persiste_nota_fornecedor_e_itens(monkeypatch):
     chave = _valid_access_key("5226051745740400118365511000040935127511810")
@@ -84,16 +104,7 @@ async def test_importacao_por_chave_persiste_nota_fornecedor_e_itens(monkeypatch
         ],
     )
 
-    async def fake_fetch_url(self, url: str) -> str:
-        return "<html>nota fiscal mockada</html>"
-
-    async def fake_classificar_itens_lote(self, itens, categorias_contexto):
-        return itens
-
-    monkeypatch.setattr(ImportadorSefazService, "_fetch_url", fake_fetch_url)
-    monkeypatch.setattr(SefazGoParser, "parse", lambda self, html: dto)
-    monkeypatch.setattr(AIStructuredExtractor, "classificar_itens_lote", fake_classificar_itens_lote)
-    app.state.http_client = AsyncMock()
+    _mock_import_dependencies(monkeypatch, dto)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
@@ -121,6 +132,130 @@ async def test_importacao_por_chave_persiste_nota_fornecedor_e_itens(monkeypatch
     assert produto is not None
     assert historico is not None
     assert auditoria is not None
+
+
+@pytest.mark.anyio
+async def test_importacao_por_chave_reimportacao_retorna_409_sem_duplicar(monkeypatch):
+    chave = _valid_access_key("5226051745740400118365511000040935127511830")
+    token = await _create_user("import_duplicate_admin")
+    dto = NotaFiscalDTO(
+        chave_acesso=chave,
+        numero_nota="40936",
+        data_emissao=date(2026, 5, 26),
+        valor_total=Decimal("22.50"),
+        fornecedor=FornecedorDTO(
+            cnpj="17457404001184",
+            razao_social="MERCADO DUPLICIDADE TESTE LTDA",
+        ),
+        itens=[
+            ItemNotaDTO(
+                ean="7891000000002",
+                descricao="FEIJAO TESTE 1KG",
+                quantidade=Decimal("1"),
+                valor_unitario=Decimal("22.50"),
+                valor_total=Decimal("22.50"),
+                marca="TESTE",
+                categoria="ALIMENTOS BASICOS",
+            )
+        ],
+    )
+    _mock_import_dependencies(monkeypatch, dto)
+
+    before = {
+        NotaFiscal: await _count(NotaFiscal),
+        Fornecedor: await _count(Fornecedor),
+        ItemNotaFiscal: await _count(ItemNotaFiscal),
+        Produto: await _count(Produto),
+        HistoricoPreco: await _count(HistoricoPreco),
+        AuditLog: await _count(AuditLog),
+    }
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        first_response = await client.post(
+            "/api/v1/notas/importacao-por-chave",
+            json={"chave_acesso": chave},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        second_response = await client.post(
+            "/api/v1/notas/importacao-por-chave",
+            json={"chave_acesso": chave},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 409
+    assert "ja cadastrada" in second_response.json()["detail"]
+    assert chave not in second_response.text
+    assert await _count(NotaFiscal) == before[NotaFiscal] + 1
+    assert await _count(Fornecedor) == before[Fornecedor] + 1
+    assert await _count(ItemNotaFiscal) == before[ItemNotaFiscal] + 1
+    assert await _count(Produto) == before[Produto] + 1
+    assert await _count(HistoricoPreco) == before[HistoricoPreco] + 1
+    assert await _count(AuditLog) == before[AuditLog] + 1
+
+
+@pytest.mark.anyio
+async def test_importacao_por_chave_integrity_error_retorna_409_sem_traceback(monkeypatch):
+    chave = _valid_access_key("5226051745740400118365511000040935127511840")
+    token = await _create_user("import_integrity_admin")
+    rollback_called = False
+
+    async def fake_importar_por_chave(self, **kwargs):
+        return ImportacaoNotaResponse(
+            mensagem="Nota fiscal importada com sucesso.",
+            fornecedor=FornecedorImportadoResponse(
+                id="00000000-0000-0000-0000-000000000001",
+                cnpj="17457404001185",
+                razao_social="MERCADO INTEGRITY TESTE LTDA",
+            ),
+            nota_fiscal=NotaFiscalImportadaResponse(
+                id="00000000-0000-0000-0000-000000000002",
+                numero_nota="40937",
+                chave_acesso=chave,
+                data_emissao=date(2026, 5, 26),
+                valor_total=Decimal("10.00"),
+            ),
+            itens=[
+                ItemNotaFiscalImportadoResponse(
+                    id="00000000-0000-0000-0000-000000000003",
+                    ean="7891000000003",
+                    descricao_original="CAFE TESTE 500G",
+                    quantidade=Decimal("1"),
+                    valor_unitario=Decimal("10.00"),
+                    valor_total=Decimal("10.00"),
+                )
+            ],
+            total_itens=1,
+        )
+
+    async def fail_commit(self):
+        raise IntegrityError(
+            "INSERT INTO notas_fiscais",
+            {},
+            Exception("UNIQUE constraint failed: notas_fiscais.chave_acesso"),
+        )
+
+    async def track_rollback(self):
+        nonlocal rollback_called
+        rollback_called = True
+
+    monkeypatch.setattr(ImportadorSefazService, "importar_por_chave", fake_importar_por_chave)
+    monkeypatch.setattr("sqlalchemy.ext.asyncio.AsyncSession.commit", fail_commit)
+    monkeypatch.setattr("sqlalchemy.ext.asyncio.AsyncSession.rollback", track_rollback)
+    app.state.http_client = AsyncMock()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-por-chave",
+            json={"chave_acesso": chave},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 409
+    assert "ja cadastrada" in response.json()["detail"]
+    assert "IntegrityError" not in response.text
+    assert chave not in response.text
+    assert rollback_called is True
 
 
 @pytest.mark.anyio
