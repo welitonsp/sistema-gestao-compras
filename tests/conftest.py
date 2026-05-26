@@ -2,9 +2,23 @@
 
 from __future__ import annotations
 
-import asyncio
+import os
 
 import pytest
+import pytest_asyncio
+
+os.environ.update(
+    {
+        "DATABASE_URL": "sqlite+aiosqlite:///:memory:",
+        "SECRET_KEY": "test_secret_key_institutional_standard",
+        "DEBUG": "false",
+        "AI_PROVIDER": "groq",
+        "ENABLE_GEMINI": "false",
+        "GROQ_API_KEY": "fake_key",
+        "GEMINI_API_KEY": "",
+        "REDIS_URL": "redis://localhost:6379/0",
+    }
+)
 
 from backend.core.database import engine
 from backend.models.base import Base
@@ -27,10 +41,18 @@ async def _drop_test_schema() -> None:
         await connection.run_sync(Base.metadata.drop_all)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def initialize_test_database() -> None:
+@pytest.fixture(scope="session")
+def anyio_backend() -> str:
+    """Force AnyIO tests to use asyncio only."""
+
+    return "asyncio"
+
+
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def initialize_test_database() -> None:
     """Initialize the database schema used by integration tests."""
 
-    asyncio.run(_create_test_schema())
+    await _create_test_schema()
     yield
-    asyncio.run(_drop_test_schema())
+    await _drop_test_schema()
+    await engine.dispose()
