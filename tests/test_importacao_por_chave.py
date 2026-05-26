@@ -131,6 +131,12 @@ async def test_importacao_por_chave_persiste_nota_fornecedor_e_itens(monkeypatch
     assert len(itens) == 1
     assert produto is not None
     assert historico is not None
+    assert nota.status == "active"
+    assert nota.archived_at is None
+    assert nota.archived_by is None
+    assert nota.archive_reason is None
+    assert historico.nota_fiscal_id == nota.id
+    assert historico.item_nota_fiscal_id == itens[0].id
     assert auditoria is not None
 
 

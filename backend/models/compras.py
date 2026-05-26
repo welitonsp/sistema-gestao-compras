@@ -192,6 +192,16 @@ class NotaFiscal(TimestampMixin, Base):
         Numeric(precision=14, scale=2),
         nullable=False,
     )
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default="active",
+        server_default="active",
+        nullable=False,
+        index=True,
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    archive_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     department: Mapped[Department | None] = relationship(back_populates="notas_fiscais")
     fornecedor: Mapped[Fornecedor] = relationship(
@@ -200,6 +210,9 @@ class NotaFiscal(TimestampMixin, Base):
     itens: Mapped[list[ItemNotaFiscal]] = relationship(
         back_populates="nota_fiscal",
         cascade="all, delete-orphan",
+    )
+    historico_precos: Mapped[list[HistoricoPreco]] = relationship(
+        back_populates="nota_fiscal",
     )
 
 
@@ -250,6 +263,9 @@ class ItemNotaFiscal(TimestampMixin, Base):
     produto: Mapped[Produto] = relationship(
         back_populates="itens_nota",
     )
+    historico_precos: Mapped[list[HistoricoPreco]] = relationship(
+        back_populates="item_nota_fiscal",
+    )
 
 
 class HistoricoPreco(TimestampMixin, Base):
@@ -264,12 +280,30 @@ class HistoricoPreco(TimestampMixin, Base):
         nullable=False,
         index=True,
     )
+    nota_fiscal_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("notas_fiscais.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    item_nota_fiscal_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("itens_notas_fiscais.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     data_compra: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     local: Mapped[str] = mapped_column(String(255), nullable=False, doc="Store or supplier name.")
     preco_pago: Mapped[Decimal] = mapped_column(Numeric(precision=14, scale=4), nullable=False)
     quantidade: Mapped[Decimal] = mapped_column(Numeric(precision=14, scale=4), nullable=False)
 
     produto: Mapped[Produto] = relationship(
+        back_populates="historico_precos",
+    )
+    nota_fiscal: Mapped[NotaFiscal | None] = relationship(
+        back_populates="historico_precos",
+    )
+    item_nota_fiscal: Mapped[ItemNotaFiscal | None] = relationship(
         back_populates="historico_precos",
     )
 
