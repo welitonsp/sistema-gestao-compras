@@ -15,6 +15,7 @@ from backend.schemas.internal import NotaFiscalDTO, ItemNotaDTO
 from core.logger import get_logger
 from backend.core.config import settings
 from backend.services.ia_groq_utils import buscar_no_cache, salvar_no_cache, extrair_json_com_groq_async, consultar_ia_async, obter_exemplos_verificados
+from backend.services.text_sanitizer import sanitize_prompt_categories
 
 logger = get_logger("services.ai")
 
@@ -115,7 +116,8 @@ class AIStructuredExtractor:
         if not itens: return []
 
         start_time = time.perf_counter()
-        lista_cats = ", ".join(categorias_contexto)
+        categorias_seguras = sanitize_prompt_categories(categorias_contexto)
+        lista_cats = ", ".join(categorias_seguras)
         exemplos = await obter_exemplos_verificados(limit=10)
 
         prompt_user = "Classifique os seguintes itens de supermercado:\n"

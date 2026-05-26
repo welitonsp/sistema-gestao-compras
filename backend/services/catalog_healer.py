@@ -7,6 +7,7 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.compras import Produto, ClassificacaoCache, ItemNotaFiscal, NotaFiscal
 from backend.services.ai_processor import AIStructuredExtractor
+from backend.services.text_sanitizer import sanitize_manual_brand, sanitize_manual_category
 from core.logger import get_logger
 
 logger = get_logger("services.healer")
@@ -80,8 +81,8 @@ class CatalogHealerService:
         
         if not produto: return
         
-        if "categoria" in target_data: produto.categoria = target_data["categoria"]
-        if "marca" in target_data: produto.marca = target_data["marca"]
+        if "categoria" in target_data: produto.categoria = sanitize_manual_category(target_data["categoria"])
+        if "marca" in target_data: produto.marca = sanitize_manual_brand(target_data["marca"])
         if "nome_limpo" in target_data: produto.nome_limpo = target_data["nome_limpo"]
         
         # Sincroniza Cache
