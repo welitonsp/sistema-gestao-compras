@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.models.compras import NotaFiscal
 from backend.services.ai_processor import AIStructuredExtractor
+from backend.services.extraction_quality import build_extraction_quality
 from backend.services.repository import ProcurementRepository
 from backend.services.parsers.sefaz_go import SefazGoParser
 from core.logger import get_logger, ContextAdapter
@@ -111,15 +112,18 @@ class ImportadorSefazService:
         nota_dto = self.parser.parse(html_content)
         
         if not nota_dto:
+            parser_source = "ai_fallback"
             texto_limpo = self._limpar_html(html_content)
             nota_dto = await self.ai.extrair_nota(texto_limpo, categorias_contexto=categorias_contexto)
             if chave_acesso: nota_dto.chave_acesso = chave_acesso
         else:
+            parser_source = "deterministic"
             # Enriquecimento: O parser determinístico não categoriza, chamamos IA para os itens
             # Isso garante que mesmo notas parseadas via CSS tenham categorias inteligentes
             nota_dto.itens = await self.ai.classificar_itens_lote(nota_dto.itens, categorias_contexto)
 
         chave_final = chave_acesso or nota_dto.chave_acesso
+        extraction_quality = build_extraction_quality(nota_dto, parser_source=parser_source)
 
         # 4. Persistência Atômica com Auditoria
         # Removemos o begin() explícito daqui, pois a transação deve ser gerenciada
@@ -130,7 +134,12 @@ class ImportadorSefazService:
         if await self.repo.nota_existe(chave_final):
             raise NotaJaCadastradaError("Nota fiscal ja cadastrada.")
         
-        nota_db = await self.repo.salvar_nota_completa(chave_final, nota_dto, department_id=department_id)
+        nota_db = await self.repo.salvar_nota_completa(
+            chave_final,
+            nota_dto,
+            department_id=department_id,
+            extraction_quality=extraction_quality,
+        )
         
         # Registrar auditoria
         await self.repo.registrar_auditoria(
