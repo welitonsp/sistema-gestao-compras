@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react
 import { 
   LogOut, RefreshCw, ShieldCheck, PackageOpen, Users, 
   Settings2, Globe, Trash2, Plus, Bell, LayoutDashboard, 
-  ClipboardCheck, Package, Shield, User as UserIcon, TrendingUp
+  ClipboardCheck, Package, Shield, User as UserIcon, TrendingUp,
+  FilePlus2
 } from 'lucide-react';
 import { apiClient } from './api/client';
 import { useAuth } from './api/authContext';
@@ -23,8 +24,9 @@ const AuditoriaView = lazy(() => import('./pages/AuditoriaView').then(m => ({ de
 const CatalogoView = lazy(() => import('./pages/CatalogoView').then(m => ({ default: m.CatalogoView })));
 const GestaoView = lazy(() => import('./pages/GestaoView').then(m => ({ default: m.GestaoView })));
 const InsightsView = lazy(() => import('./pages/InsightsView').then(m => ({ default: m.InsightsView })));
+const ImportarNotaView = lazy(() => import('./pages/ImportarNotaView').then(m => ({ default: m.ImportarNotaView })));
 
-type Tab = 'dashboard' | 'auditoria' | 'produtos' | 'gestao' | 'insights';
+type Tab = 'dashboard' | 'importar' | 'auditoria' | 'produtos' | 'gestao' | 'insights';
 
 export default function App() {
   const { isAuthenticated, logout, user: authUser } = useAuth();
@@ -140,19 +142,25 @@ export default function App() {
           >
             <LayoutDashboard size={18} /> Dashboard
           </button>
-          <button 
+          <button
             onClick={() => { setActiveTab('insights'); setIsSidebarOpen(false); }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${activeTab === 'insights' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 dark:hover:bg-slate-800/50 hover:text-white'}`}
           >
             <TrendingUp size={18} /> Insights IA
           </button>
-          <button 
+          <button
+            onClick={() => { setActiveTab('importar'); setIsSidebarOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${activeTab === 'importar' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 dark:hover:bg-slate-800/50 hover:text-white'}`}
+          >
+            <FilePlus2 size={18} /> Importar Nota
+          </button>
+          <button
             onClick={() => { setActiveTab('auditoria'); setIsSidebarOpen(false); }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${activeTab === 'auditoria' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 dark:hover:bg-slate-800/50 hover:text-white'}`}
           >
             <ClipboardCheck size={18} /> Histórico
           </button>
-          <button 
+          <button
             onClick={() => { setActiveTab('produtos'); setIsSidebarOpen(false); }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${activeTab === 'produtos' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 dark:hover:bg-slate-800/50 hover:text-white'}`}
           >
@@ -239,6 +247,7 @@ export default function App() {
             <div key={activeTab} className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
               {activeTab === 'dashboard' && <DashboardView data={data} alerts={alerts} produtosCount={produtos.length} />}
               {activeTab === 'insights' && <InsightsView />}
+              {activeTab === 'importar' && <ImportarNotaView onImported={fetchData} />}
               {activeTab === 'auditoria' && <AuditoriaView logs={auditLogs} onExport={handleExportAudit} />}
               {activeTab === 'produtos' && <CatalogoView produtos={produtos} onRefresh={fetchData} onExport={handleExportProdutos} />}
               {activeTab === 'gestao' && <GestaoView users={users} departments={departments} onRefresh={fetchData} />}
