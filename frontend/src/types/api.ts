@@ -35,6 +35,17 @@ export interface NotaFiscalImportada {
   numero_nota: string;
   data_emissao: string;
   valor_total: number;
+  extraction_quality_status?: 'ok' | 'warning' | 'failed' | string | null;
+  extraction_parser_source?: 'deterministic' | 'ai_fallback' | string | null;
+  extraction_item_count?: number | null;
+  extraction_missing_ean_count?: number | null;
+  extraction_empty_description_count?: number | null;
+  extraction_invalid_quantity_count?: number | null;
+  extraction_invalid_value_count?: number | null;
+  extraction_total_itens?: number | string | null;
+  extraction_total_nota?: number | string | null;
+  extraction_total_mismatch?: boolean | null;
+  extraction_quality_details?: string | Record<string, unknown> | null;
 }
 
 export interface ItemNotaFiscalImportado {

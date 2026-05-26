@@ -12,6 +12,95 @@ interface ImportarNotaViewProps {
   onImported?: () => void;
 }
 
+const qualityBadgeConfig = {
+  ok: {
+    label: 'Extração confiável',
+    className: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800',
+  },
+  warning: {
+    label: 'Importação com atenção',
+    className: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800',
+  },
+  failed: {
+    label: 'Extração incompleta',
+    className: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-800',
+  },
+};
+
+const numberLabel = (value: number | string | null | undefined) => {
+  if (value === null || value === undefined || value === '') return '-';
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : String(value);
+};
+
+const countValue = (value: number | null | undefined) => value ?? 0;
+
+const ImportQualityBadge: React.FC<{ status?: string | null }> = ({ status }) => {
+  const normalized = status === 'failed' || status === 'warning' || status === 'ok' ? status : 'warning';
+  const config = qualityBadgeConfig[normalized];
+  return (
+    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold ${config.className}`}>
+      {config.label}
+    </span>
+  );
+};
+
+const ImportQualitySummary: React.FC<{ nota: ImportacaoNotaResponse['nota_fiscal'] }> = ({ nota }) => {
+  const messages = [
+    nota.extraction_parser_source === 'ai_fallback' ? 'A extração usou fallback de IA.' : null,
+    countValue(nota.extraction_missing_ean_count) > 0 ? 'Há produtos sem EAN.' : null,
+    nota.extraction_total_mismatch ? 'Há divergência entre a soma dos itens e o total da nota.' : null,
+    countValue(nota.extraction_item_count) === 0 ? 'Nenhum item foi extraído.' : null,
+    countValue(nota.extraction_invalid_quantity_count) > 0 ? 'Há itens com quantidade inválida.' : null,
+    countValue(nota.extraction_invalid_value_count) > 0 ? 'Há itens com valor inválido.' : null,
+    countValue(nota.extraction_empty_description_count) > 0 ? 'Há itens sem descrição.' : null,
+  ].filter((message): message is string => Boolean(message));
+
+  const parserLabel = nota.extraction_parser_source === 'ai_fallback' ? 'Fallback IA' : 'Determinístico';
+
+  return (
+    <div className="mt-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-950/30 p-4 text-slate-700 dark:text-slate-200" role="status" aria-live="polite">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Qualidade da extração</p>
+          <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">Origem: {parserLabel}</p>
+        </div>
+        <ImportQualityBadge status={nota.extraction_quality_status} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div className="rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-3">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Itens extraídos</p>
+          <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{countValue(nota.extraction_item_count)}</p>
+        </div>
+        <div className="rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-3">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Sem EAN</p>
+          <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{countValue(nota.extraction_missing_ean_count)}</p>
+        </div>
+        <div className="rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-3">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Soma dos itens</p>
+          <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">R$ {numberLabel(nota.extraction_total_itens)}</p>
+        </div>
+        <div className="rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-3">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Total da nota</p>
+          <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">R$ {numberLabel(nota.extraction_total_nota ?? nota.valor_total)}</p>
+        </div>
+      </div>
+
+      {messages.length > 0 && (
+        <ul className="mt-4 space-y-2">
+          {messages.map((message) => (
+            <li key={message} className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
+              <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-500" />
+              <span>{message}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
+
 export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }) => {
   const [chaveAcesso, setChaveAcesso] = useState('');
   const [loading, setLoading] = useState(false);
@@ -223,14 +312,17 @@ export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }
           )}
 
           {success && (
-            <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300 p-4 rounded-2xl" role="status" aria-live="polite">
-              <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
-              <div className="text-sm">
-                <p className="font-bold">Nota importada com sucesso.</p>
-                <p className="mt-1">
-                  Nota {success.nota_fiscal.numero_nota} de {success.fornecedor.razao_social} com {success.total_itens} item(ns).
-                </p>
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300 p-4 rounded-2xl" role="status" aria-live="polite">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+                <div className="text-sm">
+                  <p className="font-bold">Nota importada com sucesso.</p>
+                  <p className="mt-1">
+                    Nota {success.nota_fiscal.numero_nota} de {success.fornecedor.razao_social} com {success.total_itens} item(ns).
+                  </p>
+                </div>
               </div>
+              <ImportQualitySummary nota={success.nota_fiscal} />
             </div>
           )}
 
