@@ -1,0 +1,34 @@
+{
+  "chave_acesso": "77777777777777777777777777777777777777777777",
+  "numero_nota": "1003",
+  "fornecedor": {
+    "cnpj": "00000000000353",
+    "razao_social": "MERCADO SINTETICO DESCONTO LTDA"
+  },
+  "data_emissao": "2026-05-26",
+  "valor_total": "40.00",
+  "expected_item_count": 2,
+  "expected_sum_itens": "45.00",
+  "expected_missing_ean_count": 0,
+  "expected_total_mismatch": true,
+  "expected_quality_status": "warning",
+  "expected_parser_source": "deterministic",
+  "itens": [
+    {
+      "ean": "7891000000003",
+      "descricao": "CAFE SINTETICO 500G",
+      "quantidade": "1.0000",
+      "valor_unitario": "25.00",
+      "valor_total": "25.00",
+      "categoria": null
+    },
+    {
+      "ean": "7891000000004",
+      "descricao": "ACUCAR SINTETICO 5KG",
+      "quantidade": "1.0000",
+      "valor_unitario": "20.00",
+      "valor_total": "20.00",
+      "categoria": null
+    }
+  ]
+}

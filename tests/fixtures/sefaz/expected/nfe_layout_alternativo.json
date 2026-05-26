@@ -1,0 +1,26 @@
+{
+  "chave_acesso": "66666666666666666666666666666666666666666666",
+  "numero_nota": "1004",
+  "fornecedor": {
+    "cnpj": "00000000000434",
+    "razao_social": "MERCADO SINTETICO LAYOUT ALT LTDA"
+  },
+  "data_emissao": "2026-05-26",
+  "valor_total": "14.00",
+  "expected_item_count": 1,
+  "expected_sum_itens": "14.00",
+  "expected_missing_ean_count": 0,
+  "expected_total_mismatch": false,
+  "expected_quality_status": "ok",
+  "expected_parser_source": "deterministic",
+  "itens": [
+    {
+      "ean": "7891000000005",
+      "descricao": "LEITE SINTETICO 1L",
+      "quantidade": "4.0000",
+      "valor_unitario": "3.50",
+      "valor_total": "14.00",
+      "categoria": null
+    }
+  ]
+}

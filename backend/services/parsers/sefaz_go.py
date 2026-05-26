@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from datetime import datetime
 from decimal import Decimal
@@ -110,9 +111,12 @@ class SefazGoParser:
                 if vtot_elem:
                     vtot = self._to_decimal(vtot_elem.text)
                 
+                descricao = nome.get_text().strip()
+                codigo = re.sub(r"\D", "", codigo_elem.get_text()) if codigo_elem else ""
+
                 itens.append(ItemNotaDTO(
-                    ean=re.sub(r"\D", "", codigo_elem.get_text()) if codigo_elem else "0",
-                    descricao=nome.get_text().strip(),
+                    ean=self._identificador_produto(codigo, row.get_text(), descricao),
+                    descricao=descricao,
                     quantidade=qtd,
                     valor_unitario=vuni,
                     valor_total=vtot if vtot > 0 else (qtd * vuni)
@@ -163,7 +167,7 @@ class SefazGoParser:
                 if not nome_elem: continue
                 
                 codigo_elem = row.find("span", class_="RCod")
-                codigo = re.sub(r"\D", "", codigo_elem.text) if codigo_elem else "0"
+                codigo = re.sub(r"\D", "", codigo_elem.text) if codigo_elem else ""
                 
                 qtd_elem = row.find("span", class_="Rqtd")
                 qtd = self._to_decimal(qtd_elem.text.split(":")[-1]) if qtd_elem else Decimal("1")
@@ -174,12 +178,7 @@ class SefazGoParser:
                 vtot_elem = row.find("span", class_="valor")
                 vtot = self._to_decimal(vtot_elem.text) if vtot_elem else (qtd * vuni)
 
-                # Novo: Tenta extrair EAN/GTIN se disponível no texto da linha
-                ean = codigo
-                if len(codigo) < 8: # Provável código interno, busca EAN no texto
-                    ean_match = re.search(r"GTIN:\s*(\d+)", row.get_text())
-                    if ean_match:
-                        ean = ean_match.group(1)
+                ean = self._identificador_produto(codigo, row.get_text(), nome_elem.text)
 
                 itens.append(ItemNotaDTO(
                     ean=ean,
@@ -213,9 +212,12 @@ class SefazGoParser:
         return info
 
     def _extract_data_emissao(self, soup: BeautifulSoup) -> datetime:
-        # Procura por "Emissão:"
         text = soup.get_text()
-        match = re.search(r"Emissão:\s*(\d{2}/\d{2}/\d{4}\s*\d{2}:\d{2}:\d{2})", text)
+        match = re.search(
+            r"(?:Emissão|Emissao):\s*(\d{2}/\d{2}/\d{4}\s*\d{2}:\d{2}:\d{2})",
+            text,
+            re.I,
+        )
         if match:
             try:
                 return datetime.strptime(match.group(1), "%d/%m/%Y %H:%M:%S")
@@ -231,7 +233,7 @@ class SefazGoParser:
 
     def _extract_numero_nota(self, soup: BeautifulSoup) -> str:
         text = soup.get_text()
-        match = re.search(r"Número:\s*(\d+)", text)
+        match = re.search(r"(?:Número|Numero):\s*(\d+)", text, re.I)
         return match.group(1) if match else "0"
 
     def _to_decimal(self, text: str) -> Decimal:
@@ -239,3 +241,19 @@ class SefazGoParser:
             return Decimal(text.strip().replace(".", "").replace(",", "."))
         except:
             return Decimal("0")
+
+    def _identificador_produto(self, codigo: str, texto_linha: str, descricao: str) -> str:
+        """Retorna GTIN, codigo interno ou identificador sintetico estavel para itens sem EAN."""
+        if len(codigo) >= 8:
+            return codigo
+
+        ean_match = re.search(r"GTIN:\s*(\d+)", texto_linha, re.I)
+        if ean_match and ean_match.group(1) != "0":
+            return ean_match.group(1)
+
+        if codigo and codigo != "0":
+            return codigo
+
+        base = re.sub(r"\s+", " ", (descricao or "PRODUTO_SEM_EAN").strip().upper())
+        digest = hashlib.sha1(base.encode("utf-8")).hexdigest()[:12].upper()
+        return f"SEM_EAN_{digest}"

@@ -1,0 +1,26 @@
+{
+  "chave_acesso": "88888888888888888888888888888888888888888888",
+  "numero_nota": "1002",
+  "fornecedor": {
+    "cnpj": "00000000000272",
+    "razao_social": "MERCADO SINTETICO SEM EAN LTDA"
+  },
+  "data_emissao": "2026-05-26",
+  "valor_total": "12.00",
+  "expected_item_count": 1,
+  "expected_sum_itens": "12.00",
+  "expected_missing_ean_count": 1,
+  "expected_total_mismatch": false,
+  "expected_quality_status": "warning",
+  "expected_parser_source": "deterministic",
+  "itens": [
+    {
+      "ean": "SEM_EAN_08FDEAB69FAA",
+      "descricao": "PRODUTO ARTESANAL SEM EAN",
+      "quantidade": "3.0000",
+      "valor_unitario": "4.00",
+      "valor_total": "12.00",
+      "categoria": null
+    }
+  ]
+}

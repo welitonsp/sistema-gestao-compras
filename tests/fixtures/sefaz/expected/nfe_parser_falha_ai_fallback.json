@@ -1,0 +1,26 @@
+{
+  "chave_acesso": "55555555555555555555555555555555555555555555",
+  "numero_nota": "1005",
+  "fornecedor": {
+    "cnpj": "00000000000515",
+    "razao_social": "MERCADO SINTETICO FALLBACK IA LTDA"
+  },
+  "data_emissao": "2026-05-26",
+  "valor_total": "9.90",
+  "expected_item_count": 1,
+  "expected_sum_itens": "9.90",
+  "expected_missing_ean_count": 0,
+  "expected_total_mismatch": false,
+  "expected_quality_status": "ok",
+  "expected_parser_source": "ai_fallback",
+  "itens": [
+    {
+      "ean": "7891000000006",
+      "descricao": "ITEM FALLBACK SINTETICO",
+      "quantidade": "1.0000",
+      "valor_unitario": "9.90",
+      "valor_total": "9.90",
+      "categoria": "OUTROS"
+    }
+  ]
+}
