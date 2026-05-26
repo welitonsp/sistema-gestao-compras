@@ -98,6 +98,8 @@ class ProcurementRepository:
             # 5. Histórico de Preço
             historico = HistoricoPreco(
                 ean=produto.ean,
+                nota_fiscal_id=nota.id,
+                item_nota_fiscal=item_fiscal,
                 data_compra=dto.data_emissao,
                 local=fornecedor.razao_social,
                 preco_pago=item_dto.valor_unitario,
