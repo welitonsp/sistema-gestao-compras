@@ -159,6 +159,25 @@ class Settings(BaseSettings):
     groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
 
+    sefaz_request_timeout_seconds: float = Field(
+        default=10.0,
+        alias="SEFAZ_REQUEST_TIMEOUT_SECONDS",
+        gt=0,
+        description="Timeout per HTTP request to SEFAZ services.",
+    )
+    sefaz_max_retries: int = Field(
+        default=3,
+        alias="SEFAZ_MAX_RETRIES",
+        ge=1,
+        description="Maximum attempts for transient SEFAZ HTTP failures.",
+    )
+    sefaz_backoff_base_seconds: float = Field(
+        default=0.5,
+        alias="SEFAZ_BACKOFF_BASE_SECONDS",
+        ge=0,
+        description="Deterministic backoff base in seconds for SEFAZ retries.",
+    )
+
     @computed_field(return_type=bool)
     @property
     def is_production(self) -> bool:
