@@ -7,10 +7,9 @@ interface AuthUser {
 }
 
 interface AuthContextType {
-  token: string | null;
   user: AuthUser | null;
-  login: (token: string) => void;
-  logout: () => void;
+  login: () => Promise<void>;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -18,15 +17,20 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  const checkSession = async () => {
+  const checkSession = async (): Promise<AuthUser | null> => {
     try {
-      const userData = await apiClient.get<any>('/users/me');
-      setUser({ username: userData.username, role: userData.role });
+      const userData = await apiClient.get<AuthUser>('/users/me');
+      const authenticatedUser = {
+        username: userData.username,
+        role: userData.role,
+      };
+      setUser(authenticatedUser);
+      return authenticatedUser;
     } catch {
       setUser(null);
+      return null;
     } finally {
       setIsInitialized(true);
     }
@@ -37,24 +41,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkSession();
   }, []);
 
-  const login = (newToken: string) => {
-    setToken(newToken);
-    checkSession();
+  const login = async () => {
+    const authenticatedUser = await checkSession();
+    if (!authenticatedUser) {
+      throw new Error('Não foi possível carregar o perfil do usuário.');
+    }
   };
 
   const logout = async () => {
     try {
-      await fetch('/api/v1/auth/logout', { method: 'POST' });
+      await fetch('/api/v1/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
     } finally {
       setUser(null);
-      setToken(null);
     }
   };
 
   useEffect(() => {
     const handleAuthExpired = () => {
       setUser(null);
-      setToken(null);
     };
 
     window.addEventListener('auth:expired', handleAuthExpired);
@@ -63,12 +70,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const isAuthenticated = !!user || !!token;
+  const isAuthenticated = !!user;
 
   if (!isInitialized) return null; // Aguarda inicialização segura
 
   return (
-    <AuthContext.Provider value={{ token, user, login, logout, isAuthenticated }}>
+    <AuthContext.Provider value={{ user, login, logout, isAuthenticated }}>
       {children}
     </AuthContext.Provider>
   );
