@@ -4,7 +4,6 @@ import {
   ShieldCheck, Lock, User as UserIcon, 
   ArrowRight, Shield, Globe, Activity 
 } from 'lucide-react';
-import { apiClient } from './api/client';
 
 export default function Login() {
   const { login } = useAuth();
@@ -26,12 +25,12 @@ export default function Login() {
       const response = await fetch('/api/v1/auth/login', {
         method: 'POST',
         body: formData,
+        credentials: 'include',
       });
       
       if (!response.ok) throw new Error('Credenciais inválidas');
       
-      const data = await response.json();
-      login(data.access_token);
+      await login();
     } catch (err: any) {
       setError(err.message);
     } finally {
