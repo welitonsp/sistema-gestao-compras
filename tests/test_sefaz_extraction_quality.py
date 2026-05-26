@@ -93,6 +93,32 @@ def test_produto_sem_ean_recebe_identificador_controlado():
     assert dto.itens[0].codigo_produto == expected["itens"][0]["ean"]
 
 
+def test_sem_ean_normaliza_espacos_pontuacao_e_unidade_antes_do_hash():
+    parser = SefazGoParser()
+
+    ids = {
+        parser._identificador_produto("", "", "ARROZ, 5KG"),
+        parser._identificador_produto("", "", "Arroz 5 kg"),
+        parser._identificador_produto("", "", "ARROZ   5KG"),
+    }
+
+    assert ids == {"SEM_EAN_D85F6E876C40"}
+
+
+def test_sem_ean_normaliza_acentos_e_pontuacao_simples_antes_do_hash():
+    parser = SefazGoParser()
+
+    assert parser._identificador_produto("", "", "CAFÉ TORRADO 500G") == parser._identificador_produto(
+        "", "", "CAFE TORRADO - 500 G"
+    )
+
+
+def test_sem_ean_mantem_produtos_diferentes_com_hashes_diferentes():
+    parser = SefazGoParser()
+
+    assert parser._identificador_produto("", "", "ARROZ 5KG") != parser._identificador_produto("", "", "FEIJAO 5KG")
+
+
 def test_layout_alternativo_nao_quebra_silenciosamente():
     expected = _load_expected("nfe_layout_alternativo")
     dto = SefazGoParser().parse(_load_html("nfe_layout_alternativo"))
