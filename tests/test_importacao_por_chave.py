@@ -143,6 +143,55 @@ def _mock_ai_fallback_import_dependencies(monkeypatch, dto: NotaFiscalDTO) -> No
     app.state.http_client = AsyncMock()
 
 
+def _dto_for_batch_key(chave: str, suffix: str) -> NotaFiscalDTO:
+    return NotaFiscalDTO(
+        chave_acesso=chave,
+        numero_nota=f"BATCH-{suffix}",
+        data_emissao=date(2026, 5, 26),
+        valor_total=Decimal("10.00"),
+        fornecedor=FornecedorDTO(
+            cnpj=f"17457404{suffix.zfill(6)}",
+            razao_social=f"MERCADO LOTE {suffix} LTDA",
+        ),
+        itens=[
+            ItemNotaDTO(
+                ean=f"789600000{suffix.zfill(4)}",
+                descricao=f"ITEM LOTE {suffix}",
+                quantidade=Decimal("1"),
+                valor_unitario=Decimal("10.00"),
+                valor_total=Decimal("10.00"),
+                categoria="OUTROS",
+            )
+        ],
+    )
+
+
+def _mock_batch_import_dependencies(monkeypatch, dto_by_key: dict[str, NotaFiscalDTO]) -> None:
+    async def fake_fetch_url(self, url: str) -> str:
+        for chave in dto_by_key:
+            if chave in url:
+                return f"<html>{chave}</html>"
+        raise AssertionError("Chave inesperada no mock de lote")
+
+    def fake_parse(self, html: str):
+        for chave, dto in dto_by_key.items():
+            if chave in html:
+                return dto
+        return None
+
+    async def fake_classificar_itens_lote(self, itens, categorias_contexto):
+        for item in itens:
+            if item.categoria:
+                item.categoria_sugerida_origem = "groq"
+                item.categoria_sugerida_modelo = "test-model"
+        return itens
+
+    monkeypatch.setattr(ImportadorSefazService, "_fetch_url", fake_fetch_url)
+    monkeypatch.setattr(SefazGoParser, "parse", fake_parse)
+    monkeypatch.setattr(AIStructuredExtractor, "classificar_itens_lote", fake_classificar_itens_lote)
+    app.state.http_client = AsyncMock()
+
+
 @pytest.mark.anyio
 async def test_importacao_por_chave_persiste_nota_fornecedor_e_itens(monkeypatch):
     chave = _valid_access_key("5226051745740400118365511000040935127511810")
@@ -467,6 +516,181 @@ async def test_nota_antiga_sem_score_qualidade_permanece_compativel():
     assert nota.extraction_quality_status is None
     assert nota.extraction_parser_source is None
     assert nota.extraction_quality_details is None
+
+
+@pytest.mark.anyio
+async def test_importacao_lote_chaves_duas_validas_retorna_success_com_quality(monkeypatch):
+    chave_1 = _valid_access_key("5226051745740400118365511000040935127519700")
+    chave_2 = _valid_access_key("5226051745740400118365511000040935127519710")
+    token = await _create_user("batch_success_admin")
+    _mock_batch_import_dependencies(
+        monkeypatch,
+        {
+            chave_1: _dto_for_batch_key(chave_1, "501"),
+            chave_2: _dto_for_batch_key(chave_2, "502"),
+        },
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-lote-chaves",
+            json={"chaves_acesso": [chave_1, chave_2]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 2
+    assert body["success_count"] == 2
+    assert body["duplicate_count"] == 0
+    assert body["failed_count"] == 0
+    assert chave_1 not in response.text
+    assert chave_2 not in response.text
+    assert [result["status"] for result in body["results"]] == ["success", "success"]
+    assert body["results"][0]["chave_acesso"] == f"{chave_1[:4]}...{chave_1[-4:]}"
+    assert body["results"][0]["nota_fiscal"]["chave_acesso"] == f"{chave_1[:4]}...{chave_1[-4:]}"
+    assert body["results"][0]["nota_fiscal"]["extraction_quality_status"] == "ok"
+    assert body["results"][1]["nota_fiscal"]["extraction_quality_status"] == "ok"
+
+    async with SessionLocal() as db:
+        assert await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave_1)) is not None
+        assert await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave_2)) is not None
+
+
+@pytest.mark.anyio
+async def test_importacao_lote_chaves_duplicada_local_nao_chama_sefaz(monkeypatch):
+    chave = _valid_access_key("5226051745740400118365511000040935127519720")
+    token = await _create_user("batch_duplicate_admin")
+
+    async with SessionLocal() as db:
+        fornecedor = Fornecedor(
+            cnpj="17457404001997",
+            razao_social="MERCADO LOTE DUPLICADO LTDA",
+        )
+        db.add(fornecedor)
+        await db.flush()
+        db.add(
+            NotaFiscal(
+                fornecedor_id=fornecedor.id,
+                numero_nota="BATCH-DUP",
+                chave_acesso=chave,
+                data_emissao=date(2026, 5, 26),
+                valor_total=Decimal("1.00"),
+            )
+        )
+        await db.commit()
+
+    async def fail_fetch_url(self, url: str) -> str:
+        raise AssertionError("SEFAZ nao deveria ser chamada para chave duplicada no lote")
+
+    monkeypatch.setattr(ImportadorSefazService, "_fetch_url", fail_fetch_url)
+    app.state.http_client = AsyncMock()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-lote-chaves",
+            json={"chaves_acesso": [chave]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success_count"] == 0
+    assert body["duplicate_count"] == 1
+    assert body["failed_count"] == 0
+    assert body["results"][0]["status"] == "duplicate"
+    assert body["results"][0]["error_code"] == "duplicate"
+    assert chave not in response.text
+
+
+@pytest.mark.anyio
+async def test_importacao_lote_chaves_misto_continua_e_faz_rollback_por_chave(monkeypatch):
+    chave_success = _valid_access_key("5226051745740400118365511000040935127519730")
+    chave_failed = _valid_access_key("5226051745740400118365511000040935127519740")
+    token = await _create_user("batch_mixed_admin")
+    _mock_batch_import_dependencies(
+        monkeypatch,
+        {chave_success: _dto_for_batch_key(chave_success, "503")},
+    )
+    original_importar = ImportadorSefazService.importar_por_chave
+
+    async def fake_importar_por_chave(self, identificador: str, **kwargs):
+        if identificador == chave_failed:
+            self.repo.db.add(
+                Fornecedor(
+                    cnpj="17457404001998",
+                    razao_social="FORNECEDOR PARCIAL NAO DEVE PERSISTIR",
+                )
+            )
+            await self.repo.db.flush()
+            raise SefazComunicacaoError("falha externa simulada")
+        return await original_importar(self, identificador=identificador, **kwargs)
+
+    monkeypatch.setattr(ImportadorSefazService, "importar_por_chave", fake_importar_por_chave)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-lote-chaves",
+            json={"chaves_acesso": [chave_success, chave_failed]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 2
+    assert body["success_count"] == 1
+    assert body["duplicate_count"] == 0
+    assert body["failed_count"] == 1
+    assert [result["status"] for result in body["results"]] == ["success", "failed"]
+    assert body["results"][1]["error_code"] == "sefaz_error"
+    assert chave_success not in response.text
+    assert chave_failed not in response.text
+
+    async with SessionLocal() as db:
+        assert await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave_success)) is not None
+        assert await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave_failed)) is None
+        partial_supplier = await db.scalar(
+            select(Fornecedor).where(Fornecedor.cnpj == "17457404001998")
+        )
+
+    assert partial_supplier is None
+
+
+@pytest.mark.anyio
+async def test_importacao_lote_chaves_mais_de_cinco_retorna_422_sem_chave_completa():
+    token = await _create_user("batch_too_many_admin")
+    chaves = [
+        _valid_access_key(f"5226051745740400118365511000040935127520{i:02d}0")
+        for i in range(6)
+    ]
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-lote-chaves",
+            json={"chaves_acesso": chaves},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Payload invalido para importacao em lote."
+    assert all(chave not in response.text for chave in chaves)
+
+
+@pytest.mark.anyio
+async def test_importacao_lote_chaves_duplicada_no_payload_retorna_422_sem_chave_completa():
+    token = await _create_user("batch_duplicate_payload_admin")
+    chave = _valid_access_key("5226051745740400118365511000040935127519750")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-lote-chaves",
+            json={"chaves_acesso": [chave, chave]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Payload invalido para importacao em lote."
+    assert chave not in response.text
 
 
 @pytest.mark.anyio
