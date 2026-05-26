@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
@@ -254,6 +255,16 @@ class SefazGoParser:
         if codigo and codigo != "0":
             return codigo
 
-        base = re.sub(r"\s+", " ", (descricao or "PRODUTO_SEM_EAN").strip().upper())
+        base = self._normalizar_descricao_sem_ean(descricao)
         digest = hashlib.sha1(base.encode("utf-8")).hexdigest()[:12].upper()
         return f"SEM_EAN_{digest}"
+
+    def _normalizar_descricao_sem_ean(self, descricao: str) -> str:
+        """Normaliza descricoes sem EAN antes do hash, sem heuristicas de merge."""
+        texto = (descricao or "PRODUTO_SEM_EAN").strip().upper()
+        texto = unicodedata.normalize("NFKD", texto)
+        texto = "".join(char for char in texto if not unicodedata.combining(char))
+        texto = re.sub(r"[^A-Z0-9\s]", " ", texto)
+        texto = re.sub(r"\s+", " ", texto).strip()
+        texto = re.sub(r"\b(\d+)\s+(KG|G|ML|L|LT|UN|UND)\b", r"\1\2", texto)
+        return re.sub(r"\s+", " ", texto).strip() or "PRODUTO_SEM_EAN"
