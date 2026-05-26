@@ -10,7 +10,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import Date, ForeignKey, Numeric, String, UniqueConstraint, Text, DateTime, func, Boolean
+from sqlalchemy import Date, ForeignKey, Numeric, String, UniqueConstraint, Text, DateTime, func, Boolean, Integer
 import enum
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -206,6 +206,17 @@ class NotaFiscal(TimestampMixin, Base):
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archived_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     archive_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extraction_quality_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    extraction_parser_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    extraction_item_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    extraction_missing_ean_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    extraction_empty_description_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    extraction_invalid_quantity_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    extraction_invalid_value_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    extraction_total_itens: Mapped[Decimal | None] = mapped_column(Numeric(precision=14, scale=2), nullable=True)
+    extraction_total_nota: Mapped[Decimal | None] = mapped_column(Numeric(precision=14, scale=2), nullable=True)
+    extraction_total_mismatch: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    extraction_quality_details: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     department: Mapped[Department | None] = relationship(back_populates="notas_fiscais")
     fornecedor: Mapped[Fornecedor] = relationship(

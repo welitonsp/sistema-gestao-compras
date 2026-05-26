@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.compras import Fornecedor, NotaFiscal, ItemNotaFiscal, Produto, HistoricoPreco, AuditLog
 from backend.schemas.internal import NotaFiscalDTO
+from backend.services.extraction_quality import ExtractionQuality
 
 
 class ProcurementRepository:
@@ -48,7 +51,13 @@ class ProcurementRepository:
         res = await self.db.execute(stmt)
         return [c for c in res.scalars() if c and c != "Não Classificado"]
 
-    async def salvar_nota_completa(self, chave_acesso: str, dto: NotaFiscalDTO, department_id: str | None = None) -> NotaFiscal:
+    async def salvar_nota_completa(
+        self,
+        chave_acesso: str,
+        dto: NotaFiscalDTO,
+        department_id: str | None = None,
+        extraction_quality: ExtractionQuality | None = None,
+    ) -> NotaFiscal:
         # 1. Obter Fornecedor (usa cache local de sessão se necessário)
         fornecedor = await self._obter_ou_criar_fornecedor(dto.fornecedor)
         
@@ -67,6 +76,22 @@ class ProcurementRepository:
             data_emissao=dto.data_emissao,
             valor_total=dto.valor_total,
         )
+        if extraction_quality:
+            nota.extraction_quality_status = extraction_quality.quality_status
+            nota.extraction_parser_source = extraction_quality.parser_source
+            nota.extraction_item_count = extraction_quality.item_count
+            nota.extraction_missing_ean_count = extraction_quality.missing_ean_count
+            nota.extraction_empty_description_count = extraction_quality.empty_description_count
+            nota.extraction_invalid_quantity_count = extraction_quality.invalid_quantity_count
+            nota.extraction_invalid_value_count = extraction_quality.invalid_value_count
+            nota.extraction_total_itens = extraction_quality.total_itens
+            nota.extraction_total_nota = extraction_quality.total_nota
+            nota.extraction_total_mismatch = extraction_quality.total_mismatch
+            nota.extraction_quality_details = json.dumps(
+                extraction_quality.to_json_dict(),
+                ensure_ascii=True,
+                sort_keys=True,
+            )
         self.db.add(nota)
         await self.db.flush()
 

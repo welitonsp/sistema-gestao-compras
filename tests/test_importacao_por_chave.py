@@ -83,6 +83,19 @@ def _mock_import_dependencies(monkeypatch, dto: NotaFiscalDTO) -> None:
     app.state.http_client = AsyncMock()
 
 
+def _mock_ai_fallback_import_dependencies(monkeypatch, dto: NotaFiscalDTO) -> None:
+    async def fake_fetch_url(self, url: str) -> str:
+        return "<html>sem seletores deterministas</html>"
+
+    async def fake_extrair_nota(self, texto_limpo: str, categorias_contexto=None):
+        return dto
+
+    monkeypatch.setattr(ImportadorSefazService, "_fetch_url", fake_fetch_url)
+    monkeypatch.setattr(SefazGoParser, "parse", lambda self, html: None)
+    monkeypatch.setattr(AIStructuredExtractor, "extrair_nota", fake_extrair_nota)
+    app.state.http_client = AsyncMock()
+
+
 @pytest.mark.anyio
 async def test_importacao_por_chave_persiste_nota_fornecedor_e_itens(monkeypatch):
     chave = _valid_access_key("5226051745740400118365511000040935127511810")
@@ -145,9 +158,196 @@ async def test_importacao_por_chave_persiste_nota_fornecedor_e_itens(monkeypatch
     assert nota.archived_at is None
     assert nota.archived_by is None
     assert nota.archive_reason is None
+    assert nota.extraction_quality_status == "ok"
+    assert nota.extraction_parser_source == "deterministic"
+    assert nota.extraction_item_count == 1
+    assert nota.extraction_missing_ean_count == 0
+    assert nota.extraction_empty_description_count == 0
+    assert nota.extraction_invalid_quantity_count == 0
+    assert nota.extraction_invalid_value_count == 0
+    assert nota.extraction_total_itens == Decimal("18.90")
+    assert nota.extraction_total_nota == Decimal("18.90")
+    assert nota.extraction_total_mismatch is False
+    detalhes_qualidade = json.loads(nota.extraction_quality_details)
+    assert detalhes_qualidade["quality_status"] == "ok"
+    assert detalhes_qualidade["parser_source"] == "deterministic"
     assert historico.nota_fiscal_id == nota.id
     assert historico.item_nota_fiscal_id == itens[0].id
     assert auditoria is not None
+
+
+@pytest.mark.anyio
+async def test_importacao_por_chave_sem_ean_grava_warning_qualidade(monkeypatch):
+    chave = _valid_access_key("5226051745740400118365511000040935127519870")
+    token = await _create_user("import_missing_ean_admin")
+    dto = NotaFiscalDTO(
+        chave_acesso=chave,
+        numero_nota="40940",
+        data_emissao=date(2026, 5, 26),
+        valor_total=Decimal("5.00"),
+        fornecedor=FornecedorDTO(
+            cnpj="17457404001988",
+            razao_social="MERCADO QUALIDADE SEM EAN LTDA",
+        ),
+        itens=[
+            ItemNotaDTO(
+                ean="SEM_EAN_QUALIDADE01",
+                descricao="PRODUTO SEM EAN TESTE",
+                quantidade=Decimal("1"),
+                valor_unitario=Decimal("5.00"),
+                valor_total=Decimal("5.00"),
+                categoria="OUTROS",
+            )
+        ],
+    )
+    _mock_import_dependencies(monkeypatch, dto)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-por-chave",
+            json={"chave_acesso": chave},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 201
+
+    async with SessionLocal() as db:
+        nota = await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave))
+
+    assert nota.extraction_quality_status == "warning"
+    assert nota.extraction_parser_source == "deterministic"
+    assert nota.extraction_missing_ean_count == 1
+    assert nota.extraction_total_mismatch is False
+
+
+@pytest.mark.anyio
+async def test_importacao_por_chave_divergencia_total_grava_warning_qualidade(monkeypatch):
+    chave = _valid_access_key("5226051745740400118365511000040935127519880")
+    token = await _create_user("import_total_mismatch_admin")
+    dto = NotaFiscalDTO(
+        chave_acesso=chave,
+        numero_nota="40941",
+        data_emissao=date(2026, 5, 26),
+        valor_total=Decimal("40.00"),
+        fornecedor=FornecedorDTO(
+            cnpj="17457404001989",
+            razao_social="MERCADO QUALIDADE DESCONTO LTDA",
+        ),
+        itens=[
+            ItemNotaDTO(
+                ean="7891000000201",
+                descricao="CAFE QUALIDADE 500G",
+                quantidade=Decimal("1"),
+                valor_unitario=Decimal("25.00"),
+                valor_total=Decimal("25.00"),
+                categoria="ALIMENTOS BASICOS",
+            ),
+            ItemNotaDTO(
+                ean="7891000000202",
+                descricao="ACUCAR QUALIDADE 5KG",
+                quantidade=Decimal("1"),
+                valor_unitario=Decimal("20.00"),
+                valor_total=Decimal("20.00"),
+                categoria="ALIMENTOS BASICOS",
+            ),
+        ],
+    )
+    _mock_import_dependencies(monkeypatch, dto)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-por-chave",
+            json={"chave_acesso": chave},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 201
+
+    async with SessionLocal() as db:
+        nota = await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave))
+
+    assert nota.extraction_quality_status == "warning"
+    assert nota.extraction_parser_source == "deterministic"
+    assert nota.extraction_total_itens == Decimal("45.00")
+    assert nota.extraction_total_nota == Decimal("40.00")
+    assert nota.extraction_total_mismatch is True
+
+
+@pytest.mark.anyio
+async def test_importacao_por_chave_fallback_ia_mockado_grava_parser_source(monkeypatch):
+    chave = _valid_access_key("5226051745740400118365511000040935127519890")
+    token = await _create_user("import_ai_fallback_admin")
+    dto = NotaFiscalDTO(
+        chave_acesso=chave,
+        numero_nota="40942",
+        data_emissao=date(2026, 5, 26),
+        valor_total=Decimal("9.90"),
+        fornecedor=FornecedorDTO(
+            cnpj="17457404001990",
+            razao_social="MERCADO QUALIDADE FALLBACK LTDA",
+        ),
+        itens=[
+            ItemNotaDTO(
+                ean="7891000000203",
+                descricao="ITEM FALLBACK QUALIDADE",
+                quantidade=Decimal("1"),
+                valor_unitario=Decimal("9.90"),
+                valor_total=Decimal("9.90"),
+                categoria="OUTROS",
+                categoria_sugerida_origem="groq",
+                categoria_sugerida_modelo="mock-groq",
+            )
+        ],
+    )
+    _mock_ai_fallback_import_dependencies(monkeypatch, dto)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-por-chave",
+            json={"chave_acesso": chave},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 201
+
+    async with SessionLocal() as db:
+        nota = await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave))
+        item = await db.scalar(select(ItemNotaFiscal).where(ItemNotaFiscal.nota_fiscal_id == nota.id))
+
+    assert nota.extraction_quality_status == "ok"
+    assert nota.extraction_parser_source == "ai_fallback"
+    assert item.categoria_sugerida == "OUTROS"
+    assert item.categoria_sugerida_origem == "groq"
+
+
+@pytest.mark.anyio
+async def test_nota_antiga_sem_score_qualidade_permanece_compativel():
+    chave = _valid_access_key("5226051745740400118365511000040935127519900")
+
+    async with SessionLocal() as db:
+        fornecedor = Fornecedor(
+            cnpj="17457404001991",
+            razao_social="MERCADO LEGADO SEM QUALIDADE LTDA",
+        )
+        db.add(fornecedor)
+        await db.flush()
+        db.add(
+            NotaFiscal(
+                fornecedor_id=fornecedor.id,
+                numero_nota="40943",
+                chave_acesso=chave,
+                data_emissao=date(2026, 5, 26),
+                valor_total=Decimal("1.00"),
+            )
+        )
+        await db.commit()
+
+    async with SessionLocal() as db:
+        nota = await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave))
+
+    assert nota.extraction_quality_status is None
+    assert nota.extraction_parser_source is None
+    assert nota.extraction_quality_details is None
 
 
 @pytest.mark.anyio
