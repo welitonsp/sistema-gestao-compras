@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { apiClient } from './client';
 
 interface AuthUser {
   username: string;
@@ -6,10 +7,9 @@ interface AuthUser {
 }
 
 interface AuthContextType {
-  token: string | null;
   user: AuthUser | null;
-  login: (token: string) => void;
-  logout: () => void;
+  login: () => Promise<void>;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -19,29 +19,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
+  const checkSession = async (): Promise<AuthUser | null> => {
+    try {
+      const userData = await apiClient.get<AuthUser>('/users/me');
+      const authenticatedUser = {
+        username: userData.username,
+        role: userData.role,
+      };
+      setUser(authenticatedUser);
+      return authenticatedUser;
+    } catch {
+      setUser(null);
+      return null;
+    } finally {
+      setIsInitialized(true);
+    }
+  };
+
   // Verifica sessão ao carregar a página
   useEffect(() => {
-    const checkSession = async () => {
-      try {
-        // Tenta buscar o perfil do usuário logado (endpoint a ser criado ou usar health check estendido)
-        const userData = await apiClient.get<User>('/users/me');
-        setUser({ username: userData.username, role: userData.role });
-      } catch {
-        setUser(null);
-      } finally {
-        setIsInitialized(true);
-      }
-    };
     checkSession();
   }, []);
 
-  const login = (userData: AuthUser) => {
-    setUser(userData);
+  const login = async () => {
+    const authenticatedUser = await checkSession();
+    if (!authenticatedUser) {
+      throw new Error('Não foi possível carregar o perfil do usuário.');
+    }
   };
 
   const logout = async () => {
     try {
-      await fetch('/api/v1/auth/logout', { method: 'POST' });
+      await fetch('/api/v1/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
     } finally {
       setUser(null);
     }
@@ -63,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   if (!isInitialized) return null; // Aguarda inicialização segura
 
   return (
-    <AuthContext.Provider value={{ token, user, login, logout, isAuthenticated }}>
+    <AuthContext.Provider value={{ user, login, logout, isAuthenticated }}>
       {children}
     </AuthContext.Provider>
   );

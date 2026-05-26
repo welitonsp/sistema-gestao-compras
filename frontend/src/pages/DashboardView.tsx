@@ -1,73 +1,142 @@
-import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line } from 'recharts';
-import { ShoppingCart, BrainCircuit, BarChart3, TrendingUp, TrendingDown, History } from 'lucide-react';
-import { DashboardResumo, AlertaPreco, AnomaliaEstatistica, ForecastInfo } from '../types/api';
+import React, { useState } from 'react';
+import { 
+  BarChart3, TrendingUp, AlertTriangle, Package, 
+  ArrowUpRight, ArrowDownRight, Activity, Calendar,
+  ExternalLink
+} from 'lucide-react';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+  Tooltip, ResponsiveContainer, Cell, LineChart, Line 
+} from 'recharts';
+import { DashboardResumo, AlertaPreco } from '../types/api';
 
-const COLORS = ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe'];
+import { Skeleton } from '../components/Skeleton';
 
 interface DashboardViewProps {
   data: DashboardResumo | null;
   alerts: AlertaPreco[];
-  duplicatas: any[];
-  anomalias: AnomaliaEstatistica[];
-  forecasts: ForecastInfo[];
-  chartData: any[];
-  trendData: any[];
+  produtosCount: number;
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({ data, alerts, duplicatas, anomalias, forecasts, chartData, trendData }) => {
+export const DashboardView: React.FC<DashboardViewProps> = ({ data, alerts, produtosCount }) => {
+  if (!data) {
+    return (
+      <div className="space-y-8">
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-4 w-96" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-32 rounded-2xl" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <Skeleton className="lg:col-span-2 h-[450px] rounded-3xl" />
+          <Skeleton className="h-[450px] rounded-3xl" />
+        </div>
+      </div>
+    );
+  }
+
+  const stats = [
+    { 
+      label: 'Gasto Total', 
+      value: `R$ ${Number(data.total_geral || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 
+      icon: BarChart3, 
+      color: 'blue',
+      trend: '+12%' 
+    },
+    { 
+      label: 'Categorias', 
+      value: data.por_categoria?.length || 0, 
+      icon: Calendar, 
+      color: 'indigo',
+      trend: 'Em uso'
+    },
+    { 
+      label: 'Produtos Únicos', 
+      value: produtosCount, 
+      icon: Package, 
+      color: 'emerald',
+      trend: 'Em catálogo'
+    },
+    { 
+      label: 'Alertas Ativos', 
+      value: alerts.length, 
+      icon: AlertTriangle, 
+      color: 'amber',
+      trend: 'Ação requerida' 
+    },
+  ];
+
+  const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
   return (
-    <main className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {duplicatas.length > 0 && (
-          <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-xl">
-            <h3 className="font-bold text-amber-900 text-xs mb-2 uppercase tracking-widest">⚠️ Possíveis Duplicidades ({duplicatas.length})</h3>
-            {duplicatas.slice(0, 1).map((dup, i) => (
-              <div key={i} className="text-[10px] text-amber-800">
-                <b>{dup.fornecedor}</b> - R$ {dup.valor.toLocaleString('pt-BR')}
-              </div>
-            ))}
-          </div>
-        )}
-        {anomalias.length > 0 && (
-          <div className="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-r-xl">
-            <div className="flex items-center gap-2 mb-2">
-              <BrainCircuit size={16} className="text-rose-600" />
-              <h3 className="font-bold text-rose-900 text-xs uppercase tracking-widest">🔍 Anomalias Z-Score</h3>
-            </div>
-            {anomalias.slice(0, 1).map((anom, i) => (
-              <div key={i} className="flex justify-between items-center text-[10px] text-rose-800">
-                <span className="font-bold truncate max-w-[200px]">{anom.produto}</span>
-                <span className="font-black text-rose-600 bg-white/50 px-1.5 py-0.5 rounded">{anom.z_score.toFixed(1)}σ</span>
-              </div>
-            ))}
-          </div>
-        )}
+    <div className="space-y-8">
+      {/* Welcome Section */}
+      <div className="flex flex-col gap-1">
+        <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">Seu Painel de Compras</h2>
+        <p className="text-slate-500 dark:text-slate-400 text-sm">Acompanhe seus hábitos de consumo e economias em tempo real.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="p-3 bg-blue-100 rounded-xl text-blue-600">
-              <ShoppingCart size={24} aria-hidden="true" />
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {stats.map((stat, i) => (
+          <div key={i} className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all">
+            <div className="flex justify-between items-start mb-4">
+              <div className={`p-3 rounded-xl bg-${stat.color}-50 dark:bg-${stat.color}-900/20 text-${stat.color}-600 dark:text-${stat.color}-400`}>
+                <stat.icon size={20} />
+              </div>
+              <span className={`text-[11px] font-bold uppercase px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400`}>
+                {stat.trend}
+              </span>
             </div>
-            <div>
-              <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Total Liquidado</p>
-              <p className="text-3xl font-black text-slate-900">
-                R$ {data?.total_geral.toLocaleString('pt-BR')}
-              </p>
-            </div>
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">{stat.label}</p>
+            <h3 className="text-2xl font-bold text-slate-800 dark:text-white">{stat.value}</h3>
           </div>
-          <div className="h-48 mt-auto">
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Main Chart */}
+        <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h3 className="font-bold text-slate-800 dark:text-white text-lg">Gastos por Categoria</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Onde você mais investiu seu dinheiro</p>
+            </div>
+            <TrendingUp size={20} className="text-slate-400 dark:text-slate-600" />
+          </div>
+          <div className="h-[350px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" hide />
-                <YAxis fontSize={10} axisLine={false} tickLine={false} />
-                <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
-                <Bar dataKey="total" radius={[6, 6, 0, 0]}>
-                  {chartData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              <BarChart data={data.por_categoria}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#1e293b' : '#f1f5f9'} />
+                <XAxis 
+                  dataKey="categoria" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: isDarkMode ? '#64748b' : '#94a3b8', fontSize: 11, fontWeight: 600 }}
+                  dy={10}
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: isDarkMode ? '#64748b' : '#94a3b8', fontSize: 11 }}
+                />
+                <Tooltip 
+                  cursor={{ fill: isDarkMode ? '#1e293b' : '#f8fafc' }}
+                  contentStyle={{ 
+                    backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
+                    borderRadius: '12px', 
+                    border: 'none', 
+                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                    color: isDarkMode ? '#f8fafc' : '#0f172a'
+                  }}
+                />
+                <Bar dataKey="total" radius={[6, 6, 0, 0]} barSize={40}>
+                  {data.por_categoria.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={['#7c3aed', '#6366f1', '#8b5cf6', '#a855f7', '#ec4899'][index % 5]} />
                   ))}
                 </Bar>
               </BarChart>
@@ -75,68 +144,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ data, alerts, dupl
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="p-3 bg-indigo-100 rounded-xl text-indigo-600">
-              <History size={24} aria-hidden="true" />
-            </div>
-            <div>
-              <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Tendência de Preços</p>
-              <p className="text-sm font-bold text-slate-600 italic">Oscilação Média Mensal</p>
-            </div>
+        {/* Alerts Sidebar */}
+        <div className="bg-slate-900 dark:bg-slate-950 rounded-3xl p-8 shadow-xl shadow-slate-200 dark:shadow-none border dark:border-slate-800 transition-colors">
+          <div className="flex items-center gap-2 mb-6">
+            <div className="h-2 w-2 rounded-full bg-amber-500" />
+            <h3 className="text-white font-bold">Alertas de Preço</h3>
           </div>
-          <div className="h-48 mt-auto">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="mes" fontSize={10} axisLine={false} tickLine={false} />
-                <YAxis fontSize={10} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
-                <Line type="monotone" dataKey="valor" stroke="#4f46e5" strokeWidth={4} dot={{ r: 4, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="space-y-4">
+            {alerts.length === 0 ? (
+              <div className="bg-slate-800/50 border border-slate-800 p-4 rounded-2xl text-center">
+                <p className="text-slate-500 text-xs">Tudo certo com seus preços habituais</p>
+              </div>
+            ) : (
+              alerts.map((alert, i) => (
+                <div key={i} className="bg-slate-800/50 dark:bg-slate-900/50 border border-slate-700/50 dark:border-slate-800 p-4 rounded-2xl group hover:bg-slate-800 transition-all cursor-pointer">
+                  <div className="flex justify-between items-start mb-2">
+                    <p className="text-[11px] font-bold text-amber-500 uppercase tracking-widest">Aumento de {alert.variacao_percentual.toFixed(1)}%</p>
+                    <ArrowUpRight size={14} className="text-slate-500 group-hover:text-white transition-colors" />
+                  </div>
+                  <p className="text-white text-sm font-bold truncate mb-1">{alert.produto}</p>
+                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                    <span>De R$ {alert.preco_medio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    <span>→</span>
+                    <span className="text-white font-bold text-xs text-rose-400">R$ {alert.preco_atual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
+          <button className="w-full mt-6 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all border border-white/10">
+            Relatório de Economia
+          </button>
         </div>
       </div>
-
-      <div className="bg-white p-6 rounded-2xl border shadow-sm">
-        <h3 className="text-[10px] font-black mb-6 text-blue-600 uppercase tracking-widest flex items-center gap-2">
-          <BarChart3 size={14} /> Forecast e Projecção Financeira
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {forecasts.slice(0, 6).map((f, i) => (
-            <div key={i} className="p-4 bg-slate-50 rounded-xl border border-slate-100 relative overflow-hidden group hover:border-blue-200 transition-all">
-              <div className="flex justify-between items-start mb-2">
-                <p className="font-black text-slate-800 text-[11px] uppercase truncate max-w-[70%]">{f.categoria}</p>
-                <span className={`text-[9px] px-2 py-0.5 rounded-full font-black flex items-center gap-1 ${
-                  f.tendencia === 'Alta' ? 'bg-red-100 text-red-700' : 
-                  f.tendencia === 'Queda' ? 'bg-green-100 text-green-700' : 
-                  'bg-blue-100 text-blue-700'
-                }`}>
-                  {f.tendencia === 'Alta' ? <TrendingUp size={10} /> : f.tendencia === 'Queda' ? <TrendingDown size={10} /> : null}
-                  {f.tendencia.toUpperCase()}
-                </span>
-              </div>
-              <div className="flex justify-between items-end mt-4">
-                <div>
-                  <p className="text-[9px] text-slate-400 font-bold uppercase">Média Atual</p>
-                  <p className="text-sm font-bold text-slate-600">R$ {f.media_atual.toFixed(0)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[9px] text-blue-400 font-bold uppercase">Projetado</p>
-                  <p className="text-lg font-black text-blue-600">R$ {f.projeção_proximo_mes.toFixed(0)}</p>
-                </div>
-              </div>
-              <div className="w-full bg-slate-200 h-1.5 rounded-full mt-3 overflow-hidden">
-                <div 
-                  className={`h-full transition-all duration-1000 ${f.tendencia === 'Alta' ? 'bg-red-500' : 'bg-blue-500'}`} 
-                  style={{ width: `${Math.min((f.media_atual / f.projeção_proximo_mes) * 100, 100)}%` }}
-                ></div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </main>
+    </div>
   );
 };

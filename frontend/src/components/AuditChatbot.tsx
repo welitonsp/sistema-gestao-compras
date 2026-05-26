@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, MessageSquare, X, Minus, Bot, User, Loader2, Database } from 'lucide-react';
+import { Send, MessageSquare, X, Minus, Bot, User, Loader2, Database, Sparkles } from 'lucide-react';
 import { apiClient } from '../api/client';
 
 interface Message {
@@ -13,41 +13,39 @@ export const AuditChatbot: React.FC = () => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: 'Olá! Sou seu Assistente de Auditoria. Como posso ajudar com os dados de compras hoje?' }
+    { role: 'assistant', content: 'Olá! Sou seu Auditor Assistente. Como posso ajudar com suas compras hoje?' }
   ]);
-  const [isLoading, setIsLoading] = useState(false);
-  
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || loading) return;
 
-    const userMessage = input.trim();
+    const userMsg = input;
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
-    setIsLoading(true);
+    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setLoading(true);
 
     try {
-      const response = await apiClient.post<any>('/chat', { message: userMessage });
+      const data = await apiClient.post<any>('/chat', { message: userMsg });
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: response.answer,
-        query: response.query_used
+        content: data.answer,
+        query: data.query_used
       }]);
-    } catch (error) {
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: 'Desculpe, ocorreu um erro ao processar sua pergunta. Verifique sua conexão.' 
-      }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Desculpe, tive um problema ao processar sua pergunta.' }]);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -55,93 +53,109 @@ export const AuditChatbot: React.FC = () => {
     return (
       <button 
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-2xl flex items-center justify-center hover:bg-blue-700 transition-all hover:scale-110 z-50 focus:ring-4 focus:ring-blue-300"
-        aria-label="Abrir chat de auditoria"
+        className="fixed bottom-8 right-8 bg-primary-600 text-white p-4 rounded-2xl shadow-2xl shadow-primary-900/40 hover:bg-primary-700 hover:scale-110 active:scale-95 transition-all z-[60] flex items-center gap-3 group"
       >
-        <MessageSquare size={28} />
+        <div className="relative">
+          <MessageSquare size={24} />
+          <span className="absolute -top-1 -right-1 h-3 w-3 bg-emerald-400 border-2 border-primary-600 rounded-full animate-pulse" />
+        </div>
+        <span className="font-bold text-sm pr-2 hidden group-hover:block animate-in slide-in-from-right duration-300">Auditor AI</span>
       </button>
     );
   }
 
   return (
-    <div className={`fixed bottom-6 right-6 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 transition-all ${isMinimized ? 'h-14' : 'h-[500px]'}`}>
+    <div className={`fixed right-8 bottom-8 z-[60] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl transition-all duration-300 overflow-hidden ${isMinimized ? 'h-16 w-64' : 'h-[600px] w-[400px]'}`}>
       {/* Header */}
-      <div className="p-4 bg-slate-900 text-white rounded-t-2xl flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Bot size={20} className="text-blue-400" />
-          <span className="font-bold text-sm tracking-tight">AUDITOR VIRTUAL</span>
+      <header className="bg-slate-900 p-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="bg-indigo-600 p-2 rounded-xl">
+            <Bot size={18} className="text-white" />
+          </div>
+          <div>
+            <p className="text-white text-xs font-bold uppercase tracking-widest">Meu Auditor</p>
+            <div className="flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[9px] text-slate-400 font-bold uppercase">Online</span>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setIsMinimized(!isMinimized)} className="p-1 hover:bg-white/10 rounded">
+        <div className="flex items-center gap-1">
+          <button onClick={() => setIsMinimized(!isMinimized)} className="p-2 text-slate-400 hover:text-white transition-colors" aria-label={isMinimized ? "Maximizar chat" : "Minimizar chat"}>
             <Minus size={16} />
           </button>
-          <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-white/10 rounded">
+          <button onClick={() => setIsOpen(false)} className="p-2 text-slate-400 hover:text-white transition-colors" aria-label="Fechar chat">
             <X size={16} />
           </button>
         </div>
-      </div>
+      </header>
 
       {!isMinimized && (
         <>
           {/* Messages */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50 dark:bg-slate-950/50">
             {messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] p-3 rounded-2xl text-xs shadow-sm ${
-                  msg.role === 'user' 
-                    ? 'bg-blue-600 text-white rounded-tr-none' 
-                    : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'
-                }`}>
-                  <div className="flex items-center gap-1 mb-1 opacity-70 font-bold uppercase text-[9px]">
-                    {msg.role === 'user' ? <User size={10} /> : <Bot size={10} />}
-                    {msg.role === 'user' ? 'Você' : 'IA Auditor'}
+              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+                <div className={`max-w-[85%] flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                  <div className={`p-4 rounded-2xl text-sm shadow-sm ${
+                    msg.role === 'user' 
+                      ? 'bg-indigo-600 text-white rounded-tr-none' 
+                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-100 dark:border-slate-700 rounded-tl-none'
+                  }`}>
+                    {msg.content}
                   </div>
-                  <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                  
                   {msg.query && (
-                    <details className="mt-2 pt-2 border-t border-slate-100">
-                      <summary className="cursor-pointer text-[9px] text-blue-500 font-bold hover:underline flex items-center gap-1">
-                        <Database size={10} /> VER SQL EXECUTADO
+                    <details className="w-full bg-slate-900 dark:bg-slate-950 rounded-xl p-3 mt-1 overflow-hidden group/debug">
+                      <summary className="flex items-center gap-2 cursor-pointer list-none">
+                        <Database size={10} className="text-indigo-400" />
+                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter group-hover/debug:text-slate-400 transition-colors">Dados Técnicos</span>
                       </summary>
-                      <pre className="mt-2 p-2 bg-slate-900 text-green-400 rounded text-[9px] overflow-x-auto">
-                        {msg.query}
-                      </pre>
+                      <div className="mt-2">
+                        <code className="text-[10px] text-indigo-300/80 font-mono break-all whitespace-pre-wrap">
+                          {msg.query}
+                        </code>
+                      </div>
                     </details>
                   )}
                 </div>
               </div>
             ))}
-            {isLoading && (
+            {loading && (
               <div className="flex justify-start">
-                <div className="bg-white p-3 rounded-2xl border border-slate-100 rounded-tl-none flex items-center gap-2">
-                  <Loader2 size={14} className="animate-spin text-blue-600" />
-                  <span className="text-[10px] text-slate-500 font-medium">Analisando base de dados...</span>
+                <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 p-4 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-2">
+                  <Loader2 size={16} className="animate-spin text-indigo-600" />
+                  <span className="text-xs text-slate-400 dark:text-slate-500 font-medium italic">Analisando seus dados...</span>
                 </div>
               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Footer Input */}
-          <form onSubmit={handleSendMessage} className="p-4 border-t border-slate-100 bg-white rounded-b-2xl">
-            <div className="relative">
+          <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
+            <form onSubmit={handleSubmit} className="relative">
               <input 
-                type="text"
+                type="text" 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ex: Qual o total gasto em Maio?"
-                className="w-full pl-4 pr-10 py-2.5 bg-slate-100 border-none rounded-full text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                disabled={isLoading}
+                placeholder="Pergunte sobre suas compras..."
+                className="w-full pl-4 pr-12 py-3 bg-slate-100 dark:bg-slate-800 border-none rounded-xl text-sm dark:text-white focus:ring-2 focus:ring-indigo-500 transition-all outline-none"
+                aria-label="Mensagem para o assistente"
               />
               <button 
                 type="submit"
-                disabled={!input.trim() || isLoading}
-                className="absolute right-1 top-1/2 -translate-y-1/2 p-2 text-blue-600 hover:text-blue-700 disabled:opacity-30"
+                disabled={!input.trim() || loading}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:grayscale transition-all"
+                aria-label="Enviar mensagem"
               >
-                <Send size={18} />
+                <Send size={16} />
               </button>
+            </form>
+            <div className="mt-3 flex items-center justify-center gap-2 opacity-30 grayscale contrast-200">
+              <Sparkles size={10} className="text-indigo-600" />
+              <p className="text-[9px] font-bold text-slate-900 dark:text-slate-400 uppercase tracking-tighter">Inteligência Artificial Llama 3.3</p>
             </div>
-            <p className="text-[9px] text-slate-400 text-center mt-2 uppercase font-bold tracking-tighter">Powered by Gemini 1.5 Flash</p>
-          </form>
+          </div>
         </>
       )}
     </div>

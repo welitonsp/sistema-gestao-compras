@@ -1,118 +1,143 @@
-import React from 'react';
-import { Users, UserPlus, Globe, Trash2, Plus, Power, Shield } from 'lucide-react';
+import React, { useState } from 'react';
+import { 
+  Users, Shield, Building2, UserPlus, 
+  Trash2, Mail, BadgeCheck, MoreVertical,
+  Activity, Globe, Zap, Settings
+} from 'lucide-react';
 import { User, Department } from '../types/api';
-
-interface Webhook {
-  id: string;
-  name: string;
-  url: string;
-  is_active: boolean;
-}
 
 interface GestaoViewProps {
   users: User[];
   departments: Department[];
-  webhooks: Webhook[];
-  onDeleteWebhook: (id: string) => void;
-  onAddUser: () => void;
-  onToggleUser: (user: User) => void;
+  onRefresh: () => void;
 }
 
-export const GestaoView: React.FC<GestaoViewProps> = ({ users, departments, webhooks, onDeleteWebhook, onAddUser, onToggleUser }) => {
+export const GestaoView: React.FC<GestaoViewProps> = ({ users, departments, onRefresh }) => {
+  const [activeSubTab, setActiveSubTab] = useState<'users' | 'departments' | 'settings'>('users');
+
   return (
-    <main className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl border shadow-sm overflow-hidden">
-          <div className="p-4 border-b flex justify-between items-center bg-slate-50">
-            <h3 className="font-black flex items-center gap-2 text-sm text-slate-800">
-              <Users size={18} className="text-blue-600" /> CONTROLE DE ACESSOS
+    <div className="space-y-8">
+      {/* Tab Navigation */}
+      <div className="flex items-center gap-1 bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-2xl w-fit transition-colors">
+        <button 
+          onClick={() => setActiveSubTab('users')}
+          className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${activeSubTab === 'users' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+        >
+          Usuários
+        </button>
+        <button 
+          onClick={() => setActiveSubTab('departments')}
+          className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${activeSubTab === 'departments' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+        >
+          Locais
+        </button>
+        <button 
+          onClick={() => setActiveSubTab('settings')}
+          className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${activeSubTab === 'settings' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+        >
+          Sistema
+        </button>
+      </div>
+
+      {activeSubTab === 'users' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+              <Users className="text-primary-500" size={24} /> Acessos e Usuários
             </h3>
             <button 
-              onClick={onAddUser}
-              className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-blue-700 transition-all flex items-center gap-1"
+              className="flex items-center gap-2 px-6 py-2.5 bg-primary-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-primary-700 transition-all shadow-lg shadow-primary-200 dark:shadow-none"
+              aria-label="Convidar novo usuário"
             >
-              <UserPlus size={14} /> Novo Usuário
+              <UserPlus size={16} /> Novo Usuário
             </button>
           </div>
-          <table className="w-full text-left text-[10px]">
-            <thead className="bg-slate-100 text-slate-500 uppercase font-black border-b border-slate-200">
-              <tr>
-                <th className="p-4">Identidade</th>
-                <th className="p-4">Perfil</th>
-                <th className="p-4">Unidade</th>
-                <th className="p-4 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {users.map(u => (
-                <tr key={u.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-4">
-                    <p className="font-black text-slate-900">{u.username}</p>
-                    <p className="text-slate-500 text-[9px]">{u.email}</p>
-                  </td>
-                  <td className="p-4">
-                    <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-black text-[9px] uppercase border border-blue-100 flex items-center gap-1 w-fit">
-                      <Shield size={10} /> {u.role}
-                    </span>
-                  </td>
-                  <td className="p-4 font-bold text-slate-600">
-                    {departments.find(d => d.id === u.department_id)?.name || 'Global'}
-                  </td>
-                  <td className="p-4 text-right">
-                    <button 
-                      onClick={() => onToggleUser(u)}
-                      className={`p-1.5 rounded-lg transition-all ${u.is_active ? 'text-green-600 hover:bg-green-50' : 'text-red-400 hover:bg-red-50'}`}
-                      title={u.is_active ? 'Desativar usuário' : 'Ativar usuário'}
-                    >
-                      <Power size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
 
-        <div className="space-y-6">
-          <div className="bg-white rounded-xl border shadow-sm p-6 border-l-4 border-indigo-500">
-            <h3 className="font-black mb-4 flex items-center gap-2 text-sm text-indigo-600 uppercase">
-              <Globe size={18} /> Webhooks Ativos
-            </h3>
-            <div className="space-y-3">
-              {webhooks.length === 0 && <p className="text-[10px] text-slate-400 italic">Nenhum conector configurado.</p>}
-              {webhooks.map(wh => (
-                <div key={wh.id} className="p-3 bg-slate-50 rounded-xl border relative group hover:border-indigo-200 transition-all">
-                  <p className="font-black text-xs text-slate-800">{wh.name}</p>
-                  <p className="text-[8px] text-slate-400 truncate mt-1">{wh.url}</p>
-                  <button 
-                    onClick={() => onDeleteWebhook(wh.id)} 
-                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-red-500 hover:scale-110 transition-all"
-                  >
-                    <Trash2 size={12} />
-                  </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {(users || []).map((user) => (
+              <div key={user.id} className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4">
+                  <div className={`h-2 w-2 rounded-full ${user.is_active ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-300 dark:bg-slate-700'}`} />
                 </div>
-              ))}
-              <button className="w-full border-2 border-dashed border-slate-200 py-3 rounded-xl text-slate-400 flex items-center justify-center gap-2 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all text-[10px] font-black uppercase">
-                <Plus size={16} /> Novo Endpoint
-              </button>
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="h-12 w-12 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-primary-600 font-bold text-lg group-hover:bg-primary-600 group-hover:text-white transition-colors">
+                    {user.username[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800 dark:text-slate-200">{user.username}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <Shield size={10} className="text-slate-400 dark:text-slate-500" />
+                      <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter">{user.role}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3 pt-4 border-t border-slate-50 dark:border-slate-800">
+                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <Mail size={14} className="text-slate-300 dark:text-slate-600" />
+                    <span className="truncate">{user.email || '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <Building2 size={14} className="text-slate-300 dark:text-slate-600" />
+                    <span>{(departments || []).find(d => d.id === user.department_id)?.name || 'Pessoal'}</span>
+                  </div>
+                </div>
+                <div className="mt-6 pt-2 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button className="p-2 text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-lg transition-colors" aria-label={`Configurar ${user.username}`}><Settings size={16} /></button>
+                  <button className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors" aria-label={`Excluir ${user.username}`}><Trash2 size={16} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeSubTab === 'departments' && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden p-8 transition-colors">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white">Meus Locais de Compra</h3>
+            <button 
+              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+              aria-label="Adicionar novo local de compra"
+            >
+              Adicionar Local
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {(departments || []).map((dept) => (
+              <div key={dept.id} className="p-5 border border-slate-100 dark:border-slate-800 rounded-2xl hover:border-primary-200 dark:hover:border-primary-800 transition-colors flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 p-3 rounded-xl"><Building2 size={20} /></div>
+                  <div>
+                    <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">{dept.name}</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">ID: {dept.id.slice(0, 8)}...</p>
+                  </div>
+                </div>
+                <BadgeCheck className="text-emerald-500" size={20} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeSubTab === 'settings' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[
+            { label: 'Status da API', icon: Zap, value: 'Operacional', color: 'emerald' },
+            { label: 'Sincronização', icon: Globe, value: 'Ativa', color: 'primary' },
+            { label: 'Saúde do Sistema', icon: BadgeCheck, value: 'Otimizada', color: 'indigo' }
+          ].map((item, i) => (
+            <div key={i} className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 flex flex-col items-center text-center gap-4 transition-colors">
+              <div className={`p-4 rounded-2xl bg-${item.color}-50 dark:bg-${item.color}-900/20 text-${item.color}-600 dark:text-${item.color}-400`}>
+                <item.icon size={32} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{item.label}</p>
+                <p className="text-xl font-bold text-slate-800 dark:text-white">{item.value}</p>
+              </div>
             </div>
-          </div>
-
-          <div className="bg-slate-900 rounded-xl p-6 text-white shadow-xl">
-             <h4 className="font-black text-[10px] uppercase text-slate-500 mb-2">Resumo da Governança</h4>
-             <div className="grid grid-cols-2 gap-4">
-                <div>
-                   <p className="text-2xl font-black">{users.length}</p>
-                   <p className="text-[9px] text-slate-400">Usuários</p>
-                </div>
-                <div>
-                   <p className="text-2xl font-black text-blue-400">{departments.length}</p>
-                   <p className="text-[9px] text-slate-400">Departamentos</p>
-                </div>
-             </div>
-          </div>
+          ))}
         </div>
-      </div>
-    </main>
+      )}
+    </div>
   );
 };
