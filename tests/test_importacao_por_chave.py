@@ -133,7 +133,14 @@ async def test_importacao_por_chave_persiste_nota_fornecedor_e_itens(monkeypatch
         )
 
     assert response.status_code == 201
-    assert response.json()["nota_fiscal"]["chave_acesso"] == chave
+    response_nota = response.json()["nota_fiscal"]
+    assert response_nota["chave_acesso"] == chave
+    assert response_nota["extraction_quality_status"] == "ok"
+    assert response_nota["extraction_parser_source"] == "deterministic"
+    assert response_nota["extraction_item_count"] == 1
+    assert response_nota["extraction_missing_ean_count"] == 0
+    assert response_nota["extraction_total_mismatch"] is False
+    assert response_nota["extraction_quality_details"] is not None
 
     async with SessionLocal() as db:
         nota = await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave))
@@ -210,6 +217,10 @@ async def test_importacao_por_chave_sem_ean_grava_warning_qualidade(monkeypatch)
         )
 
     assert response.status_code == 201
+    response_nota = response.json()["nota_fiscal"]
+    assert response_nota["extraction_quality_status"] == "warning"
+    assert response_nota["extraction_parser_source"] == "deterministic"
+    assert response_nota["extraction_missing_ean_count"] == 1
 
     async with SessionLocal() as db:
         nota = await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave))
@@ -262,6 +273,10 @@ async def test_importacao_por_chave_divergencia_total_grava_warning_qualidade(mo
         )
 
     assert response.status_code == 201
+    response_nota = response.json()["nota_fiscal"]
+    assert response_nota["extraction_quality_status"] == "warning"
+    assert response_nota["extraction_parser_source"] == "deterministic"
+    assert response_nota["extraction_total_mismatch"] is True
 
     async with SessionLocal() as db:
         nota = await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave))
@@ -309,6 +324,9 @@ async def test_importacao_por_chave_fallback_ia_mockado_grava_parser_source(monk
         )
 
     assert response.status_code == 201
+    response_nota = response.json()["nota_fiscal"]
+    assert response_nota["extraction_quality_status"] == "ok"
+    assert response_nota["extraction_parser_source"] == "ai_fallback"
 
     async with SessionLocal() as db:
         nota = await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave))

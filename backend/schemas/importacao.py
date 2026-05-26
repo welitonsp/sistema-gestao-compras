@@ -66,6 +66,17 @@ class NotaFiscalImportadaResponse(BaseModel):
     chave_acesso: str
     data_emissao: date
     valor_total: Decimal
+    extraction_quality_status: str | None = None
+    extraction_parser_source: str | None = None
+    extraction_item_count: int | None = None
+    extraction_missing_ean_count: int | None = None
+    extraction_empty_description_count: int | None = None
+    extraction_invalid_quantity_count: int | None = None
+    extraction_invalid_value_count: int | None = None
+    extraction_total_itens: Decimal | None = None
+    extraction_total_nota: Decimal | None = None
+    extraction_total_mismatch: bool | None = None
+    extraction_quality_details: str | None = None
 
 
 class ItemNotaFiscalImportadoResponse(BaseModel):
