@@ -19,17 +19,22 @@ import google.generativeai as genai
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+from core.config import settings
+
+DATABASE_URL = settings.database_url
+GEMINI_API_KEY = settings.gemini_api_key
+ENABLE_GEMINI = settings.enable_gemini
 
 if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL não encontrada no .env")
+    raise RuntimeError("DATABASE_URL não encontrada")
 
-if not GEMINI_API_KEY:
-    raise RuntimeError("GEMINI_API_KEY não encontrada no .env")
-
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+if ENABLE_GEMINI:
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY não configurada. Ative-a no .env para usar este script.")
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel("gemini-1.5-flash")
+else:
+    model = None
 
 
 # ------------------------------------------------------
@@ -115,6 +120,10 @@ Formato da resposta:
 # ------------------------------------------------------
 
 def main():
+    if not ENABLE_GEMINI:
+        print("❌ Script desativado: ENABLE_GEMINI=false no .env")
+        return
+
     print("\n🧪 INICIANDO AUDITORIA INTELIGENTE (GEMINI)\n")
 
     amostra = coletar_amostra(limit=25)

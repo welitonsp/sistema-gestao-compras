@@ -21,8 +21,10 @@ class GeminiOCRService:
     """Uses Gemini 1.5 Flash to extract structured data from images/PDFs."""
 
     def __init__(self, api_key: str = settings.gemini_api_key, model_name: str = "gemini-1.5-flash"):
+        if not settings.enable_gemini:
+            raise RuntimeError("Tentativa de usar GeminiOCRService com ENABLE_GEMINI=false")
         if not api_key:
-            raise ValueError("GEMINI_API_KEY não configurada.")
+            raise ValueError("GEMINI_API_KEY não configurada. Ative ENABLE_GEMINI=true e forneça a chave se desejar usar OCR.")
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel(model_name)
         self._log = logger
