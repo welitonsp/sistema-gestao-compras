@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from decimal import Decimal
 import json
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -336,6 +337,60 @@ async def test_importacao_por_chave_fallback_ia_mockado_grava_parser_source(monk
     assert nota.extraction_parser_source == "ai_fallback"
     assert item.categoria_sugerida == "OUTROS"
     assert item.categoria_sugerida_origem == "groq"
+
+
+@pytest.mark.anyio
+async def test_importacao_html_longo_fallback_truncado_grava_warning_sem_groq_real(monkeypatch):
+    fixtures_root = Path(__file__).parent / "fixtures" / "sefaz"
+    html = (fixtures_root / "html" / "nfe_longa_multiplos_itens.html").read_text(encoding="utf-8")
+    expected = json.loads((fixtures_root / "expected" / "nfe_longa_multiplos_itens.json").read_text(encoding="utf-8"))
+    captured_texts = []
+
+    async def fake_extrair_nota(self, texto_limpo: str, categorias_contexto=None):
+        captured_texts.append(texto_limpo)
+        return NotaFiscalDTO(
+            chave_acesso=expected["chave_acesso"],
+            numero_nota=expected["numero_nota"],
+            data_emissao=date.fromisoformat(expected["data_emissao"]),
+            valor_total=Decimal(expected["valor_total"]),
+            fornecedor=FornecedorDTO(**expected["fornecedor"]),
+            itens=[
+                ItemNotaDTO(
+                    ean=item["ean"],
+                    descricao=item["descricao"],
+                    quantidade=Decimal(item["quantidade"]),
+                    valor_unitario=Decimal(item["valor_unitario"]),
+                    valor_total=Decimal(item["valor_total"]),
+                    categoria=item["categoria"],
+                    categoria_sugerida_origem="groq",
+                    categoria_sugerida_modelo="mock-groq",
+                )
+                for item in expected["itens"]
+            ],
+        )
+
+    monkeypatch.setattr(SefazGoParser, "parse", lambda self, html_content: None)
+    monkeypatch.setattr(AIStructuredExtractor, "extrair_nota", fake_extrair_nota)
+
+    async with SessionLocal() as db:
+        service = ImportadorSefazService(db, AsyncMock())
+        await service.importar_por_chave(html, usuario="truncation_test")
+        await db.commit()
+
+    assert len(captured_texts) == 1
+    assert len(captured_texts[0]) == 20000
+    assert "ITEM SINTETICO LONGO 001" in captured_texts[0]
+    assert "ITEM SINTETICO LONGO 080" not in captured_texts[0]
+
+    async with SessionLocal() as db:
+        nota = await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == expected["chave_acesso"]))
+
+    assert nota.extraction_parser_source == "ai_fallback"
+    assert nota.extraction_quality_status == "warning"
+    detalhes_qualidade = json.loads(nota.extraction_quality_details)
+    assert detalhes_qualidade["details"]["html_truncated"] is True
+    assert detalhes_qualidade["details"]["ai_fallback_text_limit"] == 20000
+    assert detalhes_qualidade["details"]["clean_text_length"] > 20000
 
 
 @pytest.mark.anyio

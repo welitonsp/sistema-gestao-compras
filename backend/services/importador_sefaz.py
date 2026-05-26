@@ -28,6 +28,7 @@ from backend.schemas.importacao import (
 
 logger = get_logger("services.importador")
 RETRYABLE_SEFAZ_STATUS_CODES = {429, 502, 503, 504}
+AI_FALLBACK_TEXT_LIMIT = 20000
 
 
 def _mascarar_chave(chave: str) -> str:
@@ -115,17 +116,33 @@ class ImportadorSefazService:
         
         if not nota_dto:
             parser_source = "ai_fallback"
-            texto_limpo = self._limpar_html(html_content)
+            texto_limpo, html_truncated, clean_text_length = self._limpar_html_com_metadados(html_content)
+            quality_details: dict[str, Any] = {}
+            if html_truncated:
+                quality_details = {
+                    "html_truncated": True,
+                    "clean_text_length": clean_text_length,
+                    "ai_fallback_text_limit": AI_FALLBACK_TEXT_LIMIT,
+                }
+                self._log.warning(
+                    "HTML limpo para fallback IA excedeu o limite e foi truncado "
+                    f"(limite={AI_FALLBACK_TEXT_LIMIT}, tamanho_limpo={clean_text_length})."
+                )
             nota_dto = await self.ai.extrair_nota(texto_limpo, categorias_contexto=categorias_contexto)
             if chave_acesso: nota_dto.chave_acesso = chave_acesso
         else:
             parser_source = "deterministic"
+            quality_details = {}
             # Enriquecimento: O parser determinístico não categoriza, chamamos IA para os itens
             # Isso garante que mesmo notas parseadas via CSS tenham categorias inteligentes
             nota_dto.itens = await self.ai.classificar_itens_lote(nota_dto.itens, categorias_contexto)
 
         chave_final = chave_acesso or nota_dto.chave_acesso
-        extraction_quality = build_extraction_quality(nota_dto, parser_source=parser_source)
+        extraction_quality = build_extraction_quality(
+            nota_dto,
+            parser_source=parser_source,
+            details=quality_details,
+        )
 
         # 4. Persistência Atômica com Auditoria
         # Removemos o begin() explícito daqui, pois a transação deve ser gerenciada
@@ -236,6 +253,10 @@ class ImportadorSefazService:
         return "" # Unreachable
 
     def _limpar_html(self, html: str) -> str:
+        texto_limpo, _html_truncated, _clean_text_length = self._limpar_html_com_metadados(html)
+        return texto_limpo
+
+    def _limpar_html_com_metadados(self, html: str) -> tuple[str, bool, int]:
         """Sanitização equilibrada do HTML para reduzir tokens mantendo contexto."""
         # Remove scripts e estilos
         texto = re.sub(r"<(script|style).*?>.*?</\1>", " ", html, flags=re.DOTALL | re.IGNORECASE)
@@ -243,4 +264,5 @@ class ImportadorSefazService:
         texto = re.sub(r"<[^>]+>", " ", texto)
         texto = unescape(texto)
         # Limita a 20.000 caracteres para dar mais margem à IA
-        return re.sub(r"\s+", " ", texto).strip()[:20000]
+        texto = re.sub(r"\s+", " ", texto).strip()
+        return texto[:AI_FALLBACK_TEXT_LIMIT], len(texto) > AI_FALLBACK_TEXT_LIMIT, len(texto)

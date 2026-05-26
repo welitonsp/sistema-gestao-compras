@@ -1,0 +1,658 @@
+{
+    "chave_acesso":  "88888888888888888888888888888888888888888888",
+    "numero_nota":  "1800",
+    "fornecedor":  {
+                       "cnpj":  "00000000000195",
+                       "razao_social":  "MERCADO SINTETICO NOTA LONGA LTDA"
+                   },
+    "data_emissao":  "2026-05-26",
+    "valor_total":  "80.00",
+    "expected_item_count":  80,
+    "expected_sum_itens":  "80.00",
+    "expected_missing_ean_count":  0,
+    "expected_total_mismatch":  false,
+    "expected_quality_status":  "ok",
+    "expected_parser_source":  "deterministic",
+    "itens":  [
+                  {
+                      "ean":  "7894000000001",
+                      "descricao":  "ITEM SINTETICO LONGO 001 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000002",
+                      "descricao":  "ITEM SINTETICO LONGO 002 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000003",
+                      "descricao":  "ITEM SINTETICO LONGO 003 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000004",
+                      "descricao":  "ITEM SINTETICO LONGO 004 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000005",
+                      "descricao":  "ITEM SINTETICO LONGO 005 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000006",
+                      "descricao":  "ITEM SINTETICO LONGO 006 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000007",
+                      "descricao":  "ITEM SINTETICO LONGO 007 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000008",
+                      "descricao":  "ITEM SINTETICO LONGO 008 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000009",
+                      "descricao":  "ITEM SINTETICO LONGO 009 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000010",
+                      "descricao":  "ITEM SINTETICO LONGO 010 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000011",
+                      "descricao":  "ITEM SINTETICO LONGO 011 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000012",
+                      "descricao":  "ITEM SINTETICO LONGO 012 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000013",
+                      "descricao":  "ITEM SINTETICO LONGO 013 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000014",
+                      "descricao":  "ITEM SINTETICO LONGO 014 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000015",
+                      "descricao":  "ITEM SINTETICO LONGO 015 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000016",
+                      "descricao":  "ITEM SINTETICO LONGO 016 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000017",
+                      "descricao":  "ITEM SINTETICO LONGO 017 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000018",
+                      "descricao":  "ITEM SINTETICO LONGO 018 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000019",
+                      "descricao":  "ITEM SINTETICO LONGO 019 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000020",
+                      "descricao":  "ITEM SINTETICO LONGO 020 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000021",
+                      "descricao":  "ITEM SINTETICO LONGO 021 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000022",
+                      "descricao":  "ITEM SINTETICO LONGO 022 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000023",
+                      "descricao":  "ITEM SINTETICO LONGO 023 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000024",
+                      "descricao":  "ITEM SINTETICO LONGO 024 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000025",
+                      "descricao":  "ITEM SINTETICO LONGO 025 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000026",
+                      "descricao":  "ITEM SINTETICO LONGO 026 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000027",
+                      "descricao":  "ITEM SINTETICO LONGO 027 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000028",
+                      "descricao":  "ITEM SINTETICO LONGO 028 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000029",
+                      "descricao":  "ITEM SINTETICO LONGO 029 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000030",
+                      "descricao":  "ITEM SINTETICO LONGO 030 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000031",
+                      "descricao":  "ITEM SINTETICO LONGO 031 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000032",
+                      "descricao":  "ITEM SINTETICO LONGO 032 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000033",
+                      "descricao":  "ITEM SINTETICO LONGO 033 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000034",
+                      "descricao":  "ITEM SINTETICO LONGO 034 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000035",
+                      "descricao":  "ITEM SINTETICO LONGO 035 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000036",
+                      "descricao":  "ITEM SINTETICO LONGO 036 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000037",
+                      "descricao":  "ITEM SINTETICO LONGO 037 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000038",
+                      "descricao":  "ITEM SINTETICO LONGO 038 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000039",
+                      "descricao":  "ITEM SINTETICO LONGO 039 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000040",
+                      "descricao":  "ITEM SINTETICO LONGO 040 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000041",
+                      "descricao":  "ITEM SINTETICO LONGO 041 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000042",
+                      "descricao":  "ITEM SINTETICO LONGO 042 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000043",
+                      "descricao":  "ITEM SINTETICO LONGO 043 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000044",
+                      "descricao":  "ITEM SINTETICO LONGO 044 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000045",
+                      "descricao":  "ITEM SINTETICO LONGO 045 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000046",
+                      "descricao":  "ITEM SINTETICO LONGO 046 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000047",
+                      "descricao":  "ITEM SINTETICO LONGO 047 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000048",
+                      "descricao":  "ITEM SINTETICO LONGO 048 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000049",
+                      "descricao":  "ITEM SINTETICO LONGO 049 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000050",
+                      "descricao":  "ITEM SINTETICO LONGO 050 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000051",
+                      "descricao":  "ITEM SINTETICO LONGO 051 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000052",
+                      "descricao":  "ITEM SINTETICO LONGO 052 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000053",
+                      "descricao":  "ITEM SINTETICO LONGO 053 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000054",
+                      "descricao":  "ITEM SINTETICO LONGO 054 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000055",
+                      "descricao":  "ITEM SINTETICO LONGO 055 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000056",
+                      "descricao":  "ITEM SINTETICO LONGO 056 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000057",
+                      "descricao":  "ITEM SINTETICO LONGO 057 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000058",
+                      "descricao":  "ITEM SINTETICO LONGO 058 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000059",
+                      "descricao":  "ITEM SINTETICO LONGO 059 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000060",
+                      "descricao":  "ITEM SINTETICO LONGO 060 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000061",
+                      "descricao":  "ITEM SINTETICO LONGO 061 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000062",
+                      "descricao":  "ITEM SINTETICO LONGO 062 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000063",
+                      "descricao":  "ITEM SINTETICO LONGO 063 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000064",
+                      "descricao":  "ITEM SINTETICO LONGO 064 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000065",
+                      "descricao":  "ITEM SINTETICO LONGO 065 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000066",
+                      "descricao":  "ITEM SINTETICO LONGO 066 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000067",
+                      "descricao":  "ITEM SINTETICO LONGO 067 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000068",
+                      "descricao":  "ITEM SINTETICO LONGO 068 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000069",
+                      "descricao":  "ITEM SINTETICO LONGO 069 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000070",
+                      "descricao":  "ITEM SINTETICO LONGO 070 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000071",
+                      "descricao":  "ITEM SINTETICO LONGO 071 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000072",
+                      "descricao":  "ITEM SINTETICO LONGO 072 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000073",
+                      "descricao":  "ITEM SINTETICO LONGO 073 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000074",
+                      "descricao":  "ITEM SINTETICO LONGO 074 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000075",
+                      "descricao":  "ITEM SINTETICO LONGO 075 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000076",
+                      "descricao":  "ITEM SINTETICO LONGO 076 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000077",
+                      "descricao":  "ITEM SINTETICO LONGO 077 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000078",
+                      "descricao":  "ITEM SINTETICO LONGO 078 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000079",
+                      "descricao":  "ITEM SINTETICO LONGO 079 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  },
+                  {
+                      "ean":  "7894000000080",
+                      "descricao":  "ITEM SINTETICO LONGO 080 1UN",
+                      "quantidade":  "1.0000",
+                      "valor_unitario":  "1.00",
+                      "valor_total":  "1.00",
+                      "categoria":  null
+                  }
+              ]
+}
