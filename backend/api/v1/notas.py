@@ -114,24 +114,32 @@ async def importar_nota_por_chave(
 
     try:
         servico = ImportadorSefazService(db=db, http_client=client)
-        return await servico.importar_por_chave(
+        resultado = await servico.importar_por_chave(
             identificador=payload.chave_acesso,
             usuario=user.username,
             ip_origem=request.client.host if request.client else None,
             department_id=user.department_id
         )
+        await db.commit()
+        return resultado
     except NotaJaCadastradaError as exc:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
     except SefazComunicacaoError as exc:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
         ) from exc
     except ExtracaoDadosNotaError as exc:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from exc
+    except Exception:
+        await db.rollback()
+        raise
