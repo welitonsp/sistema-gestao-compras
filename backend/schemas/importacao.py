@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
@@ -91,6 +91,33 @@ class ImportacaoNotaResponse(BaseModel):
     nota_fiscal: NotaFiscalImportadaResponse
     itens: list[ItemNotaFiscalImportadoResponse]
     total_itens: int
+
+
+class ArchiveImportacaoRequest(BaseModel):
+    """Payload para archive auditavel de uma importacao."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    motivo: str = Field(
+        ...,
+        min_length=5,
+        max_length=500,
+        description="Motivo operacional para arquivar a importacao.",
+    )
+
+
+class ArchiveImportacaoResponse(BaseModel):
+    """Resposta minima do archive de importacao."""
+
+    mensagem: str
+    status: str
+    chave_acesso: str
+    archived_at: datetime
+    archived_by: str
+    archive_reason: str
 
 
 class ProcessamentoLoteResponse(BaseModel):

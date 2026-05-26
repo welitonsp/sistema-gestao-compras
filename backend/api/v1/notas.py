@@ -12,7 +12,20 @@ from sqlalchemy.exc import IntegrityError
 from backend.api.dependencies import DbSession, ArqPool, CurrentUser, HttpClient, RoleChecker
 from backend.models.compras import User, UserRole
 from backend.core.fiscal import validar_chave_acesso
-from backend.schemas.importacao import ImportacaoChaveRequest, ImportacaoNotaResponse, ProcessamentoLoteResponse
+from backend.schemas.importacao import (
+    ArchiveImportacaoRequest,
+    ArchiveImportacaoResponse,
+    ChaveAcesso44,
+    ImportacaoChaveRequest,
+    ImportacaoNotaResponse,
+    ProcessamentoLoteResponse,
+)
+from backend.services.import_archive_service import (
+    ImportacaoJaArquivadaError,
+    ImportacaoNaoEncontradaError,
+    ImportArchiveError,
+    archive_importacao_por_chave,
+)
 from backend.services.importador_sefaz import (
     ExtracaoDadosNotaError,
     ImportadorSefazService,
@@ -25,6 +38,12 @@ from arq.jobs import Job
 router = APIRouter(prefix="/notas", tags=["Notas Fiscais"])
 
 DUPLICATE_NOTA_DETAIL = "Nota fiscal ja cadastrada."
+
+
+def _mascarar_chave_acesso(chave_acesso: str) -> str:
+    if len(chave_acesso) < 8:
+        return "<chave-redigida>"
+    return f"{chave_acesso[:4]}...{chave_acesso[-4:]}"
 
 
 def _is_chave_acesso_integrity_error(exc: IntegrityError) -> bool:
@@ -167,3 +186,69 @@ async def importar_nota_por_chave(
     except Exception:
         await db.rollback()
         raise
+
+
+@router.post(
+    "/{chave_acesso}/archive",
+    response_model=ArchiveImportacaoResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Arquivar importacao por chave de acesso",
+    description=(
+        "Arquiva uma importacao sem excluir dados fiscais, catalogo, historico "
+        "ou trilha de auditoria."
+    ),
+)
+async def arquivar_importacao_por_chave(
+    chave_acesso: ChaveAcesso44,
+    payload: ArchiveImportacaoRequest,
+    db: DbSession,
+    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER]))],
+) -> ArchiveImportacaoResponse:
+    """Arquiva uma importacao existente usando transacao controlada pelo endpoint."""
+
+    if not validar_chave_acesso(chave_acesso):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Digito verificador da chave de acesso invalido.",
+        )
+
+    try:
+        resultado = await archive_importacao_por_chave(
+            chave_acesso=chave_acesso,
+            usuario=user.username,
+            motivo=payload.motivo,
+            db=db,
+        )
+        await db.commit()
+        return ArchiveImportacaoResponse(
+            mensagem="Importacao arquivada com sucesso.",
+            status=resultado.status,
+            chave_acesso=_mascarar_chave_acesso(resultado.chave_acesso),
+            archived_at=resultado.archived_at,
+            archived_by=user.username,
+            archive_reason=payload.motivo,
+        )
+    except ImportacaoNaoEncontradaError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Importacao nao encontrada.",
+        ) from exc
+    except ImportacaoJaArquivadaError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Importacao ja arquivada.",
+        ) from exc
+    except ImportArchiveError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao arquivar importacao.",
+        ) from exc
