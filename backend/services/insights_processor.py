@@ -5,13 +5,25 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import List, Dict, Any
 from uuid import UUID
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.compras import Produto, HistoricoPreco, NotaFiscal, ItemNotaFiscal
 from core.logger import get_logger
 
 logger = get_logger("services.insights")
+
+ACTIVE_INVOICE_STATUS = "active"
+
+
+def _historico_visivel_filter():
+    return or_(HistoricoPreco.nota_fiscal_id == None, NotaFiscal.status == ACTIVE_INVOICE_STATUS)
+
+
+def _historico_department_filter(department_id: UUID | None):
+    if department_id is None:
+        return None
+    return or_(HistoricoPreco.nota_fiscal_id == None, NotaFiscal.department_id == department_id)
 
 class PriceInsightsService:
     def __init__(self, db: AsyncSession):
@@ -23,17 +35,22 @@ class PriceInsightsService:
         em relação à média histórica (Otimizado via Pushdown Filter).
         """
         # Subquery para a média histórica (Global ou por Dept)
-        sub_medias = (
+        sub_medias_stmt = (
             select(
                 HistoricoPreco.ean,
                 func.avg(HistoricoPreco.preco_pago).label("preco_medio")
             )
+            .outerjoin(NotaFiscal, NotaFiscal.id == HistoricoPreco.nota_fiscal_id)
+            .where(_historico_visivel_filter())
             .group_by(HistoricoPreco.ean)
-            .subquery()
         )
+        dept_filter = _historico_department_filter(department_id)
+        if dept_filter is not None:
+            sub_medias_stmt = sub_medias_stmt.where(dept_filter)
+        sub_medias = sub_medias_stmt.subquery()
 
         # Query para a última compra
-        sub_ultima = (
+        sub_ultima_stmt = (
             select(
                 HistoricoPreco.ean,
                 HistoricoPreco.preco_pago,
@@ -47,10 +64,12 @@ class PriceInsightsService:
                 ).label("rn")
             )
             .join(Produto, Produto.ean == HistoricoPreco.ean)
-            .join(ItemNotaFiscal, ItemNotaFiscal.ean == Produto.ean)
-            .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
-            .subquery()
+            .outerjoin(NotaFiscal, NotaFiscal.id == HistoricoPreco.nota_fiscal_id)
+            .where(_historico_visivel_filter())
         )
+        if dept_filter is not None:
+            sub_ultima_stmt = sub_ultima_stmt.where(dept_filter)
+        sub_ultima = sub_ultima_stmt.subquery()
 
         # Calcula a variação percentual diretamente no banco usando nullif para prevenir Divisão por Zero
         variacao_calc = ((sub_ultima.c.preco_pago / func.nullif(sub_medias.c.preco_medio, 0)) - 1) * 100
@@ -70,10 +89,6 @@ class PriceInsightsService:
             .where(func.abs(variacao_calc) >= threshold_percent)
             .order_by(desc(func.abs(variacao_calc)))
         )
-        
-        if department_id:
-            stmt = stmt.where(sub_ultima.c.department_id == department_id)
-        
         result = await self.db.execute(stmt)
         alertas = []
         for row in result.fetchall():
@@ -90,18 +105,23 @@ class PriceInsightsService:
 
     async def detectar_anomalias_estatisticas(self, z_threshold: float = 2.0, department_id: UUID | None = None) -> List[Dict[str, Any]]:
         """Detecta anomalias usando Z-Score com isolamento de departamento."""
-        sub_stats = (
+        sub_stats_stmt = (
             select(
                 HistoricoPreco.ean,
                 func.avg(HistoricoPreco.preco_pago).label("avg_price"),
                 func.stddev(HistoricoPreco.preco_pago).label("stddev_price")
             )
+            .outerjoin(NotaFiscal, NotaFiscal.id == HistoricoPreco.nota_fiscal_id)
+            .where(_historico_visivel_filter())
             .group_by(HistoricoPreco.ean)
             .having(func.count(HistoricoPreco.id) >= 3)
-            .subquery()
         )
+        dept_filter = _historico_department_filter(department_id)
+        if dept_filter is not None:
+            sub_stats_stmt = sub_stats_stmt.where(dept_filter)
+        sub_stats = sub_stats_stmt.subquery()
 
-        sub_ultima = (
+        sub_ultima_stmt = (
             select(
                 HistoricoPreco.ean,
                 HistoricoPreco.preco_pago,
@@ -113,20 +133,18 @@ class PriceInsightsService:
                 ).label("rn")
             )
             .join(Produto, Produto.ean == HistoricoPreco.ean)
-            .join(ItemNotaFiscal, ItemNotaFiscal.ean == Produto.ean)
-            .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
-            .subquery()
+            .outerjoin(NotaFiscal, NotaFiscal.id == HistoricoPreco.nota_fiscal_id)
+            .where(_historico_visivel_filter())
         )
+        if dept_filter is not None:
+            sub_ultima_stmt = sub_ultima_stmt.where(dept_filter)
+        sub_ultima = sub_ultima_stmt.subquery()
 
         stmt = (
             select(sub_ultima, sub_stats.c.avg_price, sub_stats.c.stddev_price)
             .join(sub_stats, sub_stats.c.ean == sub_ultima.c.ean)
             .where(sub_ultima.c.rn == 1)
         )
-        
-        if department_id:
-            stmt = stmt.where(sub_ultima.c.department_id == department_id)
-
         result = await self.db.execute(stmt)
         anomalias = []
         for row in result.fetchall():
@@ -149,6 +167,7 @@ class PriceInsightsService:
             )
             .join(ItemNotaFiscal, Produto.ean == ItemNotaFiscal.ean)
             .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
         )
         
         if department_id:
@@ -172,6 +191,7 @@ class PriceInsightsService:
             .join(ItemNotaFiscal, Produto.ean == ItemNotaFiscal.ean)
             .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
             .where(NotaFiscal.data_emissao >= inicio)
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
         )
         if department_id:
             stmt = stmt.where(NotaFiscal.department_id == department_id)
@@ -232,6 +252,7 @@ class PriceInsightsService:
             )
             .join(ItemNotaFiscal, ItemNotaFiscal.nota_fiscal_id == NotaFiscal.id)
             .where(NotaFiscal.data_emissao >= inicio)
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
         )
         if department_id:
             stmt = stmt.where(NotaFiscal.department_id == department_id)
@@ -255,6 +276,7 @@ class PriceInsightsService:
         # Subquery para encontrar os grupos duplicados
         subq = (
             select(NotaFiscal.fornecedor_id, NotaFiscal.data_emissao, NotaFiscal.valor_total)
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
             .group_by(NotaFiscal.fornecedor_id, NotaFiscal.data_emissao, NotaFiscal.valor_total)
             .having(func.count(NotaFiscal.id) > 1)
         )
@@ -274,6 +296,7 @@ class PriceInsightsService:
                 (NotaFiscal.data_emissao == subq.c.data_emissao) & 
                 (NotaFiscal.valor_total == subq.c.valor_total)
             )
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
         )
         
         if department_id:
@@ -317,12 +340,13 @@ class PriceInsightsService:
                  func.nullif(func.min(HistoricoPreco.preco_pago), 0) * 100).label("v")
             )
             .join(HistoricoPreco, Produto.ean == HistoricoPreco.ean)
-            .join(ItemNotaFiscal, ItemNotaFiscal.ean == Produto.ean)
-            .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+            .outerjoin(NotaFiscal, NotaFiscal.id == HistoricoPreco.nota_fiscal_id)
+            .where(_historico_visivel_filter())
         )
         
-        if department_id:
-            stmt = stmt.where(NotaFiscal.department_id == department_id)
+        dept_filter = _historico_department_filter(department_id)
+        if dept_filter is not None:
+            stmt = stmt.where(dept_filter)
             
         stmt = stmt.group_by(Produto.ean, Produto.nome_limpo).having(func.count(HistoricoPreco.id) > 1).order_by(desc("v")).limit(limit)
         result = await self.db.execute(stmt)
