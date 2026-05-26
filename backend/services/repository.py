@@ -92,6 +92,10 @@ class ProcurementRepository:
                 quantidade=item_dto.quantidade,
                 valor_unitario=item_dto.valor_unitario,
                 valor_total=item_dto.valor_total,
+                categoria_sugerida=item_dto.categoria,
+                categoria_sugerida_origem=item_dto.categoria_sugerida_origem,
+                categoria_sugerida_confidence=item_dto.categoria_sugerida_confidence,
+                categoria_sugerida_modelo=item_dto.categoria_sugerida_modelo,
             )
             self.db.add(item_fiscal)
 

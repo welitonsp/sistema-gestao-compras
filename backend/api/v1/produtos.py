@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Annotated
 from fastapi import APIRouter, HTTPException, status, Query, Depends
 from fastapi.responses import StreamingResponse
@@ -135,6 +136,12 @@ async def atualizar_produto(
     update_data = payload.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(produto, field, value)
+
+    if "categoria" in update_data:
+        produto.categoria_confirmada = update_data["categoria"]
+        produto.categoria_confirmada_por = user.username
+        produto.categoria_confirmada_em = datetime.now(timezone.utc)
+        produto.categoria_confirmada_origem = "manual"
     
     # Sincroniza com ClassificacaoCache
     # Isso garante que futuras importações do mesmo item já venham corrigidas.

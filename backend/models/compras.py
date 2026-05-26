@@ -136,6 +136,10 @@ class Produto(TimestampMixin, Base):
     )
     marca: Mapped[str | None] = mapped_column(String(100), nullable=True)
     categoria: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    categoria_confirmada: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    categoria_confirmada_por: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    categoria_confirmada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    categoria_confirmada_origem: Mapped[str | None] = mapped_column(String(50), nullable=True)
     unidade: Mapped[str] = mapped_column(String(20), default="un")
 
     itens_nota: Mapped[list[ItemNotaFiscal]] = relationship(
@@ -256,6 +260,13 @@ class ItemNotaFiscal(TimestampMixin, Base):
         Numeric(precision=14, scale=2),
         nullable=False,
     )
+    categoria_sugerida: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    categoria_sugerida_origem: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    categoria_sugerida_confidence: Mapped[Decimal | None] = mapped_column(
+        Numeric(precision=5, scale=4),
+        nullable=True,
+    )
+    categoria_sugerida_modelo: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     nota_fiscal: Mapped[NotaFiscal] = relationship(
         back_populates="itens",
