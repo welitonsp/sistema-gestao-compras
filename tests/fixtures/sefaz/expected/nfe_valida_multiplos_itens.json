@@ -1,0 +1,34 @@
+{
+  "chave_acesso": "99999999999999999999999999999999999999999999",
+  "numero_nota": "1001",
+  "fornecedor": {
+    "cnpj": "00000000000191",
+    "razao_social": "MERCADO SINTETICO MULTI ITENS LTDA"
+  },
+  "data_emissao": "2026-05-26",
+  "valor_total": "31.40",
+  "expected_item_count": 2,
+  "expected_sum_itens": "31.40",
+  "expected_missing_ean_count": 0,
+  "expected_total_mismatch": false,
+  "expected_quality_status": "ok",
+  "expected_parser_source": "deterministic",
+  "itens": [
+    {
+      "ean": "7891000000001",
+      "descricao": "ARROZ SINTETICO TIPO 1 5KG",
+      "quantidade": "1.0000",
+      "valor_unitario": "18.90",
+      "valor_total": "18.90",
+      "categoria": null
+    },
+    {
+      "ean": "7891000000002",
+      "descricao": "FEIJAO SINTETICO 1KG",
+      "quantidade": "2.0000",
+      "valor_unitario": "6.25",
+      "valor_total": "12.50",
+      "categoria": null
+    }
+  ]
+}
