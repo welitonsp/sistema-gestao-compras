@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
@@ -102,6 +102,58 @@ class ImportacaoNotaResponse(BaseModel):
     nota_fiscal: NotaFiscalImportadaResponse
     itens: list[ItemNotaFiscalImportadoResponse]
     total_itens: int
+
+
+class ImportacaoLoteChavesRequest(BaseModel):
+    """Payload para importacao sequencial de um lote pequeno de chaves."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    chaves_acesso: list[ChaveAcesso44] = Field(
+        ...,
+        min_length=1,
+        max_length=5,
+        description="Lista de 1 a 5 chaves de acesso com 44 digitos.",
+    )
+
+    @field_validator("chaves_acesso", mode="before")
+    @classmethod
+    def normalizar_chaves_acesso(cls, value: object) -> object:
+        """Remove mascaras visuais de cada chave antes da validacao formal."""
+
+        if not isinstance(value, list):
+            return value
+        return [re.sub(r"\D", "", item) if isinstance(item, str) else item for item in value]
+
+    @field_validator("chaves_acesso")
+    @classmethod
+    def rejeitar_chaves_duplicadas(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("Chaves duplicadas no payload.")
+        return value
+
+
+class ImportacaoLoteResultadoResponse(BaseModel):
+    """Resultado individual de uma chave processada em lote."""
+
+    chave_acesso: str
+    status: Literal["success", "duplicate", "failed"]
+    mensagem: str
+    nota_fiscal: NotaFiscalImportadaResponse | None = None
+    error_code: str | None = None
+
+
+class ImportacaoLoteChavesResponse(BaseModel):
+    """Resultado agregado da importacao sequencial de chaves."""
+
+    total: int
+    success_count: int
+    duplicate_count: int
+    failed_count: int
+    results: list[ImportacaoLoteResultadoResponse]
 
 
 class ArchiveImportacaoRequest(BaseModel):

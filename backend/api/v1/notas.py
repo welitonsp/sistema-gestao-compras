@@ -20,6 +20,9 @@ from backend.schemas.importacao import (
     ChaveAcesso44,
     ImportacaoChaveRequest,
     ImportacaoHistoricoItemResponse,
+    ImportacaoLoteChavesRequest,
+    ImportacaoLoteChavesResponse,
+    ImportacaoLoteResultadoResponse,
     ImportacaoNotaResponse,
     ImportacoesHistoricoResponse,
     ProcessamentoLoteResponse,
@@ -260,6 +263,133 @@ async def importar_nota_por_chave(
     except Exception:
         await db.rollback()
         raise
+
+
+@router.post(
+    "/importacao-lote-chaves",
+    response_model=ImportacaoLoteChavesResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Importar lote pequeno de notas fiscais por chave de acesso",
+    description=(
+        "Processa sequencialmente ate 5 chaves de acesso, com transacao "
+        "isolada por chave e resultado operacional individual."
+    ),
+)
+async def importar_lote_chaves(
+    request: Request,
+    db: DbSession,
+    client: HttpClient,
+    user: CurrentUser,
+    payload_bruto: dict[str, Any] = Body(...),
+) -> ImportacaoLoteChavesResponse:
+    """Executa importacao sequencial e controlada de um lote pequeno de chaves."""
+
+    try:
+        payload = ImportacaoLoteChavesRequest.model_validate(payload_bruto)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Payload invalido para importacao em lote.",
+        ) from exc
+
+    if not all(validar_chave_acesso(chave) for chave in payload.chaves_acesso):
+        raise HTTPException(
+            status_code=422,
+            detail="Payload invalido para importacao em lote.",
+        )
+
+    results: list[ImportacaoLoteResultadoResponse] = []
+
+    for chave in payload.chaves_acesso:
+        chave_mascarada = _mascarar_chave_acesso(chave)
+        try:
+            servico = ImportadorSefazService(db=db, http_client=client)
+            resultado = await servico.importar_por_chave(
+                identificador=chave,
+                usuario=user.username,
+                ip_origem=request.client.host if request.client else None,
+                department_id=user.department_id,
+            )
+            await db.commit()
+            nota_mascarada = resultado.nota_fiscal.model_copy(
+                update={"chave_acesso": chave_mascarada}
+            )
+            results.append(
+                ImportacaoLoteResultadoResponse(
+                    chave_acesso=chave_mascarada,
+                    status="success",
+                    mensagem="Nota fiscal importada com sucesso.",
+                    nota_fiscal=nota_mascarada,
+                )
+            )
+        except NotaJaCadastradaError:
+            await db.rollback()
+            results.append(
+                ImportacaoLoteResultadoResponse(
+                    chave_acesso=chave_mascarada,
+                    status="duplicate",
+                    mensagem=DUPLICATE_NOTA_DETAIL,
+                    error_code="duplicate",
+                )
+            )
+        except IntegrityError as exc:
+            await db.rollback()
+            if _is_chave_acesso_integrity_error(exc):
+                results.append(
+                    ImportacaoLoteResultadoResponse(
+                        chave_acesso=chave_mascarada,
+                        status="duplicate",
+                        mensagem=DUPLICATE_NOTA_DETAIL,
+                        error_code="duplicate",
+                    )
+                )
+                continue
+            results.append(
+                ImportacaoLoteResultadoResponse(
+                    chave_acesso=chave_mascarada,
+                    status="failed",
+                    mensagem="Falha ao importar esta chave.",
+                    error_code="integrity_error",
+                )
+            )
+        except SefazComunicacaoError:
+            await db.rollback()
+            results.append(
+                ImportacaoLoteResultadoResponse(
+                    chave_acesso=chave_mascarada,
+                    status="failed",
+                    mensagem="Falha ao consultar SEFAZ para esta chave.",
+                    error_code="sefaz_error",
+                )
+            )
+        except ExtracaoDadosNotaError:
+            await db.rollback()
+            results.append(
+                ImportacaoLoteResultadoResponse(
+                    chave_acesso=chave_mascarada,
+                    status="failed",
+                    mensagem="Falha ao extrair dados da nota.",
+                    error_code="extraction_error",
+                )
+            )
+        except Exception:
+            await db.rollback()
+            results.append(
+                ImportacaoLoteResultadoResponse(
+                    chave_acesso=chave_mascarada,
+                    status="failed",
+                    mensagem="Falha inesperada ao importar esta chave.",
+                    error_code="unexpected_error",
+                )
+            )
+
+    return ImportacaoLoteChavesResponse(
+        total=len(results),
+        success_count=sum(1 for result in results if result.status == "success"),
+        duplicate_count=sum(1 for result in results if result.status == "duplicate"),
+        failed_count=sum(1 for result in results if result.status == "failed"),
+        results=results,
+    )
 
 
 @router.post(
