@@ -40,6 +40,10 @@ async def processar_arquivo_background(ctx: dict[Any, Any], caminho_str: str, de
             # path_real = await storage.get_file_path(caminho.name, folder="NOVAS_NOTAS")
             
             if caminho.suffix.lower() in [".pdf", ".jpg", ".jpeg", ".png"]:
+                if not settings.enable_gemini:
+                    logger.warning(f"Processamento de imagem/PDF ignorado: ENABLE_GEMINI está falso. Arquivo: {caminho.name}")
+                    await dispatcher.broadcast("JOB_FAILED", {"job_id": job_id, "error": "OCR desativado (Custo Gemini)"})
+                    return False
                 ocr = GeminiOCRService()
                 service = PDFProcessorService(repo, ocr)
             elif caminho.suffix.lower() == ".xml":

@@ -143,6 +143,18 @@ class Settings(BaseSettings):
     s3_access_key: str | None = Field(default=None, alias="S3_ACCESS_KEY")
     s3_secret_key: SecretStr | None = Field(default=None, alias="S3_SECRET_KEY")
 
+    # AI Provider Settings (Control Costs)
+    ai_provider: Literal["groq", "gemini"] = Field(
+        default="groq",
+        alias="AI_PROVIDER",
+        description="Default AI provider for structured extraction and classification."
+    )
+    enable_gemini: bool = Field(
+        default=False,
+        alias="ENABLE_GEMINI",
+        description="Enables Gemini features (like Vision OCR). If false, Gemini is never called."
+    )
+
     # AI Keys (Required for processing)
     groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")

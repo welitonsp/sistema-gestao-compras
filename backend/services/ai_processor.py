@@ -30,8 +30,12 @@ class AIStructuredExtractor:
     def client(self) -> genai.Client:
         """Mantido para compatibilidade, mas o fluxo principal usa Groq agora."""
         if self._client is None:
+            if not settings.enable_gemini:
+                raise RuntimeError("Gemini desativado: ENABLE_GEMINI=false")
             api_key = settings.gemini_api_key.get_secret_value() if hasattr(settings.gemini_api_key, "get_secret_value") else settings.gemini_api_key
-            self._client = genai.Client(api_key=api_key or "DUMMY_KEY_FOR_INIT")
+            if not api_key:
+                raise RuntimeError("GEMINI_API_KEY nao configurada")
+            self._client = genai.Client(api_key=api_key)
         return self._client
 
     async def extrair_nota(self, texto_limpo: str, categorias_contexto: list[str] | None = None) -> NotaFiscalDTO:

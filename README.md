@@ -7,7 +7,8 @@ Solução institucional para ingestão, auditoria e análise inteligente de docu
 O sistema é dividido em:
 - **Backend API (FastAPI):** Interface RESTful assíncrona.
 - **Worker (ARQ/Redis):** Processamento em background para grandes volumes.
-- **Engine de IA (Groq/Gemini):** Extração OCR e classificação de produtos.
+- **Engine de IA (Groq-first):** Extração estruturada e classificação de produtos via Groq. Gemini 1.5 Flash fica disponível apenas como recurso opcional de visão quando `ENABLE_GEMINI=true`.
+- **Configuração de IA:** `AI_PROVIDER=groq` e `ENABLE_GEMINI=false` são os padrões; `GEMINI_API_KEY` é opcional.
 - **Parser Determinístico:** Motor de alta performance para SEFAZ GO.
 
 ## 🛠️ Configuração Rápida

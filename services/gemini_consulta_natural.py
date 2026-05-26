@@ -7,12 +7,13 @@
 # e o Gemini explica o resultado.
 # ==========================================================
 
-import os
 import json
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 import google.generativeai as genai
+
+from core.config import DATABASE_URL, ENABLE_GEMINI, GEMINI_API_KEY
 
 
 # ----------------------------------------------------------
@@ -21,17 +22,22 @@ import google.generativeai as genai
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL não encontrada no .env")
 
-if not GEMINI_API_KEY:
-    raise RuntimeError("GEMINI_API_KEY não encontrada no .env")
+model = None
 
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+
+def obter_modelo_gemini():
+    global model
+    if not ENABLE_GEMINI:
+        raise RuntimeError("Gemini desativado: ENABLE_GEMINI=false")
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY nao encontrada no .env")
+    if model is None:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+    return model
 
 
 # ----------------------------------------------------------
@@ -75,6 +81,7 @@ def conectar():
 # ----------------------------------------------------------
 
 def gerar_sql(pergunta: str) -> str:
+    gemini_model = obter_modelo_gemini()
     prompt = f"""
 Você é um especialista em SQL (PostgreSQL).
 
@@ -93,7 +100,7 @@ REGRAS:
 PERGUNTA DO USUÁRIO:
 "{pergunta}"
 """
-    resposta = model.generate_content(prompt)
+    resposta = gemini_model.generate_content(prompt)
     return resposta.text.strip().rstrip(";")
 
 
@@ -116,6 +123,7 @@ def executar_sql(sql: str):
 # ----------------------------------------------------------
 
 def explicar_resultado(pergunta: str, dados: list[dict]) -> str:
+    gemini_model = obter_modelo_gemini()
     prompt = f"""
 Você é um analista de dados.
 
@@ -128,7 +136,7 @@ O resultado retornado pelo banco foi:
 Explique o resultado de forma clara,
 em português simples, como para um leigo.
 """
-    resposta = model.generate_content(prompt)
+    resposta = gemini_model.generate_content(prompt)
     return resposta.text.strip()
 
 
@@ -137,6 +145,10 @@ em português simples, como para um leigo.
 # ----------------------------------------------------------
 
 def main():
+    if not ENABLE_GEMINI:
+        print("Gemini desativado: ENABLE_GEMINI=false")
+        return
+
     print("\n🧠 CONSULTA EM LINGUAGEM NATURAL (GEMINI)")
     print("=" * 70)
 

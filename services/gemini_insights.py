@@ -30,7 +30,7 @@ import psycopg2
 from psycopg2.extras import DictCursor
 import google.generativeai as genai
 
-from core.config import DATABASE_URL, GEMINI_API_KEY
+from core.config import DATABASE_URL, ENABLE_GEMINI, GEMINI_API_KEY
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -39,18 +39,21 @@ logger = get_logger(__name__)
 # CONFIGURAÇÃO DO GEMINI (AUTOMÁTICA)
 # ----------------------------------------------------------
 
-if not GEMINI_API_KEY:
-    raise RuntimeError("GEMINI_API_KEY não configurada")
-
-genai.configure(api_key=GEMINI_API_KEY)
+model = None
 
 
 def escolher_modelo_gemini():
+    if not ENABLE_GEMINI:
+        raise RuntimeError("Gemini desativado: ENABLE_GEMINI=false")
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY nao configurada")
+
     """
     Lista os modelos disponíveis e escolhe automaticamente
     um que suporte generateContent.
     """
     try:
+        genai.configure(api_key=GEMINI_API_KEY)
         modelos = genai.list_models()
         for m in modelos:
             if "generateContent" in m.supported_generation_methods:
@@ -64,8 +67,15 @@ def escolher_modelo_gemini():
         raise
 
 
-GEMINI_MODEL = escolher_modelo_gemini()
-model = genai.GenerativeModel(GEMINI_MODEL)
+def obter_modelo_gemini():
+    global model
+    if not ENABLE_GEMINI:
+        raise RuntimeError("Gemini desativado: ENABLE_GEMINI=false")
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY nao configurada")
+    if model is None:
+        model = genai.GenerativeModel(escolher_modelo_gemini())
+    return model
 
 # ----------------------------------------------------------
 # BANCO DE DADOS
@@ -139,6 +149,7 @@ def coletar_resumo():
 # ----------------------------------------------------------
 
 def gerar_insights(resumo: dict) -> str:
+    gemini_model = obter_modelo_gemini()
     logger.info("Gerando insights com Gemini")
 
     prompt = f"""
@@ -156,7 +167,7 @@ REGRAS:
 """
 
     try:
-        resposta = model.generate_content(prompt)
+        resposta = gemini_model.generate_content(prompt)
         return resposta.text.strip()
 
     except Exception as e:
@@ -169,6 +180,10 @@ REGRAS:
 
 def main():
     logger.info("Iniciando Gemini Insights")
+
+    if not ENABLE_GEMINI:
+        print("Gemini desativado: ENABLE_GEMINI=false")
+        return
 
     resumo = coletar_resumo()
 

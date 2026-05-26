@@ -11,7 +11,7 @@ O sistema atingiu a maturidade institucional. A infraestrutura base está consol
 - **Core:** FastAPI (Async), PostgreSQL (Neon), Redis (ARQ/Worker).
 - **Frontend:** SPA React + Vite + Tailwind CSS (WCAG 2.1 AA Compliant).
 - **Segurança:** Autenticação JWT, Proteção de Rotas, Sanitização DDL via Alembic.
-- **Inteligência:** Classificação "Human-in-the-loop", OCR Multimodal (Gemini Vision) e Parsers Determinísticos (SEFAZ GO).
+- **Inteligência:** Classificação "Human-in-the-loop", OCR Multimodal (Gemini Vision - opcional) e Parsers Determinísticos (SEFAZ GO).
 - **Auditoria:** Trilha de logs imutável, exportação corporativa (CSV/Excel), detecção de duplicidade de pagamentos e volatilidade de mercado.
 - **DevOps:** Docker Multi-stage build para implantação em provedores serverless.
 

@@ -57,11 +57,14 @@ async def health_check(
             health_status["components"]["groq_api"] = "unreachable"
 
         # Gemini (Check base domain)
-        try:
-            resp = await client.get("https://generativelanguage.googleapis.com/")
-            # Google retorne 404/403 no root mas responde, o que indica conectividade
-            health_status["components"]["gemini_api"] = "online" if resp.status_code < 500 else f"error: {resp.status_code}"
-        except Exception:
-            health_status["components"]["gemini_api"] = "unreachable"
+        if not settings.enable_gemini:
+            health_status["components"]["gemini_api"] = "disabled"
+        else:
+            try:
+                resp = await client.get("https://generativelanguage.googleapis.com/")
+                # Google retorne 404/403 no root mas responde, o que indica conectividade
+                health_status["components"]["gemini_api"] = "online" if resp.status_code < 500 else f"error: {resp.status_code}"
+            except Exception:
+                health_status["components"]["gemini_api"] = "unreachable"
 
     return health_status

@@ -31,6 +31,10 @@ if not DATABASE_URL:
 TABELA_PRODUTOS = "produtos"
 TABELA_HISTORICO_PRECOS = "historico_precos"
 
+# AI CONFIG (CONTROL)
+AI_PROVIDER = os.getenv("AI_PROVIDER", "groq")
+ENABLE_GEMINI = os.getenv("ENABLE_GEMINI", "false").lower() == "true"
+
 # ----------------------------------------------------------
 # GROQ (IA OPERACIONAL)
 # ----------------------------------------------------------
@@ -57,6 +61,8 @@ class Settings:
     groq_model: str
     gemini_model: str
     debug: bool
+    ai_provider: str
+    enable_gemini: bool
 
 
 def get_settings() -> Settings:
@@ -67,6 +73,8 @@ def get_settings() -> Settings:
         groq_model=GROQ_MODEL,
         gemini_model=GEMINI_MODEL,
         debug=DEBUG,
+        ai_provider=AI_PROVIDER,
+        enable_gemini=ENABLE_GEMINI,
     )
 
 settings = get_settings()
