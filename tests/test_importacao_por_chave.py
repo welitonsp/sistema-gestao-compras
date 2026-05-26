@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import pytest
@@ -14,6 +14,7 @@ from backend.core.security import create_access_token
 from backend.main import app
 from backend.models.compras import (
     AuditLog,
+    ClassificacaoCache,
     Fornecedor,
     HistoricoPreco,
     ItemNotaFiscal,
@@ -69,6 +70,10 @@ def _mock_import_dependencies(monkeypatch, dto: NotaFiscalDTO) -> None:
         return "<html>nota fiscal mockada</html>"
 
     async def fake_classificar_itens_lote(self, itens, categorias_contexto):
+        for item in itens:
+            if item.categoria:
+                item.categoria_sugerida_origem = "groq"
+                item.categoria_sugerida_modelo = "test-model"
         return itens
 
     monkeypatch.setattr(ImportadorSefazService, "_fetch_url", fake_fetch_url)
@@ -129,7 +134,11 @@ async def test_importacao_por_chave_persiste_nota_fornecedor_e_itens(monkeypatch
     assert nota is not None
     assert fornecedor is not None
     assert len(itens) == 1
+    assert itens[0].categoria_sugerida == "ALIMENTOS BASICOS"
+    assert itens[0].categoria_sugerida_origem == "groq"
+    assert itens[0].categoria_sugerida_modelo == "test-model"
     assert produto is not None
+    assert produto.categoria == "ALIMENTOS BASICOS"
     assert historico is not None
     assert nota.status == "active"
     assert nota.archived_at is None
@@ -138,6 +147,147 @@ async def test_importacao_por_chave_persiste_nota_fornecedor_e_itens(monkeypatch
     assert historico.nota_fiscal_id == nota.id
     assert historico.item_nota_fiscal_id == itens[0].id
     assert auditoria is not None
+
+
+@pytest.mark.anyio
+async def test_importacao_por_chave_nao_sobrescreve_categoria_confirmada(monkeypatch):
+    chave = _valid_access_key("5226051745740400118365511000040935127519850")
+    token = await _create_user("import_confirmed_admin")
+    ean = "7891000000199"
+
+    async with SessionLocal() as db:
+        db.add(
+            Produto(
+                ean=ean,
+                nome_limpo="PRODUTO JA CONFIRMADO",
+                marca="HUMANA",
+                categoria="CATEGORIA HUMANA",
+                categoria_confirmada="CATEGORIA HUMANA",
+                categoria_confirmada_por="gestor",
+                categoria_confirmada_em=datetime.now(timezone.utc),
+                categoria_confirmada_origem="manual",
+                unidade="un",
+            )
+        )
+        await db.commit()
+
+    dto = NotaFiscalDTO(
+        chave_acesso=chave,
+        numero_nota="40938",
+        data_emissao=date(2026, 5, 26),
+        valor_total=Decimal("12.00"),
+        fornecedor=FornecedorDTO(
+            cnpj="17457404001986",
+            razao_social="MERCADO CONFIRMACAO TESTE LTDA",
+        ),
+        itens=[
+            ItemNotaDTO(
+                ean=ean,
+                descricao="PRODUTO COM SUGESTAO IA",
+                quantidade=Decimal("1"),
+                valor_unitario=Decimal("12.00"),
+                valor_total=Decimal("12.00"),
+                marca="IA",
+                categoria="CATEGORIA IA",
+            )
+        ],
+    )
+    _mock_import_dependencies(monkeypatch, dto)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-por-chave",
+            json={"chave_acesso": chave},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 201
+
+    async with SessionLocal() as db:
+        produto = await db.scalar(select(Produto).where(Produto.ean == ean))
+        item = await db.scalar(
+            select(ItemNotaFiscal)
+            .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+            .where(NotaFiscal.chave_acesso == chave)
+        )
+
+    assert produto.categoria == "CATEGORIA HUMANA"
+    assert produto.categoria_confirmada == "CATEGORIA HUMANA"
+    assert produto.categoria_confirmada_por == "gestor"
+    assert produto.categoria_confirmada_origem == "manual"
+    assert item.categoria_sugerida == "CATEGORIA IA"
+    assert item.categoria_sugerida_origem == "groq"
+
+
+@pytest.mark.anyio
+async def test_patch_produto_categoria_preenche_confirmacao_manual():
+    chave = _valid_access_key("5226051745740400118365511000040935127511860")
+    token = await _create_user("catalog_confirm_manager", UserRole.MANAGER)
+    ean = "7891000000100"
+
+    async with SessionLocal() as db:
+        fornecedor = Fornecedor(
+            cnpj="17457404001187",
+            razao_social="MERCADO PATCH CATEGORIA LTDA",
+        )
+        produto = Produto(
+            ean=ean,
+            nome_limpo="PRODUTO PATCH CATEGORIA",
+            marca="ANTIGA",
+            categoria="ANTIGA",
+            unidade="un",
+        )
+        db.add_all([fornecedor, produto])
+        await db.flush()
+
+        nota = NotaFiscal(
+            fornecedor_id=fornecedor.id,
+            numero_nota="40939",
+            chave_acesso=chave,
+            data_emissao=date(2026, 5, 26),
+            valor_total=Decimal("7.50"),
+        )
+        db.add(nota)
+        await db.flush()
+
+        db.add(
+            ItemNotaFiscal(
+                nota_fiscal_id=nota.id,
+                ean=ean,
+                descricao_original="PRODUTO PATCH DESCRICAO ORIGINAL",
+                quantidade=Decimal("1"),
+                valor_unitario=Decimal("7.50"),
+                valor_total=Decimal("7.50"),
+            )
+        )
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.patch(
+            f"/api/v1/produtos/{ean}",
+            json={"categoria": "CATEGORIA CONFIRMADA", "marca": "NOVA"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+
+    async with SessionLocal() as db:
+        produto = await db.scalar(select(Produto).where(Produto.ean == ean))
+        cache = await db.scalar(
+            select(ClassificacaoCache).where(
+                ClassificacaoCache.descricao_original == "PRODUTO PATCH DESCRICAO ORIGINAL"
+            )
+        )
+
+    assert produto.categoria == "CATEGORIA CONFIRMADA"
+    assert produto.categoria_confirmada == "CATEGORIA CONFIRMADA"
+    assert produto.categoria_confirmada_por == "catalog_confirm_manager"
+    assert produto.categoria_confirmada_em is not None
+    assert produto.categoria_confirmada_origem == "manual"
+    assert cache is not None
+    assert cache.categoria == "CATEGORIA CONFIRMADA"
+    assert cache.marca == "NOVA"
+    assert cache.verificado_usuario is True
 
 
 @pytest.mark.anyio

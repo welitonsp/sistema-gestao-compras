@@ -23,6 +23,9 @@ class ItemNotaDTO(BaseModel):
     valor_total: Decimal
     marca: str | None = None
     categoria: str | None = None
+    categoria_sugerida_origem: str | None = None
+    categoria_sugerida_confidence: Decimal | None = None
+    categoria_sugerida_modelo: str | None = None
 
 
 class NotaFiscalDTO(BaseModel):

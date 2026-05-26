@@ -101,9 +101,11 @@ class AIStructuredExtractor:
             if not dados_brutos.get("data_emissao"):
                 dados_brutos["data_emissao"] = date.today().isoformat()
                 
+            dto = NotaFiscalDTO.model_validate(dados_brutos)
+            self._marcar_sugestoes_ia(dto.itens)
             duration = time.perf_counter() - start_time
             logger.info(f"Groq respondeu em {duration:.2f}s.")
-            return NotaFiscalDTO.model_validate(dados_brutos)
+            return dto
         except Exception as e:
             logger.error(f"Erro na extração via Groq ({self.model_name}): {e}")
             raise
@@ -141,6 +143,8 @@ class AIStructuredExtractor:
                 if i < len(classificacoes):
                     item.marca = classificacoes[i].get("marca", "")
                     item.categoria = classificacoes[i].get("categoria", "OUTROS")
+                    item.categoria_sugerida_origem = "groq"
+                    item.categoria_sugerida_modelo = self.model_name
             
             return itens
         except Exception as e:
@@ -167,3 +171,9 @@ class AIStructuredExtractor:
         except Exception as e:
             logger.error(f"Erro ao classificar item manual via Groq: {e}")
             return {"produto": descricao, "marca": "", "categoria": "Outros", "unidade": "un"}
+
+    def _marcar_sugestoes_ia(self, itens: list[ItemNotaDTO]) -> None:
+        for item in itens:
+            if item.categoria:
+                item.categoria_sugerida_origem = "groq"
+                item.categoria_sugerida_modelo = self.model_name
