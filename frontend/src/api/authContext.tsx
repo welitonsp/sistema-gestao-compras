@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { apiClient } from './client';
 
 interface AuthUser {
   username: string;
@@ -17,26 +18,28 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+
+  const checkSession = async () => {
+    try {
+      const userData = await apiClient.get<any>('/users/me');
+      setUser({ username: userData.username, role: userData.role });
+    } catch {
+      setUser(null);
+    } finally {
+      setIsInitialized(true);
+    }
+  };
 
   // Verifica sessão ao carregar a página
   useEffect(() => {
-    const checkSession = async () => {
-      try {
-        // Tenta buscar o perfil do usuário logado (endpoint a ser criado ou usar health check estendido)
-        const userData = await apiClient.get<User>('/users/me');
-        setUser({ username: userData.username, role: userData.role });
-      } catch {
-        setUser(null);
-      } finally {
-        setIsInitialized(true);
-      }
-    };
     checkSession();
   }, []);
 
-  const login = (userData: AuthUser) => {
-    setUser(userData);
+  const login = (newToken: string) => {
+    setToken(newToken);
+    checkSession();
   };
 
   const logout = async () => {
@@ -44,12 +47,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await fetch('/api/v1/auth/logout', { method: 'POST' });
     } finally {
       setUser(null);
+      setToken(null);
     }
   };
 
   useEffect(() => {
     const handleAuthExpired = () => {
       setUser(null);
+      setToken(null);
     };
 
     window.addEventListener('auth:expired', handleAuthExpired);
@@ -58,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const isAuthenticated = !!user;
+  const isAuthenticated = !!user || !!token;
 
   if (!isInitialized) return null; // Aguarda inicialização segura
 

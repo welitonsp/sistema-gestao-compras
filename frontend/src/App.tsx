@@ -1,271 +1,256 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { LogOut, RefreshCw, ShieldCheck, PackageOpen, Users, UserPlus, Settings2, Globe, Trash2, Plus, Bell } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import { 
+  LogOut, RefreshCw, ShieldCheck, PackageOpen, Users, 
+  Settings2, Globe, Trash2, Plus, Bell, LayoutDashboard, 
+  ClipboardCheck, Package, Shield, User as UserIcon, TrendingUp
+} from 'lucide-react';
 import { apiClient } from './api/client';
 import { useAuth } from './api/authContext';
 import Login from './Login';
-import { DashboardResumo, AlertaPreco, AuditLog, Produto, ForecastInfo, AnomaliaEstatistica, User, Department } from './types/api';
+import { 
+  DashboardResumo, AlertaPreco, AuditLog, Produto, 
+  ForecastInfo, AnomaliaEstatistica, User, Department 
+} from './types/api';
 
-// Components & Pages
 import { StatusMessage } from './components/StatusMessage';
 import { JobMonitor, JobStatus } from './components/JobMonitor';
 import { AuditChatbot } from './components/AuditChatbot';
-import { DashboardView } from './pages/DashboardView';
-import { AuditoriaView } from './pages/AuditoriaView';
-import { CatalogoView } from './pages/CatalogoView';
-import { GestaoView } from './pages/GestaoView';
-import { UserCreateModal } from './components/UserCreateModal';
+import { Skeleton } from './components/Skeleton';
 
-type Tab = 'dashboard' | 'auditoria' | 'produtos' | 'gestao';
+// Lazy load views for better performance (Code Splitting)
+const DashboardView = lazy(() => import('./pages/DashboardView').then(m => ({ default: m.DashboardView })));
+const AuditoriaView = lazy(() => import('./pages/AuditoriaView').then(m => ({ default: m.AuditoriaView })));
+const CatalogoView = lazy(() => import('./pages/CatalogoView').then(m => ({ default: m.CatalogoView })));
+const GestaoView = lazy(() => import('./pages/GestaoView').then(m => ({ default: m.GestaoView })));
+const InsightsView = lazy(() => import('./pages/InsightsView').then(m => ({ default: m.InsightsView })));
+
+type Tab = 'dashboard' | 'auditoria' | 'produtos' | 'gestao' | 'insights';
 
 export default function App() {
   const { isAuthenticated, logout, user: authUser } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [data, setData] = useState<DashboardResumo | null>(null);
   const [alerts, setAlertas] = useState<AlertaPreco[]>([]);
-  const [duplicatas, setDuplicatas] = useState<any[]>([]);
-  const [volatilidade, setVolatilidade] = useState<any[]>([]);
-  const [forecasts, setForecasts] = useState<ForecastInfo[]>([]);
-  const [anomalias, setAnomalias] = useState<AnomaliaEstatistica[]>([]);
-  const [trendData, setTrendData] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [webhooks, setWebhooks] = useState<any[]>([]);
-  
   const [loading, setLoading] = useState(true);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [activeJobs, setActiveJobs] = useState<JobStatus[]>([]);
-  const [searchProduto, setSearchProduto] = useState('');
-  const [editingEan, setEditingEan] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
-  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-
-  const showStatus = (msg: string) => {
-    setStatusMessage(msg);
-    setTimeout(() => setStatusMessage(''), 3000);
-  };
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
-      const promises: any[] = [
+      const [resumo, alertas, logs, prods] = await Promise.all([
         apiClient.get<DashboardResumo>('/dashboard/resumo'),
         apiClient.get<{ alertas: AlertaPreco[] }>('/dashboard/alertas'),
         apiClient.get<AuditLog[]>('/dashboard/audit-logs'),
         apiClient.get<Produto[]>('/produtos'),
-        apiClient.get<any[]>('/dashboard/alertas/duplicidade'),
-        apiClient.get<any[]>('/dashboard/insights/volatilidade'),
-        apiClient.get<ForecastInfo[]>('/dashboard/insights/forecast'),
-        apiClient.get<AnomaliaEstatistica[]>('/dashboard/alertas/estatisticos'),
-        apiClient.get<any[]>('/dashboard/insights/tendencia'),
-      ];
-
-      if (authUser?.role === 'admin') {
-        promises.push(apiClient.get<User[]>('/users'));
-        promises.push(apiClient.get<Department[]>('/users/departments'));
-        promises.push(apiClient.get<any[]>('/webhooks'));
-      }
-
-      const results = await Promise.all(promises);
+      ]);
       
-      setData(results[0]);
-      setAlertas(results[1].alertas);
-      setAuditLogs(results[2]);
-      setProdutos(results[3]);
-      setDuplicatas(results[4]);
-      setVolatilidade(results[5]);
-      setForecasts(results[6]);
-      setAnomalias(results[7]);
-      setTrendData(results[8]);
+      setData(resumo);
+      setAlertas(alertas.alertas);
+      setAuditLogs(logs);
+      setProdutos(prods);
       
       if (authUser?.role === 'admin') {
-        setUsers(results[9]);
-        setDepartments(results[10]);
-        setWebhooks(results[11]);
+        const [userList, depts] = await Promise.all([
+          apiClient.get<User[]>('/users'),
+          apiClient.get<Department[]>('/users/departments'),
+        ]);
+        setUsers(userList);
+        setDepartments(depts);
       }
     } catch (err) {
       console.error(err);
+      setStatusMessage('Falha ao sincronizar dados. Verifique sua conexão.');
+      setTimeout(() => setStatusMessage(''), 5000);
     } finally {
       setLoading(false);
     }
   }, [authUser]);
 
   useEffect(() => {
-    if (isAuthenticated) fetchData();
-  }, [isAuthenticated, fetchData]);
+    if (isAuthenticated) {
+      fetchData();
 
-  // SSE Notifications
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const eventSource = new EventSource(`/api/v1/dashboard/notifications`);
-    eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'JOB_STARTED') {
-        setActiveJobs(prev => [...prev, { job_id: data.payload.job_id, status: 'in_progress', success: null, file: data.payload.file }]);
-      } 
-      else if (data.type === 'JOB_COMPLETED' || data.type === 'JOB_FAILED') {
-        setActiveJobs(prev => prev.map(job => job.job_id === data.payload.job_id ? { ...job, status: data.type === 'JOB_COMPLETED' ? 'completed' : 'failed', success: data.type === 'JOB_COMPLETED' } : job));
-        if (data.type === 'JOB_COMPLETED') { 
-          showStatus(`Concluído: ${data.payload.file || 'arquivo'}`); 
-          fetchData(); 
+      // SSE para notificações em tempo real
+      const eventSource = new EventSource('/api/v1/dashboard/notifications');
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          setStatusMessage(payload.message || 'Nova notificação do sistema');
+          
+          // Se for um evento de conclusão, recarrega dados para refletir mudanças
+          if (payload.status === 'completed' || payload.type?.includes('finished')) {
+            fetchData();
+          }
+          
+          setTimeout(() => setStatusMessage(''), 8000);
+        } catch (e) {
+          console.error("Erro ao processar mensagem SSE", e);
         }
-      }
-      else if (data.type === 'ANOMALY_DETECTED') {
-        showStatus(`ALERTA: Anomalia crítica detectada no produto ${data.payload.produto}!`);
-        fetchData();
-      }
-    };
-    return () => eventSource.close();
+      };
+
+      eventSource.onerror = () => {
+        eventSource.close();
+      };
+
+      return () => eventSource.close();
+    }
   }, [isAuthenticated, fetchData]);
 
-  const handleProcessBatch = async () => {
-    setIsProcessing(true);
-    try { 
-      await apiClient.post<any>('/notas/processar-lote', {}); 
-      showStatus("Lote em processamento..."); 
-    } catch (err) { alert("Falha no worker."); } 
-    finally { setIsProcessing(false); }
+  const handleExportAudit = () => {
+    window.location.href = '/api/v1/dashboard/audit-logs/export';
   };
 
-  const handleExport = () => {
-    showStatus("Gerando relatório...");
-    let endpoint = activeTab === 'auditoria' ? '/dashboard/audit-logs/export' : '/produtos/export';
-    fetch(`/api/v1${endpoint}`).then(r => r.blob()).then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${activeTab}_${new Date().getTime()}.csv`;
-        a.click();
-    });
+  const handleExportProdutos = () => {
+    window.location.href = '/api/v1/produtos/export';
   };
-
-  const handleUpdateCategory = async (ean: string) => {
-    try {
-      await apiClient.patch(`/produtos/${ean}`, { categoria: editValue });
-      setEditingEan(null);
-      showStatus("Produto atualizado!");
-      fetchData();
-    } catch (err) { alert("Erro na atualização."); }
-  };
-
-  const handleCreateUser = async (userData: any) => {
-    try {
-      await apiClient.post('/users', userData);
-      showStatus("Usuário criado com sucesso!");
-      fetchData();
-    } catch (err) {
-      throw err;
-    }
-  };
-
-  const handleToggleUserStatus = async (user: User) => {
-    try {
-      await apiClient.patch(`/users/${user.id}`, { is_active: !user.is_active });
-      showStatus(`Usuário ${user.username} ${user.is_active ? 'desativado' : 'ativado'}!`);
-      fetchData();
-    } catch (err) { alert("Erro ao alterar status."); }
-  };
-
-  const handleDeleteWebhook = async (id: string) => {
-    if (!confirm("Remover?")) return;
-    try { await apiClient.post(`/webhooks/${id}`, {}, { method: 'DELETE' }); fetchData(); } catch(e) { alert("Erro"); }
-  };
-
-  const chartData = useMemo(() => data?.por_categoria.map(c => ({ name: c.categoria, total: Number(c.total) })) || [], [data]);
-  const filteredProdutos = useMemo(() => produtos.filter(p => p.nome_limpo.toLowerCase().includes(searchProduto.toLowerCase()) || p.ean.includes(searchProduto)), [produtos, searchProduto]);
 
   if (!isAuthenticated) return <Login />;
-  if (loading) return <div className="p-12 font-bold animate-pulse text-blue-800 uppercase tracking-widest text-center">Iniciando Portal de Auditoria Governamental...</div>;
-
-  const isEmpty = (!data || data.total_geral === 0) && activeJobs.length === 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8">
-      <StatusMessage message={statusMessage} />
-      
-      <UserCreateModal 
-        isOpen={isUserModalOpen} 
-        onClose={() => setIsUserModalOpen(false)} 
-        departments={departments} 
-        onSave={handleCreateUser} 
-      />
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex transition-colors duration-300">
+      {/* Overlay for mobile sidebar */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
 
-      <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2 tracking-tighter"><ShieldCheck className="text-blue-600" /> GESTÃO DE COMPRAS</h1>
-          <p className="text-slate-500 text-[10px] font-black uppercase">
-            Portal Corporativo | {authUser?.role} | {departments.find(d => d.id === users.find(u => u.username === authUser?.username)?.department_id)?.name || 'Institucional'}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <nav className="bg-slate-200/50 p-1 rounded-xl flex gap-1 mr-2" role="tablist">
-            {['dashboard', 'auditoria', 'produtos', 'gestao'].map((t) => (
-              (t !== 'gestao' || authUser?.role === 'admin') && (
-                <button 
-                  key={t} 
-                  role="tab" 
-                  aria-selected={activeTab === t} 
-                  onClick={() => setActiveTab(t as Tab)} 
-                  className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${activeTab === t ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
-                >
-                  {t.toUpperCase()}
-                </button>
-              )
-            ))}
-          </nav>
-          <button className="bg-white text-slate-600 border border-slate-200 px-3 py-1.5 rounded-lg text-[10px] font-black hover:bg-red-50 hover:text-red-600 transition-all" onClick={logout}>SAIR</button>
-          <button disabled={isProcessing} onClick={handleProcessBatch} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-[10px] font-black hover:bg-blue-700 flex items-center gap-2">
-            {isProcessing ? <RefreshCw className="animate-spin" size={14} /> : <RefreshCw size={14} />} LOTE
-          </button>
-        </div>
-      </header>
-
-      <AuditChatbot />
-
-      {isEmpty ? (
-        <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border-2 border-dashed border-slate-200">
-          <PackageOpen size={64} className="text-slate-200 mb-6" />
-          <h2 className="text-xl font-black text-slate-800">BASE DE DADOS VAZIA</h2>
-          <p className="text-slate-500 text-sm mt-2">Clique no botão LOTE para iniciar a ingestão institucional.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-3 space-y-6">
-            {activeTab === 'dashboard' && <DashboardView data={data} alerts={alerts} duplicatas={duplicatas} anomalias={anomalias} forecasts={forecasts} chartData={chartData} trendData={trendData} />}
-            {activeTab === 'auditoria' && <AuditoriaView logs={auditLogs} onExport={handleExport} />}
-            {activeTab === 'produtos' && <CatalogoView produtos={filteredProdutos} search={searchProduto} onSearchChange={setSearchProduto} onExport={handleExport} editingEan={editingEan} editValue={editValue} onEditStart={(p) => { setEditingEan(p.ean); setEditValue(p.categoria || ''); }} onEditChange={setEditValue} onEditSave={handleUpdateCategory} onEditCancel={() => setEditingEan(null)} onRefresh={fetchData} />}
-            {activeTab === 'gestao' && (
-              <GestaoView 
-                users={users} 
-                departments={departments} 
-                webhooks={webhooks} 
-                onDeleteWebhook={handleDeleteWebhook}
-                onAddUser={() => setIsUserModalOpen(true)}
-                onToggleUser={handleToggleUserStatus}
-              />
-            )}
+      {/* Sidebar Navigation */}
+      <aside className={`w-64 bg-slate-900 dark:bg-slate-900 text-slate-300 flex flex-col fixed inset-y-0 z-50 transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 border-r dark:border-slate-800`}>
+        <div className="p-6 flex items-center gap-3 border-b border-slate-800">
+          <div className="bg-indigo-600 p-2 rounded-xl">
+            <ShieldCheck className="text-white" size={24} />
           </div>
-          
-          <div className="lg:col-span-1 space-y-6">
-            <JobMonitor jobs={activeJobs} />
-            
-            <div className="bg-white p-6 rounded-2xl border shadow-sm">
-              <h3 className="text-[10px] font-black mb-4 text-slate-400 uppercase tracking-widest">Network Integrity</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center text-[10px]">
-                  <span className="text-slate-500 font-bold">API GATEWAY</span>
-                  <span className="text-green-600 flex items-center gap-1 font-black underline">ONLINE</span>
-                </div>
-                <div className="flex justify-between items-center text-[10px]">
-                  <span className="text-slate-500 font-bold">SSE STREAM</span>
-                  <span className="text-blue-600 flex items-center gap-1 font-black animate-pulse">ACTIVE</span>
-                </div>
-              </div>
+          <div>
+            <h1 className="text-white font-bold text-sm tracking-tight uppercase">Meu Gestor</h1>
+            <p className="text-[11px] text-slate-500 font-medium">Análise de Compras</p>
+          </div>
+        </div>
+
+        <nav className="flex-1 px-4 py-6 space-y-2">
+          <button 
+            onClick={() => { setActiveTab('dashboard'); setIsSidebarOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 dark:hover:bg-slate-800/50 hover:text-white'}`}
+          >
+            <LayoutDashboard size={18} /> Dashboard
+          </button>
+          <button 
+            onClick={() => { setActiveTab('insights'); setIsSidebarOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${activeTab === 'insights' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 dark:hover:bg-slate-800/50 hover:text-white'}`}
+          >
+            <TrendingUp size={18} /> Insights IA
+          </button>
+          <button 
+            onClick={() => { setActiveTab('auditoria'); setIsSidebarOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${activeTab === 'auditoria' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 dark:hover:bg-slate-800/50 hover:text-white'}`}
+          >
+            <ClipboardCheck size={18} /> Histórico
+          </button>
+          <button 
+            onClick={() => { setActiveTab('produtos'); setIsSidebarOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${activeTab === 'produtos' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 dark:hover:bg-slate-800/50 hover:text-white'}`}
+          >
+            <Package size={18} /> Meus Itens
+          </button>
+          {authUser?.role === 'admin' && (
+            <button 
+              onClick={() => { setActiveTab('gestao'); setIsSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${activeTab === 'gestao' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 dark:hover:bg-slate-800/50 hover:text-white'}`}
+            >
+              <Shield size={18} /> Configurações
+            </button>
+          )}
+        </nav>
+
+        <div className="p-4 border-t border-slate-800 mt-auto">
+          <div className="bg-slate-800/50 p-4 rounded-2xl flex items-center gap-3">
+            <div className="bg-slate-700 h-10 w-10 rounded-full flex items-center justify-center text-indigo-400 font-bold">
+              {authUser?.username?.[0].toUpperCase()}
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <p className="text-white text-xs font-bold truncate">{authUser?.username}</p>
+              <p className="text-[11px] text-slate-500 uppercase font-bold">{authUser?.role}</p>
+            </div>
+            <button 
+              onClick={logout}
+              className="text-slate-500 hover:text-red-400 transition-colors"
+              title="Sair"
+              aria-label="Sair do sistema"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 md:ml-64 min-h-screen transition-all duration-300">
+        {/* Top Header */}
+        <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 h-16 sticky top-0 z-40 flex items-center justify-between px-4 md:px-8 transition-colors">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl md:hidden"
+              aria-label="Abrir menu"
+            >
+              <Settings2 size={20} />
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">System Online</span>
             </div>
           </div>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={fetchData} 
+              className="p-2 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors" 
+              title="Atualizar dados"
+              aria-label="Atualizar dados do dashboard"
+            >
+              <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+            </button>
+            <div className="h-6 w-[1px] bg-slate-200 dark:bg-slate-800 hidden sm:block mx-2" />
+            <div className="hidden sm:flex items-center gap-3">
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-tighter">{new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+            </div>
+          </div>
+        </header>
+
+        {/* View Content */}
+        <div className="p-8 pb-24 overflow-x-hidden">
+          <Suspense fallback={
+            <div className="space-y-8 animate-in fade-in duration-500">
+              <div className="flex flex-col gap-2">
+                <Skeleton className="h-8 w-64" />
+                <Skeleton className="h-4 w-96" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+              </div>
+              <Skeleton className="h-[400px] rounded-3xl" />
+            </div>
+          }>
+            <div key={activeTab} className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {activeTab === 'dashboard' && <DashboardView data={data} alerts={alerts} produtosCount={produtos.length} />}
+              {activeTab === 'insights' && <InsightsView />}
+              {activeTab === 'auditoria' && <AuditoriaView logs={auditLogs} onExport={handleExportAudit} />}
+              {activeTab === 'produtos' && <CatalogoView produtos={produtos} onRefresh={fetchData} onExport={handleExportProdutos} />}
+              {activeTab === 'gestao' && <GestaoView users={users} departments={departments} onRefresh={fetchData} />}
+            </div>
+          </Suspense>
         </div>
-      )}
+
+        {/* AI Chatbot Overlay */}
+        <AuditChatbot />
+      </main>
+
+      {statusMessage && <StatusMessage message={statusMessage} />}
     </div>
   );
 }
