@@ -131,6 +131,40 @@ class ArchiveImportacaoResponse(BaseModel):
     archive_reason: str
 
 
+class ImportacaoHistoricoItemResponse(BaseModel):
+    """Item operacional do historico de importacoes."""
+
+    id: UUID
+    chave_acesso: str
+    numero_nota: str
+    fornecedor: str
+    data_emissao: date
+    valor_total: Decimal
+    status: str
+    created_at: datetime
+    imported_at: datetime
+    extraction_quality_status: str | None = None
+    extraction_parser_source: str | None = None
+    extraction_item_count: int | None = None
+    extraction_missing_ean_count: int | None = None
+    extraction_total_mismatch: bool | None = None
+    extraction_quality_details: str | None = None
+    archived_at: datetime | None = None
+    archived_by: str | None = None
+    archive_reason: str | None = None
+
+
+class ImportacoesHistoricoResponse(BaseModel):
+    """Resposta paginada simples para acompanhamento operacional de importacoes."""
+
+    items: list[ImportacaoHistoricoItemResponse]
+    total: int
+    limit: int
+    offset: int
+    status: str
+    quality_status: str
+
+
 class ProcessamentoLoteResponse(BaseModel):
     """Resposta para o início de um processamento em lote."""
     mensagem: str

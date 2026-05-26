@@ -67,6 +67,52 @@ async def _count(model) -> int:
         return await db.scalar(select(func.count()).select_from(model)) or 0
 
 
+async def _create_import_history_note(
+    *,
+    chave: str,
+    cnpj: str,
+    numero_nota: str,
+    status_nota: str = "active",
+    quality_status: str = "ok",
+    parser_source: str = "deterministic",
+    missing_ean_count: int = 0,
+    total_mismatch: bool = False,
+) -> None:
+    async with SessionLocal() as db:
+        fornecedor = Fornecedor(
+            cnpj=cnpj,
+            razao_social=f"MERCADO HISTORICO {numero_nota} LTDA",
+        )
+        db.add(fornecedor)
+        await db.flush()
+        db.add(
+            NotaFiscal(
+                fornecedor_id=fornecedor.id,
+                numero_nota=numero_nota,
+                chave_acesso=chave,
+                data_emissao=date(2026, 5, 26),
+                valor_total=Decimal("12.34"),
+                status=status_nota,
+                archived_at=datetime.now(timezone.utc) if status_nota == "archived" else None,
+                archived_by="history_admin" if status_nota == "archived" else None,
+                archive_reason="archive para historico" if status_nota == "archived" else None,
+                extraction_quality_status=quality_status,
+                extraction_parser_source=parser_source,
+                extraction_item_count=2,
+                extraction_missing_ean_count=missing_ean_count,
+                extraction_total_mismatch=total_mismatch,
+                extraction_quality_details=json.dumps(
+                    {
+                        "quality_status": quality_status,
+                        "parser_source": parser_source,
+                        "details": {"html_truncated": parser_source == "ai_fallback"},
+                    }
+                ),
+            )
+        )
+        await db.commit()
+
+
 def _mock_import_dependencies(monkeypatch, dto: NotaFiscalDTO) -> None:
     async def fake_fetch_url(self, url: str) -> str:
         return "<html>nota fiscal mockada</html>"
@@ -421,6 +467,100 @@ async def test_nota_antiga_sem_score_qualidade_permanece_compativel():
     assert nota.extraction_quality_status is None
     assert nota.extraction_parser_source is None
     assert nota.extraction_quality_details is None
+
+
+@pytest.mark.anyio
+async def test_listar_importacoes_retorna_status_qualidade_e_chave_mascarada():
+    chave = _valid_access_key("5226051745740400118365511000040935127519930")
+    token = await _create_user("import_history_admin")
+    await _create_import_history_note(
+        chave=chave,
+        cnpj="17457404001994",
+        numero_nota="HIST-001",
+        quality_status="warning",
+        parser_source="ai_fallback",
+        missing_ean_count=1,
+        total_mismatch=True,
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/notas/importacoes?status=all&quality_status=all&limit=50",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    assert chave not in response.text
+    body = response.json()
+    item = next(item for item in body["items"] if item["numero_nota"] == "HIST-001")
+    assert item["chave_acesso"] == f"{chave[:4]}...{chave[-4:]}"
+    assert item["fornecedor"] == "MERCADO HISTORICO HIST-001 LTDA"
+    assert item["status"] == "active"
+    assert item["extraction_quality_status"] == "warning"
+    assert item["extraction_parser_source"] == "ai_fallback"
+    assert item["extraction_item_count"] == 2
+    assert item["extraction_missing_ean_count"] == 1
+    assert item["extraction_total_mismatch"] is True
+    assert item["extraction_quality_details"] is not None
+    assert body["limit"] == 50
+    assert body["offset"] == 0
+
+
+@pytest.mark.anyio
+async def test_listar_importacoes_filtra_status_e_quality_status():
+    token = await _create_user("import_history_filter_admin")
+    active_chave = _valid_access_key("5226051745740400118365511000040935127519940")
+    archived_chave = _valid_access_key("5226051745740400118365511000040935127519950")
+    await _create_import_history_note(
+        chave=active_chave,
+        cnpj="17457404001995",
+        numero_nota="HIST-ACTIVE",
+        status_nota="active",
+        quality_status="ok",
+    )
+    await _create_import_history_note(
+        chave=archived_chave,
+        cnpj="17457404001996",
+        numero_nota="HIST-ARCHIVED",
+        status_nota="archived",
+        quality_status="failed",
+        parser_source="ai_fallback",
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        archived_response = await client.get(
+            "/api/v1/notas/importacoes?status=archived&quality_status=all&limit=50",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        failed_response = await client.get(
+            "/api/v1/notas/importacoes?status=all&quality_status=failed&limit=50",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert archived_response.status_code == 200
+    archived_body = archived_response.json()
+    assert archived_body["status"] == "archived"
+    assert all(item["status"] == "archived" for item in archived_body["items"])
+    archived_item = next(item for item in archived_body["items"] if item["numero_nota"] == "HIST-ARCHIVED")
+    assert archived_item["archived_at"] is not None
+    assert archived_item["archived_by"] == "history_admin"
+    assert archived_item["archive_reason"] == "archive para historico"
+    assert active_chave not in archived_response.text
+
+    assert failed_response.status_code == 200
+    failed_body = failed_response.json()
+    assert failed_body["quality_status"] == "failed"
+    assert all(item["extraction_quality_status"] == "failed" for item in failed_body["items"])
+    assert any(item["numero_nota"] == "HIST-ARCHIVED" for item in failed_body["items"])
+    assert archived_chave not in failed_response.text
+
+
+@pytest.mark.anyio
+async def test_listar_importacoes_sem_autenticacao_retorna_401():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/v1/notas/importacoes")
+
+    assert response.status_code == 401
 
 
 @pytest.mark.anyio

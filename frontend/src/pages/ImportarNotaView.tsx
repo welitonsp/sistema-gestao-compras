@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from 'react';
-import { AlertCircle, Archive, CheckCircle2, FilePlus2, Loader2, ReceiptText, ShieldAlert, X } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertCircle, Archive, Bot, CheckCircle2, FilePlus2, Loader2, ReceiptText, RefreshCw, ShieldAlert, X } from 'lucide-react';
 import { ApiError, apiClient } from '../api/client';
 import {
   ArchiveImportacaoRequest,
   ArchiveImportacaoResponse,
   ImportacaoChaveRequest,
+  ImportacaoHistoricoItem,
+  ImportacoesHistoricoResponse,
   ImportacaoNotaResponse,
 } from '../types/api';
 
@@ -34,6 +36,19 @@ const numberLabel = (value: number | string | null | undefined) => {
 };
 
 const countValue = (value: number | null | undefined) => value ?? 0;
+
+const formatCurrency = (value: number | string | null | undefined) => {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed)
+    ? parsed.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+    : 'R$ 0,00';
+};
+
+const formatDate = (value: string | null | undefined) => {
+  if (!value) return '-';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('pt-BR');
+};
 
 const ImportQualityBadge: React.FC<{ status?: string | null }> = ({ status }) => {
   const normalized = status === 'failed' || status === 'warning' || status === 'ok' ? status : 'warning';
@@ -101,6 +116,274 @@ const ImportQualitySummary: React.FC<{ nota: ImportacaoNotaResponse['nota_fiscal
   );
 };
 
+const compactQualityConfig = {
+  ok: {
+    label: 'Confiavel',
+    className: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800',
+  },
+  warning: {
+    label: 'Atencao',
+    className: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800',
+  },
+  failed: {
+    label: 'Incompleta',
+    className: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-800',
+  },
+};
+
+const CompactQualityBadge: React.FC<{ status?: string | null }> = ({ status }) => {
+  const normalized = status === 'failed' || status === 'warning' || status === 'ok' ? status : 'warning';
+  const config = compactQualityConfig[normalized];
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold ${config.className}`}>
+      {config.label}
+    </span>
+  );
+};
+
+const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
+  const archived = status === 'archived';
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+      archived
+        ? 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+        : 'bg-indigo-100 text-indigo-800 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-200 dark:border-indigo-800'
+    }`}>
+      {archived ? 'Arquivada' : 'Ativa'}
+    </span>
+  );
+};
+
+const readQualityDetails = (details: ImportacaoHistoricoItem['extraction_quality_details']) => {
+  if (!details) return {};
+  if (typeof details === 'object') return details as Record<string, unknown>;
+  try {
+    return JSON.parse(details) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+};
+
+const importAlerts = (item: ImportacaoHistoricoItem) => {
+  const details = readQualityDetails(item.extraction_quality_details);
+  const nestedDetails = typeof details.details === 'object' && details.details !== null
+    ? details.details as Record<string, unknown>
+    : {};
+
+  return [
+    countValue(item.extraction_missing_ean_count) > 0 ? `${item.extraction_missing_ean_count} sem EAN` : null,
+    item.extraction_total_mismatch ? 'Total divergente' : null,
+    item.extraction_parser_source === 'ai_fallback' ? 'Fallback IA' : null,
+    nestedDetails.html_truncated === true ? 'HTML truncado' : null,
+  ].filter((message): message is string => Boolean(message));
+};
+
+const ImportHistorySection: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
+  const [items, setItems] = useState<ImportacaoHistoricoItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [statusFilter, setStatusFilter] = useState<'active' | 'archived' | 'all'>('active');
+  const [qualityFilter, setQualityFilter] = useState<'all' | 'ok' | 'warning' | 'failed'>('all');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const loadImports = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const params = new URLSearchParams({
+        limit: '20',
+        offset: '0',
+        status: statusFilter,
+        quality_status: qualityFilter,
+      });
+      const response = await apiClient.get<ImportacoesHistoricoResponse>(`/notas/importacoes?${params.toString()}`);
+      setItems(response.items);
+      setTotal(response.total);
+    } catch {
+      setError('Nao foi possivel carregar o historico de importacoes.');
+    } finally {
+      setLoading(false);
+    }
+  }, [qualityFilter, statusFilter]);
+
+  useEffect(() => {
+    loadImports();
+  }, [loadImports, refreshKey]);
+
+  const summary = useMemo(() => ({
+    loaded: items.length,
+    warning: items.filter((item) => item.extraction_quality_status === 'warning').length,
+    failed: items.filter((item) => item.extraction_quality_status === 'failed').length,
+    fallback: items.filter((item) => item.extraction_parser_source === 'ai_fallback').length,
+  }), [items]);
+
+  return (
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden transition-colors">
+      <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex items-start gap-4">
+          <div className="p-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl">
+            <ReceiptText size={24} />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white">Historico de importacoes</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              {summary.loaded} de {total} importacao(oes) carregada(s), {summary.warning} com atencao, {summary.failed} incompleta(s), {summary.fallback} via fallback IA.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3">
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-semibold text-slate-700 dark:text-slate-200"
+            aria-label="Filtrar por status"
+          >
+            <option value="active">Ativas</option>
+            <option value="archived">Arquivadas</option>
+            <option value="all">Todas</option>
+          </select>
+          <select
+            value={qualityFilter}
+            onChange={(event) => setQualityFilter(event.target.value as typeof qualityFilter)}
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-semibold text-slate-700 dark:text-slate-200"
+            aria-label="Filtrar por qualidade"
+          >
+            <option value="all">Todas qualidades</option>
+            <option value="ok">Confiavel</option>
+            <option value="warning">Atencao</option>
+            <option value="failed">Incompleta</option>
+          </select>
+          <button
+            type="button"
+            onClick={loadImports}
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-2xl text-sm font-bold disabled:opacity-50 transition-all"
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            Atualizar lista
+          </button>
+        </div>
+      </div>
+
+      <div className="p-8">
+        {error && (
+          <div className="flex items-start gap-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/40 text-rose-700 dark:text-rose-300 p-4 rounded-2xl" role="alert">
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            <p className="text-sm font-semibold">{error}</p>
+          </div>
+        )}
+
+        {!error && loading && (
+          <div className="flex items-center gap-3 text-sm font-semibold text-slate-500 dark:text-slate-400" role="status" aria-live="polite">
+            <Loader2 size={18} className="animate-spin" />
+            Carregando historico...
+          </div>
+        )}
+
+        {!error && !loading && items.length === 0 && (
+          <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Nenhuma importacao registrada ainda.</p>
+        )}
+
+        {!error && items.length > 0 && (
+          <>
+            <div className="hidden xl:block overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-950/40 text-[11px] uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Nota</th>
+                    <th className="px-4 py-3">Fornecedor</th>
+                    <th className="px-4 py-3">Data</th>
+                    <th className="px-4 py-3">Valor</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Qualidade</th>
+                    <th className="px-4 py-3">Origem</th>
+                    <th className="px-4 py-3">Alertas</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {items.map((item) => (
+                    <tr key={item.id} className="text-slate-700 dark:text-slate-200">
+                      <td className="px-4 py-4">
+                        <p className="font-bold">{item.numero_nota}</p>
+                        <p className="font-mono text-xs text-slate-400">{item.chave_acesso}</p>
+                      </td>
+                      <td className="px-4 py-4 max-w-[240px] truncate">{item.fornecedor}</td>
+                      <td className="px-4 py-4">{formatDate(item.data_emissao)}</td>
+                      <td className="px-4 py-4 font-semibold">{formatCurrency(item.valor_total)}</td>
+                      <td className="px-4 py-4"><StatusBadge status={item.status} /></td>
+                      <td className="px-4 py-4"><CompactQualityBadge status={item.extraction_quality_status} /></td>
+                      <td className="px-4 py-4">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400">
+                          {item.extraction_parser_source === 'ai_fallback' && <Bot size={14} />}
+                          {item.extraction_parser_source === 'ai_fallback' ? 'Fallback IA' : 'Deterministico'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap gap-1.5">
+                          {importAlerts(item).length > 0 ? importAlerts(item).map((alert) => (
+                            <span key={alert} className="rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-200 px-2 py-1 text-[11px] font-bold">
+                              {alert}
+                            </span>
+                          )) : <span className="text-xs text-slate-400">Sem alertas</span>}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="xl:hidden space-y-3">
+              {items.map((item) => {
+                const alerts = importAlerts(item);
+                return (
+                  <div key={item.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-900 dark:text-white">Nota {item.numero_nota}</p>
+                        <p className="font-mono text-xs text-slate-400 mt-1">{item.chave_acesso}</p>
+                      </div>
+                      <StatusBadge status={item.status} />
+                    </div>
+                    <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">{item.fornecedor}</p>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-widest text-slate-400 font-bold">Data</p>
+                        <p className="font-semibold text-slate-700 dark:text-slate-200">{formatDate(item.data_emissao)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-widest text-slate-400 font-bold">Valor</p>
+                        <p className="font-semibold text-slate-700 dark:text-slate-200">{formatCurrency(item.valor_total)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-widest text-slate-400 font-bold">Itens</p>
+                        <p className="font-semibold text-slate-700 dark:text-slate-200">{countValue(item.extraction_item_count)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-widest text-slate-400 font-bold">Origem</p>
+                        <p className="font-semibold text-slate-700 dark:text-slate-200">{item.extraction_parser_source === 'ai_fallback' ? 'Fallback IA' : 'Deterministico'}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <CompactQualityBadge status={item.extraction_quality_status} />
+                      {alerts.length > 0 ? alerts.map((alert) => (
+                        <span key={alert} className="rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-200 px-2 py-1 text-[11px] font-bold">
+                          {alert}
+                        </span>
+                      )) : <span className="text-xs font-semibold text-slate-400">Sem alertas</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }) => {
   const [chaveAcesso, setChaveAcesso] = useState('');
   const [loading, setLoading] = useState(false);
@@ -112,6 +395,7 @@ export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }
   const [archiveSuccess, setArchiveSuccess] = useState<ArchiveImportacaoResponse | null>(null);
   const [archiveError, setArchiveError] = useState('');
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   const validationMessage = useMemo(() => {
     if (!chaveAcesso) return '';
@@ -185,6 +469,7 @@ export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }
       const response = await apiClient.post<ImportacaoNotaResponse>('/notas/importacao-por-chave', payload);
       setSuccess(response);
       setChaveAcesso('');
+      setHistoryRefreshKey((value) => value + 1);
       onImported?.();
     } catch {
       setError('Nao foi possivel importar a nota. Confira a chave, tente novamente ou consulte a SEFAZ mais tarde.');
@@ -244,6 +529,7 @@ export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }
       setArchiveChave('');
       setArchiveMotivo('');
       setShowArchiveConfirm(false);
+      setHistoryRefreshKey((value) => value + 1);
       onImported?.();
     } catch (err) {
       setArchiveError(resolveArchiveError(err));
@@ -451,6 +737,8 @@ export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }
           </div>
         </form>
       </div>
+
+      <ImportHistorySection refreshKey={historyRefreshKey} />
 
       {showArchiveConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="archive-confirm-title">

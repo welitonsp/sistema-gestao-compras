@@ -82,6 +82,36 @@ export interface ArchiveImportacaoResponse {
   archive_reason: string;
 }
 
+export interface ImportacaoHistoricoItem {
+  id: string;
+  chave_acesso: string;
+  numero_nota: string;
+  fornecedor: string;
+  data_emissao: string;
+  valor_total: number | string;
+  status: 'active' | 'archived' | string;
+  created_at: string;
+  imported_at: string;
+  extraction_quality_status?: 'ok' | 'warning' | 'failed' | string | null;
+  extraction_parser_source?: 'deterministic' | 'ai_fallback' | string | null;
+  extraction_item_count?: number | null;
+  extraction_missing_ean_count?: number | null;
+  extraction_total_mismatch?: boolean | null;
+  extraction_quality_details?: string | Record<string, unknown> | null;
+  archived_at?: string | null;
+  archived_by?: string | null;
+  archive_reason?: string | null;
+}
+
+export interface ImportacoesHistoricoResponse {
+  items: ImportacaoHistoricoItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  status: string;
+  quality_status: string;
+}
+
 export interface AuditLog {
   id: string;
   usuario: string;
