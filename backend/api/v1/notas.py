@@ -2,22 +2,26 @@
 
 from __future__ import annotations
 
-from typing import Any, Annotated
+from typing import Any, Annotated, Literal
 from pathlib import Path
 
-from fastapi import APIRouter, Body, HTTPException, status, Request, Depends
+from fastapi import APIRouter, Body, HTTPException, Query, status, Request, Depends
 from pydantic import ValidationError
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
 from backend.api.dependencies import DbSession, ArqPool, CurrentUser, HttpClient, RoleChecker
-from backend.models.compras import User, UserRole
+from backend.models.compras import NotaFiscal, User, UserRole
 from backend.core.fiscal import validar_chave_acesso
 from backend.schemas.importacao import (
     ArchiveImportacaoRequest,
     ArchiveImportacaoResponse,
     ChaveAcesso44,
     ImportacaoChaveRequest,
+    ImportacaoHistoricoItemResponse,
     ImportacaoNotaResponse,
+    ImportacoesHistoricoResponse,
     ProcessamentoLoteResponse,
 )
 from backend.services.import_archive_service import (
@@ -57,6 +61,7 @@ def _is_chave_acesso_integrity_error(exc: IntegrityError) -> bool:
         or "notas_fiscais_chave_acesso" in message
         or ("unique" in message and "chave_acesso" in message)
     )
+
 
 @router.get(
     "/jobs/{job_id}",
@@ -109,6 +114,75 @@ async def processar_lote_background(
         mensagem=f"Processamento de {len(arquivos)} arquivos iniciado em background.",
         total_arquivos=len(arquivos),
         job_ids=job_ids
+    )
+
+
+@router.get(
+    "/importacoes",
+    response_model=ImportacoesHistoricoResponse,
+    summary="Listar historico operacional de importacoes",
+)
+async def listar_importacoes(
+    db: DbSession,
+    user: CurrentUser,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    status_filter: Literal["active", "archived", "all"] = Query("active", alias="status"),
+    quality_status: Literal["ok", "warning", "failed", "all"] = Query("all"),
+) -> ImportacoesHistoricoResponse:
+    """Retorna importacoes recentes com status e qualidade sem expor chave completa."""
+
+    filters = []
+    if status_filter != "all":
+        filters.append(NotaFiscal.status == status_filter)
+    if quality_status != "all":
+        filters.append(NotaFiscal.extraction_quality_status == quality_status)
+    if user.department_id:
+        filters.append(NotaFiscal.department_id == user.department_id)
+
+    total_stmt = select(func.count()).select_from(NotaFiscal).where(*filters)
+    total = await db.scalar(total_stmt) or 0
+
+    stmt = (
+        select(NotaFiscal)
+        .options(selectinload(NotaFiscal.fornecedor))
+        .where(*filters)
+        .order_by(NotaFiscal.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await db.execute(stmt)
+    notas = result.scalars().all()
+
+    return ImportacoesHistoricoResponse(
+        items=[
+            ImportacaoHistoricoItemResponse(
+                id=nota.id,
+                chave_acesso=_mascarar_chave_acesso(nota.chave_acesso),
+                numero_nota=nota.numero_nota,
+                fornecedor=nota.fornecedor.razao_social,
+                data_emissao=nota.data_emissao,
+                valor_total=nota.valor_total,
+                status=nota.status,
+                created_at=nota.created_at,
+                imported_at=nota.created_at,
+                extraction_quality_status=nota.extraction_quality_status,
+                extraction_parser_source=nota.extraction_parser_source,
+                extraction_item_count=nota.extraction_item_count,
+                extraction_missing_ean_count=nota.extraction_missing_ean_count,
+                extraction_total_mismatch=nota.extraction_total_mismatch,
+                extraction_quality_details=nota.extraction_quality_details,
+                archived_at=nota.archived_at,
+                archived_by=nota.archived_by,
+                archive_reason=nota.archive_reason,
+            )
+            for nota in notas
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+        status=status_filter,
+        quality_status=quality_status,
     )
 
 @router.post(
