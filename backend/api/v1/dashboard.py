@@ -19,6 +19,8 @@ from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard & Insights"])
 
+ACTIVE_INVOICE_STATUS = "active"
+
 @router.get("/notifications", summary="Stream de notificações em tempo real (SSE)")
 async def stream_notifications(user: CurrentUser):
     """
@@ -109,9 +111,9 @@ async def obter_resumo_dashboard(
     
     # Total Geral filtrado por Dept
     stmt_total = (
-        select(func.sum(HistoricoPreco.preco_pago * HistoricoPreco.quantidade))
-        .join(ItemNotaFiscal, ItemNotaFiscal.ean == HistoricoPreco.ean)
+        select(func.sum(ItemNotaFiscal.valor_total))
         .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+        .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
     )
     if user.role != UserRole.ADMIN:
         stmt_total = stmt_total.where(NotaFiscal.department_id == user.department_id)

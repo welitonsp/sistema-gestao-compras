@@ -3,13 +3,29 @@
 from __future__ import annotations
 import asyncio
 from typing import List, Dict, Any
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.models.compras import Produto, ClassificacaoCache
+from backend.models.compras import Produto, ClassificacaoCache, ItemNotaFiscal, NotaFiscal
 from backend.services.ai_processor import AIStructuredExtractor
 from core.logger import get_logger
 
 logger = get_logger("services.healer")
+
+ACTIVE_INVOICE_STATUS = "active"
+
+
+def _produto_operacional_filter():
+    item_exists = select(ItemNotaFiscal.id).where(ItemNotaFiscal.ean == Produto.ean).exists()
+    active_item_exists = (
+        select(ItemNotaFiscal.id)
+        .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+        .where(
+            ItemNotaFiscal.ean == Produto.ean,
+            NotaFiscal.status == ACTIVE_INVOICE_STATUS,
+        )
+        .exists()
+    )
+    return or_(~item_exists, active_item_exists)
 
 class CatalogHealerService:
     """Identifies inconsistencies in the product catalog and suggests unifications."""
@@ -27,7 +43,7 @@ class CatalogHealerService:
         
         # 1. Busca produtos que podem ser duplicados ou inconsistentes
         # Pega produtos agrupados por nome aproximado (simulação simples)
-        stmt = select(Produto).order_by(Produto.nome_limpo)
+        stmt = select(Produto).where(_produto_operacional_filter()).order_by(Produto.nome_limpo)
         result = await self.db.execute(stmt)
         all_products = result.scalars().all()
         

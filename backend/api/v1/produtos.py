@@ -9,12 +9,28 @@ import io
 import pandas as pd
 from sqlalchemy import select, or_
 from backend.api.dependencies import DbSession, CurrentUser, RoleChecker
-from backend.models.compras import Produto, ClassificacaoCache, UserRole, User
+from backend.models.compras import Produto, ClassificacaoCache, UserRole, User, ItemNotaFiscal, NotaFiscal
 from backend.schemas.produtos import ProdutoResponse, ProdutoUpdate
 
 from backend.services.catalog_healer import CatalogHealerService
 
 router = APIRouter(prefix="/produtos", tags=["Produtos"])
+
+ACTIVE_INVOICE_STATUS = "active"
+
+
+def _produto_operacional_filter():
+    item_exists = select(ItemNotaFiscal.id).where(ItemNotaFiscal.ean == Produto.ean).exists()
+    active_item_exists = (
+        select(ItemNotaFiscal.id)
+        .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+        .where(
+            ItemNotaFiscal.ean == Produto.ean,
+            NotaFiscal.status == ACTIVE_INVOICE_STATUS,
+        )
+        .exists()
+    )
+    return or_(~item_exists, active_item_exists)
 
 @router.get(
     "/maintenance",
@@ -50,7 +66,7 @@ async def exportar_produtos(
     async def generate_csv():
         yield "EAN/Codigo;Descricao Canonica;Marca;Categoria;Unidade\n"
         
-        stmt = select(Produto).order_by(Produto.nome_limpo)
+        stmt = select(Produto).where(_produto_operacional_filter()).order_by(Produto.nome_limpo)
         result = await db.stream(stmt)
         
         async for row in result:
@@ -79,7 +95,7 @@ async def listar_produtos(
     offset: int = 0,
 ) -> Any:
     """Retorna a lista de produtos cadastrados no sistema."""
-    stmt = select(Produto)
+    stmt = select(Produto).where(_produto_operacional_filter())
     
     if search:
         stmt = stmt.where(
