@@ -128,6 +128,21 @@ def test_layout_alternativo_nao_quebra_silenciosamente():
     assert dto.itens[0].descricao == expected["itens"][0]["descricao"]
 
 
+def test_parser_deterministico_extrai_nota_longa_sintetica():
+    case_name = "nfe_longa_multiplos_itens"
+    expected = _load_expected(case_name)
+    dto = SefazGoParser().parse(_load_html(case_name))
+
+    assert dto is not None
+    _assert_dto_matches_expected(dto, expected)
+
+    quality = build_extraction_quality(dto, expected, parser_source="deterministic")
+    assert quality.item_count == 80
+    assert quality.extracted_item_count == 80
+    assert quality.total_itens == Decimal("80.00")
+    assert quality.quality_status == "ok"
+
+
 @pytest.mark.anyio
 async def test_fallback_ia_groq_mockado_sem_chamada_real(monkeypatch):
     case_name = "nfe_parser_falha_ai_fallback"

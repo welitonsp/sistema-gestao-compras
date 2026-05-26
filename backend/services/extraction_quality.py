@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from backend.schemas.internal import NotaFiscalDTO
 
@@ -24,6 +24,7 @@ class ExtractionQuality:
     total_mismatch: bool
     parser_source: ParserSource
     quality_status: QualityStatus
+    details: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -44,6 +45,7 @@ def build_extraction_quality(
     parser_source: ParserSource,
     expected_item_count: int | None = None,
     total_tolerance: Decimal | str = Decimal("0.01"),
+    details: dict[str, Any] | None = None,
 ) -> ExtractionQuality:
     total_itens = sum((item.valor_total for item in dto.itens), Decimal("0"))
     total_nota = dto.valor_total
@@ -59,6 +61,8 @@ def build_extraction_quality(
     invalid_quantity_count = sum(1 for item in dto.itens if item.quantidade <= 0)
     invalid_value_count = sum(1 for item in dto.itens if item.valor_unitario < 0 or item.valor_total < 0)
 
+    quality_details = details or {}
+
     if (
         extracted_item_count == 0
         or extracted_item_count != item_count
@@ -67,7 +71,7 @@ def build_extraction_quality(
         or invalid_value_count
     ):
         quality_status: QualityStatus = "failed"
-    elif total_mismatch or missing_ean_count:
+    elif total_mismatch or missing_ean_count or quality_details.get("html_truncated"):
         quality_status = "warning"
     else:
         quality_status = "ok"
@@ -84,4 +88,5 @@ def build_extraction_quality(
         total_mismatch=total_mismatch,
         parser_source=parser_source,
         quality_status=quality_status,
+        details=quality_details,
     )
