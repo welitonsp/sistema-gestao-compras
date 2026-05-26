@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
+import json
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -258,6 +259,8 @@ async def test_patch_produto_categoria_preenche_confirmacao_manual():
                 quantidade=Decimal("1"),
                 valor_unitario=Decimal("7.50"),
                 valor_total=Decimal("7.50"),
+                categoria_sugerida="CATEGORIA SUGERIDA IA",
+                categoria_sugerida_origem="groq",
             )
         )
         await db.commit()
@@ -278,6 +281,13 @@ async def test_patch_produto_categoria_preenche_confirmacao_manual():
                 ClassificacaoCache.descricao_original == "PRODUTO PATCH DESCRICAO ORIGINAL"
             )
         )
+        audit_log = await db.scalar(
+            select(AuditLog).where(
+                AuditLog.operacao == "CATEGORY_CONFIRMED",
+                AuditLog.entidade == "Produto",
+                AuditLog.entidade_id == ean,
+            )
+        )
 
     assert produto.categoria == "CATEGORIA CONFIRMADA"
     assert produto.categoria_confirmada == "CATEGORIA CONFIRMADA"
@@ -288,6 +298,143 @@ async def test_patch_produto_categoria_preenche_confirmacao_manual():
     assert cache.categoria == "CATEGORIA CONFIRMADA"
     assert cache.marca == "NOVA"
     assert cache.verificado_usuario is True
+    assert audit_log is not None
+    detalhes = json.loads(audit_log.detalhes)
+    assert audit_log.usuario == "catalog_confirm_manager"
+    assert detalhes["categoria_anterior"] == "ANTIGA"
+    assert detalhes["categoria_nova"] == "CATEGORIA CONFIRMADA"
+    assert detalhes["origem"] == "manual"
+    assert detalhes["usuario"] == "catalog_confirm_manager"
+    assert detalhes["produto"] == "PRODUTO PATCH CATEGORIA"
+    assert detalhes["categorias_sugeridas_relacionadas"] == ["CATEGORIA SUGERIDA IA"]
+
+
+@pytest.mark.anyio
+async def test_patch_produto_categoria_igual_nao_cria_auditlog():
+    token = await _create_user("catalog_same_category_manager", UserRole.MANAGER)
+    ean = "7891000000101"
+
+    async with SessionLocal() as db:
+        db.add(
+            Produto(
+                ean=ean,
+                nome_limpo="PRODUTO MESMA CATEGORIA",
+                marca="ANTIGA",
+                categoria="CATEGORIA ATUAL",
+                unidade="un",
+            )
+        )
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.patch(
+            f"/api/v1/produtos/{ean}",
+            json={"categoria": "CATEGORIA ATUAL", "marca": "NOVA"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+
+    async with SessionLocal() as db:
+        produto = await db.scalar(select(Produto).where(Produto.ean == ean))
+        audit_count = await db.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(
+                AuditLog.operacao == "CATEGORY_CONFIRMED",
+                AuditLog.entidade_id == ean,
+            )
+        )
+
+    assert produto.categoria_confirmada == "CATEGORIA ATUAL"
+    assert produto.categoria_confirmada_por == "catalog_same_category_manager"
+    assert produto.categoria_confirmada_origem == "manual"
+    assert audit_count == 0
+
+
+@pytest.mark.anyio
+async def test_patch_produto_sem_categoria_nao_cria_auditlog():
+    token = await _create_user("catalog_brand_only_manager", UserRole.MANAGER)
+    ean = "7891000000102"
+
+    async with SessionLocal() as db:
+        db.add(
+            Produto(
+                ean=ean,
+                nome_limpo="PRODUTO SOMENTE MARCA",
+                marca="ANTIGA",
+                categoria="CATEGORIA ATUAL",
+                unidade="un",
+            )
+        )
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.patch(
+            f"/api/v1/produtos/{ean}",
+            json={"marca": "NOVA"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+
+    async with SessionLocal() as db:
+        produto = await db.scalar(select(Produto).where(Produto.ean == ean))
+        audit_count = await db.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(
+                AuditLog.operacao == "CATEGORY_CONFIRMED",
+                AuditLog.entidade_id == ean,
+            )
+        )
+
+    assert produto.marca == "NOVA"
+    assert produto.categoria == "CATEGORIA ATUAL"
+    assert produto.categoria_confirmada is None
+    assert audit_count == 0
+
+
+@pytest.mark.anyio
+async def test_patch_produto_categoria_usuario_sem_permissao_nao_cria_auditlog():
+    token = await _create_user("catalog_operator", UserRole.OPERATOR)
+    ean = "7891000000103"
+
+    async with SessionLocal() as db:
+        db.add(
+            Produto(
+                ean=ean,
+                nome_limpo="PRODUTO BLOQUEADO",
+                marca="ANTIGA",
+                categoria="CATEGORIA ATUAL",
+                unidade="un",
+            )
+        )
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.patch(
+            f"/api/v1/produtos/{ean}",
+            json={"categoria": "CATEGORIA BLOQUEADA"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 403
+
+    async with SessionLocal() as db:
+        produto = await db.scalar(select(Produto).where(Produto.ean == ean))
+        audit_count = await db.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(
+                AuditLog.operacao == "CATEGORY_CONFIRMED",
+                AuditLog.entidade_id == ean,
+            )
+        )
+
+    assert produto.categoria == "CATEGORIA ATUAL"
+    assert produto.categoria_confirmada is None
+    assert audit_count == 0
 
 
 @pytest.mark.anyio
