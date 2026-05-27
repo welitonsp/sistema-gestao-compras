@@ -1,3 +1,5 @@
+import type { ImportacaoLoteChavesRequest, ImportacaoLoteChavesResponse } from '../types/api';
+
 const API_BASE = '/api/v1';
 
 export class ApiError extends Error {
@@ -99,3 +101,7 @@ export const apiClient = {
     return response.json();
   },
 };
+
+export const importarLoteChaves = (
+  payload: ImportacaoLoteChavesRequest,
+): Promise<ImportacaoLoteChavesResponse> => apiClient.post<ImportacaoLoteChavesResponse>('/notas/importacao-lote-chaves', payload);

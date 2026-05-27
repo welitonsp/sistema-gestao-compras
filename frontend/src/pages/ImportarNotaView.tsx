@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Archive, Bot, CheckCircle2, FilePlus2, Loader2, ReceiptText, RefreshCw, ShieldAlert, X } from 'lucide-react';
-import { ApiError, apiClient } from '../api/client';
+import { ApiError, apiClient, importarLoteChaves } from '../api/client';
 import {
   ArchiveImportacaoRequest,
   ArchiveImportacaoResponse,
   ImportacaoChaveRequest,
   ImportacaoHistoricoItem,
+  ImportacaoLoteChavesRequest,
+  ImportacaoLoteChavesResponse,
+  ImportacaoLoteChaveResultado,
   ImportacoesHistoricoResponse,
   ImportacaoNotaResponse,
 } from '../types/api';
@@ -13,6 +16,8 @@ import {
 interface ImportarNotaViewProps {
   onImported?: () => void;
 }
+
+const MAX_BATCH_KEYS = 5;
 
 const qualityBadgeConfig = {
   ok: {
@@ -139,6 +144,71 @@ const CompactQualityBadge: React.FC<{ status?: string | null }> = ({ status }) =
       {config.label}
     </span>
   );
+};
+
+const batchStatusConfig: Record<ImportacaoLoteChaveResultado['status'], { label: string; className: string }> = {
+  success: {
+    label: 'Importada',
+    className: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800',
+  },
+  duplicate: {
+    label: 'Duplicada',
+    className: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800',
+  },
+  failed: {
+    label: 'Falhou',
+    className: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-800',
+  },
+};
+
+const batchQualityConfig = {
+  ok: {
+    label: 'Confiável',
+    className: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800',
+  },
+  warning: {
+    label: 'Atenção',
+    className: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800',
+  },
+  failed: {
+    label: 'Incompleta',
+    className: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-800',
+  },
+};
+
+const BatchStatusBadge: React.FC<{ status: ImportacaoLoteChaveResultado['status'] }> = ({ status }) => {
+  const config = batchStatusConfig[status];
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold ${config.className}`}>
+      {config.label}
+    </span>
+  );
+};
+
+const BatchQualityBadge: React.FC<{ status?: string | null }> = ({ status }) => {
+  const normalized = status === 'failed' || status === 'warning' || status === 'ok' ? status : 'warning';
+  const config = batchQualityConfig[normalized];
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold ${config.className}`}>
+      {config.label}
+    </span>
+  );
+};
+
+const parseBatchKeys = (value: string) => (
+  value
+    .split(/[\s,;]+/)
+    .map((part) => part.replace(/\D/g, ''))
+    .filter(Boolean)
+);
+
+const hasDuplicateBatchKeys = (keys: string[]) => new Set(keys).size !== keys.length;
+
+const maskKeyPreview = (key: string) => {
+  if (key.includes('...')) return key;
+  const onlyNumbers = key.replace(/\D/g, '');
+  if (onlyNumbers.length < 8) return 'chave nao informada';
+  return `${onlyNumbers.slice(0, 4)}...${onlyNumbers.slice(-4)}`;
 };
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
@@ -389,6 +459,10 @@ export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState<ImportacaoNotaResponse | null>(null);
   const [error, setError] = useState('');
+  const [batchKeysInput, setBatchKeysInput] = useState('');
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [batchResult, setBatchResult] = useState<ImportacaoLoteChavesResponse | null>(null);
+  const [batchError, setBatchError] = useState('');
   const [archiveChave, setArchiveChave] = useState('');
   const [archiveMotivo, setArchiveMotivo] = useState('');
   const [archiveLoading, setArchiveLoading] = useState(false);
@@ -405,6 +479,20 @@ export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }
   }, [chaveAcesso]);
 
   const isValid = chaveAcesso.length === 44 && !validationMessage;
+
+  const batchKeys = useMemo(() => parseBatchKeys(batchKeysInput), [batchKeysInput]);
+
+  const batchValidationMessage = useMemo(() => {
+    if (!batchKeysInput.trim()) return '';
+    if (batchKeys.length === 0) return 'Informe pelo menos uma chave de acesso.';
+    if (batchKeys.length > MAX_BATCH_KEYS) return `Informe no maximo ${MAX_BATCH_KEYS} chaves por lote.`;
+    if (hasDuplicateBatchKeys(batchKeys)) return 'Remova chaves duplicadas antes de importar.';
+    const invalidIndex = batchKeys.findIndex((key) => key.length !== 44);
+    if (invalidIndex >= 0) return `A chave ${invalidIndex + 1} deve ter 44 digitos.`;
+    return '';
+  }, [batchKeys, batchKeysInput]);
+
+  const isBatchValid = batchKeys.length >= 1 && batchKeys.length <= MAX_BATCH_KEYS && !batchValidationMessage;
 
   const archiveChaveValidation = useMemo(() => {
     if (!archiveChave) return '';
@@ -433,6 +521,12 @@ export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }
     setChaveAcesso(onlyNumbers);
     setError('');
     setSuccess(null);
+  };
+
+  const handleBatchKeysChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setBatchKeysInput(event.target.value);
+    setBatchError('');
+    setBatchResult(null);
   };
 
   const handleArchiveChaveChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -475,6 +569,40 @@ export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }
       setError('Nao foi possivel importar a nota. Confira a chave, tente novamente ou consulte a SEFAZ mais tarde.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBatchSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBatchError('');
+    setBatchResult(null);
+
+    if (!batchKeysInput.trim() || batchKeys.length === 0) {
+      setBatchError('Informe pelo menos uma chave de acesso.');
+      return;
+    }
+
+    if (!isBatchValid) {
+      setBatchError(batchValidationMessage || 'Verifique as chaves informadas.');
+      return;
+    }
+
+    setBatchLoading(true);
+    try {
+      const payload: ImportacaoLoteChavesRequest = { chaves_acesso: batchKeys };
+      const response = await importarLoteChaves(payload);
+      setBatchResult(response);
+      setBatchKeysInput('');
+      setHistoryRefreshKey((value) => value + 1);
+      onImported?.();
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 400 || err.status === 422)) {
+        setBatchError('Verifique as chaves informadas. Cada chave deve ter 44 digitos validos e nao pode estar duplicada.');
+      } else {
+        setBatchError('Nao foi possivel importar o lote. Tente novamente ou consulte a SEFAZ mais tarde.');
+      }
+    } finally {
+      setBatchLoading(false);
     }
   };
 
@@ -623,6 +751,160 @@ export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }
             </button>
             <p className="text-xs text-slate-400 dark:text-slate-500">
               Apos a importacao, os dados do painel e catalogo serao atualizados automaticamente.
+            </p>
+          </div>
+        </form>
+      </div>
+
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden transition-colors">
+        <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex items-start gap-4">
+          <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-2xl">
+            <ReceiptText size={24} />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white">Importar várias chaves</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Cole ate 5 chaves NF-e ou NFC-e separadas por linha, espaco, virgula ou ponto e virgula.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleBatchSubmit} className="p-8 space-y-6" noValidate>
+          <div className="space-y-2">
+            <label htmlFor="batch-chaves-acesso" className="text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+              Chaves de acesso
+            </label>
+            <textarea
+              id="batch-chaves-acesso"
+              value={batchKeysInput}
+              onChange={handleBatchKeysChange}
+              rows={6}
+              aria-describedby="batch-chaves-help"
+              aria-invalid={Boolean(batchError || batchValidationMessage)}
+              placeholder="Cole uma chave por linha ou separe por espaco, virgula ou ponto e virgula"
+              className="w-full px-4 py-4 bg-slate-50 dark:bg-slate-800/50 border-2 border-slate-100 dark:border-slate-800 rounded-2xl outline-none focus:border-emerald-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-sm font-mono tracking-wider text-slate-900 dark:text-white resize-y min-h-[160px]"
+            />
+            <div id="batch-chaves-help" className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs">
+              <span className={batchValidationMessage ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-slate-400 dark:text-slate-500'}>
+                {batchValidationMessage || 'Caracteres nao numericos sao removidos de cada chave antes do envio.'}
+              </span>
+              <span className={`font-mono ${batchKeys.length > MAX_BATCH_KEYS ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-slate-400 dark:text-slate-500'}`}>
+                {batchKeys.length} de {MAX_BATCH_KEYS} chaves
+              </span>
+            </div>
+          </div>
+
+          {batchKeys.length > 0 && (
+            <div className="flex flex-wrap gap-2" aria-label="Previa mascarada das chaves normalizadas">
+              {batchKeys.slice(0, MAX_BATCH_KEYS).map((key, index) => (
+                <span key={`${key}-${index}`} className="inline-flex max-w-full items-center rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-xs font-mono font-semibold text-slate-500 dark:text-slate-300">
+                  {maskKeyPreview(key)}
+                </span>
+              ))}
+              {batchKeys.length > MAX_BATCH_KEYS && (
+                <span className="inline-flex items-center rounded-full bg-amber-50 dark:bg-amber-900/20 px-3 py-1 text-xs font-bold text-amber-700 dark:text-amber-200">
+                  +{batchKeys.length - MAX_BATCH_KEYS} acima do limite
+                </span>
+              )}
+            </div>
+          )}
+
+          {batchError && (
+            <div className="flex items-start gap-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/40 text-rose-700 dark:text-rose-300 p-4 rounded-2xl" role="alert">
+              <AlertCircle size={18} className="mt-0.5 shrink-0" />
+              <p className="text-sm font-semibold">{batchError}</p>
+            </div>
+          )}
+
+          {batchLoading && (
+            <div className="flex items-center gap-3 text-sm font-semibold text-slate-500 dark:text-slate-400" role="status" aria-live="polite">
+              <Loader2 size={18} className="animate-spin" />
+              Processando lote...
+            </div>
+          )}
+
+          {batchResult && (
+            <div className="space-y-5" role="status" aria-live="polite">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/30 border border-slate-100 dark:border-slate-800 p-4">
+                  <p className="text-[11px] uppercase tracking-widest text-slate-400 dark:text-slate-500 font-bold">Total</p>
+                  <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{batchResult.total}</p>
+                </div>
+                <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/40 p-4">
+                  <p className="text-[11px] uppercase tracking-widest text-emerald-700 dark:text-emerald-200 font-bold">Importadas</p>
+                  <p className="mt-1 text-xl font-bold text-emerald-800 dark:text-emerald-100">{batchResult.success_count}</p>
+                </div>
+                <div className="rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40 p-4">
+                  <p className="text-[11px] uppercase tracking-widest text-amber-700 dark:text-amber-200 font-bold">Duplicadas</p>
+                  <p className="mt-1 text-xl font-bold text-amber-800 dark:text-amber-100">{batchResult.duplicate_count}</p>
+                </div>
+                <div className="rounded-2xl bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/40 p-4">
+                  <p className="text-[11px] uppercase tracking-widest text-rose-700 dark:text-rose-200 font-bold">Falhas</p>
+                  <p className="mt-1 text-xl font-bold text-rose-800 dark:text-rose-100">{batchResult.failed_count}</p>
+                </div>
+              </div>
+
+              <div className="hidden md:block overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 dark:bg-slate-950/40 text-[11px] uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Chave</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Qualidade</th>
+                      <th className="px-4 py-3">Mensagem</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {batchResult.results.map((result, index) => (
+                      <tr key={`${result.chave_acesso}-${index}`} className="text-slate-700 dark:text-slate-200">
+                        <td className="px-4 py-4 font-mono text-xs text-slate-500 dark:text-slate-400">{maskKeyPreview(result.chave_acesso)}</td>
+                        <td className="px-4 py-4"><BatchStatusBadge status={result.status} /></td>
+                        <td className="px-4 py-4">
+                          {result.status === 'success' && result.nota_fiscal
+                            ? <BatchQualityBadge status={result.nota_fiscal.extraction_quality_status} />
+                            : <span className="text-xs font-semibold text-slate-400">Nao aplicavel</span>}
+                        </td>
+                        <td className="px-4 py-4 max-w-[360px] text-sm text-slate-600 dark:text-slate-300 break-words">{result.mensagem}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="md:hidden space-y-3">
+                {batchResult.results.map((result, index) => (
+                  <div key={`${result.chave_acesso}-${index}`} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[11px] uppercase tracking-widest text-slate-400 font-bold">Chave</p>
+                        <p className="mt-1 font-mono text-xs text-slate-500 dark:text-slate-400 break-words">{maskKeyPreview(result.chave_acesso)}</p>
+                      </div>
+                      <BatchStatusBadge status={result.status} />
+                    </div>
+                    <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200 break-words">{result.mensagem}</p>
+                    {result.status === 'success' && result.nota_fiscal && (
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Qualidade</span>
+                        <BatchQualityBadge status={result.nota_fiscal.extraction_quality_status} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <button
+              type="submit"
+              disabled={batchLoading || !isBatchValid}
+              className="inline-flex min-h-11 items-center justify-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-2xl text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-900/10"
+            >
+              {batchLoading ? <Loader2 size={18} className="animate-spin" /> : <FilePlus2 size={18} />}
+              {batchLoading ? 'Importando lote...' : 'Importar lote'}
+            </button>
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              Ao concluir, o historico, dashboard e catalogo sao atualizados automaticamente.
             </p>
           </div>
         </form>
