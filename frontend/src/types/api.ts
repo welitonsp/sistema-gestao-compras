@@ -69,6 +69,28 @@ export interface ImportacaoNotaResponse {
   total_itens: number;
 }
 
+export interface ImportacaoLoteChavesRequest {
+  chaves_acesso: string[];
+}
+
+export type ImportacaoLoteChaveStatus = 'success' | 'duplicate' | 'failed';
+
+export interface ImportacaoLoteChaveResultado {
+  chave_acesso: string;
+  status: ImportacaoLoteChaveStatus;
+  mensagem: string;
+  nota_fiscal?: NotaFiscalImportada | null;
+  error_code?: string | null;
+}
+
+export interface ImportacaoLoteChavesResponse {
+  total: number;
+  success_count: number;
+  duplicate_count: number;
+  failed_count: number;
+  results: ImportacaoLoteChaveResultado[];
+}
+
 export interface ArchiveImportacaoRequest {
   motivo: string;
 }
