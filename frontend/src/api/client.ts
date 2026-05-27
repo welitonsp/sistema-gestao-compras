@@ -1,4 +1,4 @@
-import type { ImportacaoLoteChavesRequest, ImportacaoLoteChavesResponse } from '../types/api';
+import type { ImportacaoLoteChavesRequest, ImportacaoLoteChavesResponse, ImportacaoNotaResponse } from '../types/api';
 
 const API_BASE = '/api/v1';
 
@@ -105,3 +105,21 @@ export const apiClient = {
 export const importarLoteChaves = (
   payload: ImportacaoLoteChavesRequest,
 ): Promise<ImportacaoLoteChavesResponse> => apiClient.post<ImportacaoLoteChavesResponse>('/notas/importacao-lote-chaves', payload);
+
+export const importarPdfNfce = async (arquivo: File): Promise<ImportacaoNotaResponse> => {
+  const formData = new FormData();
+  formData.append('arquivo', arquivo);
+
+  const response = await fetch(`${API_BASE}/notas/importacao-pdf-nfce`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  if (response.status === 401) {
+    return handleUnauthorized();
+  }
+
+  if (!response.ok) return throwApiError(response);
+  return response.json();
+};
