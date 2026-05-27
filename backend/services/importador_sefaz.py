@@ -29,6 +29,7 @@ from backend.schemas.importacao import (
 logger = get_logger("services.importador")
 RETRYABLE_SEFAZ_STATUS_CODES = {429, 502, 503, 504}
 AI_FALLBACK_TEXT_LIMIT = 20000
+IMPORTACAO_SEM_PRODUTOS_MESSAGE = "Não foi possível extrair produtos desta nota. A importação não foi concluída."
 
 
 def _mascarar_chave(chave: str) -> str:
@@ -52,6 +53,10 @@ class SefazComunicacaoError(Exception):
 
 class ExtracaoDadosNotaError(Exception):
     """Erro interno ao estruturar os dados extraidos da consulta externa."""
+
+
+class ImportacaoSemProdutosError(Exception):
+    """Erro levantado quando a extracao nao trouxe produtos importaveis."""
 
 
 class ImportadorSefazService:
@@ -143,6 +148,20 @@ class ImportadorSefazService:
             parser_source=parser_source,
             details=quality_details,
         )
+
+        if (
+            not nota_dto.itens
+            or extraction_quality.item_count == 0
+            or (
+                extraction_quality.quality_status == "failed"
+                and extraction_quality.extracted_item_count == 0
+            )
+        ):
+            self._log.warning(
+                "Importacao bloqueada porque nenhum produto foi extraido "
+                f"(chave={_mascarar_chave(chave_final)}, origem={parser_source})."
+            )
+            raise ImportacaoSemProdutosError(IMPORTACAO_SEM_PRODUTOS_MESSAGE)
 
         # 4. Persistência Atômica com Auditoria
         # Removemos o begin() explícito daqui, pois a transação deve ser gerenciada
