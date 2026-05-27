@@ -376,7 +376,7 @@ const ImportHistorySection: React.FC<{ refreshKey: number }> = ({ refreshKey }) 
                     <tr key={item.id} className="text-slate-700 dark:text-slate-200">
                       <td className="px-4 py-4">
                         <p className="font-bold">{item.numero_nota}</p>
-                        <p className="font-mono text-xs text-slate-400">{item.chave_acesso}</p>
+                        <p className="font-mono text-xs text-slate-400">{maskKeyPreview(item.chave_acesso)}</p>
                       </td>
                       <td className="px-4 py-4 max-w-[240px] truncate">{item.fornecedor}</td>
                       <td className="px-4 py-4">{formatDate(item.data_emissao)}</td>
@@ -412,7 +412,7 @@ const ImportHistorySection: React.FC<{ refreshKey: number }> = ({ refreshKey }) 
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-slate-900 dark:text-white">Nota {item.numero_nota}</p>
-                        <p className="font-mono text-xs text-slate-400 mt-1">{item.chave_acesso}</p>
+                        <p className="font-mono text-xs text-slate-400 mt-1">{maskKeyPreview(item.chave_acesso)}</p>
                       </div>
                       <StatusBadge status={item.status} />
                     </div>
