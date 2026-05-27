@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import ssl
+
 import httpx
 import pytest
 
 from backend.core.config import settings
-from backend.services.importador_sefaz import ImportadorSefazService, SefazComunicacaoError
+from backend.services.importador_sefaz import (
+    ImportadorSefazService,
+    SefazComunicacaoError,
+    SefazTransportError,
+)
 
 
 class FakeLogger:
@@ -86,11 +92,44 @@ async def test_fetch_url_timeout_retorna_erro_controlado_sem_chave_completa(monk
         await service._fetch_url(f"https://sefaz.test?p={chave}")
 
     assert str(exc.value) == "Falha ao consultar SEFAZ (timeout)."
+    assert exc.value.error_code == "sefaz_timeout"
+    assert exc.value.stage == "fetch_url"
     assert chave not in str(exc.value)
     assert len(client.calls) == 3
     assert sleeps == [0.5, 1.0]
     assert all(chave not in message for message in logger.messages)
-    assert any("<chave-redigida>" in message for message in logger.messages)
+    assert any("<chave-redigida>" in message or "<payload-redigido>" in message for message in logger.messages)
+
+
+@pytest.mark.anyio
+async def test_fetch_url_ssl_handshake_retorna_erro_controlado_sem_chave_completa(monkeypatch):
+    chave = "99999999999999999999999999999999999999999999"
+    sleeps = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr("backend.services.importador_sefaz.asyncio.sleep", fake_sleep)
+    client = FakeSefazClient(
+        [
+            ssl.SSLError(f"[SSL: SSLV3_ALERT_HANDSHAKE_FAILURE] handshake failure {chave}"),
+            ssl.SSLError(f"[SSL: SSLV3_ALERT_HANDSHAKE_FAILURE] handshake failure {chave}"),
+            ssl.SSLError(f"[SSL: SSLV3_ALERT_HANDSHAKE_FAILURE] handshake failure {chave}"),
+        ]
+    )
+    service, logger = _service_with_client(client)
+
+    with pytest.raises(SefazTransportError) as exc:
+        await service._fetch_url(f"https://sefaz.test?p={chave}")
+
+    assert str(exc.value) == "Falha de transporte ao consultar SEFAZ."
+    assert exc.value.error_code == "sefaz_transport_error"
+    assert exc.value.stage == "fetch_url"
+    assert chave not in str(exc.value)
+    assert len(client.calls) == 3
+    assert sleeps == [0.5, 1.0]
+    assert all(chave not in message for message in logger.messages)
+    assert any("<chave-redigida>" in message or "<payload-redigido>" in message for message in logger.messages)
 
 
 @pytest.mark.anyio

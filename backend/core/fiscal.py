@@ -3,6 +3,86 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
+from typing import Literal
+from urllib.parse import parse_qs, unquote, urlparse
+
+
+ImportacaoIdentificadorKind = Literal["plain_access_key", "qrcode_payload", "qrcode_url", "invalid"]
+
+
+@dataclass(frozen=True)
+class ImportacaoIdentificador:
+    kind: ImportacaoIdentificadorKind
+    original: str
+    access_key: str = ""
+    qrcode_payload: str = ""
+    error_code: str | None = None
+
+
+def extrair_payload_qrcode_de_url(value: str) -> str:
+    parsed = urlparse(value or "")
+    params = parse_qs(parsed.query, keep_blank_values=True)
+    payloads = params.get("p") or []
+    if not payloads:
+        return ""
+    return unquote(payloads[0])
+
+
+def extrair_chave_acesso_de_payload_qrcode(payload: str) -> str:
+    match = re.search(r"\d{44}", payload or "")
+    return match.group(0) if match else ""
+
+
+def classificar_identificador_importacao(value: str) -> ImportacaoIdentificador:
+    original = (value or "").strip()
+    if not original:
+        return ImportacaoIdentificador(kind="invalid", original=original, error_code="empty_identifier")
+
+    if original.startswith(("http://", "https://")):
+        payload = extrair_payload_qrcode_de_url(original)
+        if not payload:
+            return ImportacaoIdentificador(
+                kind="invalid",
+                original=original,
+                error_code="qrcode_url_missing_payload",
+            )
+        chave = extrair_chave_acesso_de_payload_qrcode(payload)
+        if not chave:
+            return ImportacaoIdentificador(
+                kind="qrcode_url",
+                original=original,
+                qrcode_payload=payload,
+                error_code="sefaz_qrcode_payload_incomplete",
+            )
+        return ImportacaoIdentificador(
+            kind="qrcode_url",
+            original=original,
+            access_key=chave,
+            qrcode_payload=payload,
+        )
+
+    if "|" in original:
+        chave = extrair_chave_acesso_de_payload_qrcode(original)
+        if not chave:
+            return ImportacaoIdentificador(
+                kind="qrcode_payload",
+                original=original,
+                qrcode_payload=original,
+                error_code="sefaz_qrcode_payload_incomplete",
+            )
+        return ImportacaoIdentificador(
+            kind="qrcode_payload",
+            original=original,
+            access_key=chave,
+            qrcode_payload=original,
+        )
+
+    digits = re.sub(r"\D", "", original)
+    if len(digits) == 44:
+        return ImportacaoIdentificador(kind="plain_access_key", original=original, access_key=digits)
+
+    return ImportacaoIdentificador(kind="invalid", original=original, error_code="unsupported_identifier")
 
 def validar_chave_acesso(chave: str) -> bool:
     """

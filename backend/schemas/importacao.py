@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+
+from backend.core.fiscal import classificar_identificador_importacao
 
 ChaveAcesso44 = Annotated[
     str,
@@ -29,20 +30,29 @@ class ImportacaoChaveRequest(BaseModel):
         str_strip_whitespace=True,
     )
 
-    chave_acesso: ChaveAcesso44 = Field(
+    chave_acesso: str = Field(
         ...,
-        description="Chave de acesso da nota fiscal com 44 digitos.",
-        examples=["52260412345678000123550010000012341000012345"],
+        min_length=1,
+        max_length=2048,
+        description="Chave de acesso, payload QR Code NFC-e ou URL completa do QR Code.",
+        examples=[
+            "52260412345678000123550010000012341000012345",
+            "https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p=5226...|2|1|...",
+        ],
     )
 
     @field_validator("chave_acesso", mode="before")
     @classmethod
     def normalizar_chave_acesso(cls, value: object) -> object:
-        """Remove mascaras visuais antes da validacao formal."""
+        """Normaliza apenas chave pura; preserva URL/payload QR Code."""
 
         if not isinstance(value, str):
             return value
-        return re.sub(r"\D", "", value)
+        identificador = value.strip()
+        classificacao = classificar_identificador_importacao(identificador)
+        if classificacao.kind == "plain_access_key":
+            return classificacao.access_key
+        return identificador
 
 
 class FornecedorImportadoResponse(BaseModel):
@@ -112,26 +122,42 @@ class ImportacaoLoteChavesRequest(BaseModel):
         str_strip_whitespace=True,
     )
 
-    chaves_acesso: list[ChaveAcesso44] = Field(
+    chaves_acesso: list[str] = Field(
         ...,
         min_length=1,
         max_length=5,
-        description="Lista de 1 a 5 chaves de acesso com 44 digitos.",
+        description="Lista de 1 a 5 chaves, payloads QR Code NFC-e ou URLs completas do QR Code.",
     )
 
     @field_validator("chaves_acesso", mode="before")
     @classmethod
     def normalizar_chaves_acesso(cls, value: object) -> object:
-        """Remove mascaras visuais de cada chave antes da validacao formal."""
+        """Normaliza apenas chaves puras; preserva URLs/payloads QR Code."""
 
         if not isinstance(value, list):
             return value
-        return [re.sub(r"\D", "", item) if isinstance(item, str) else item for item in value]
+        normalized: list[object] = []
+        for item in value:
+            if not isinstance(item, str):
+                normalized.append(item)
+                continue
+            identificador = item.strip()
+            classificacao = classificar_identificador_importacao(identificador)
+            normalized.append(
+                classificacao.access_key
+                if classificacao.kind == "plain_access_key"
+                else identificador
+            )
+        return normalized
 
     @field_validator("chaves_acesso")
     @classmethod
     def rejeitar_chaves_duplicadas(cls, value: list[str]) -> list[str]:
-        if len(set(value)) != len(value):
+        identities = []
+        for item in value:
+            classificacao = classificar_identificador_importacao(item)
+            identities.append(classificacao.access_key or classificacao.qrcode_payload or item)
+        if len(set(identities)) != len(identities):
             raise ValueError("Chaves duplicadas no payload.")
         return value
 

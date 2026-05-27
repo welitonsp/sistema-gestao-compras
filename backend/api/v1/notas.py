@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.api.dependencies import DbSession, ArqPool, CurrentUser, HttpClient, RoleChecker
 from backend.models.compras import NotaFiscal, User, UserRole
-from backend.core.fiscal import validar_chave_acesso
+from backend.core.fiscal import classificar_identificador_importacao, validar_chave_acesso
 from backend.schemas.importacao import (
     ArchiveImportacaoRequest,
     ArchiveImportacaoResponse,
@@ -38,7 +38,9 @@ from backend.services.importador_sefaz import (
     ImportacaoSemProdutosError,
     ImportadorSefazService,
     NotaJaCadastradaError,
+    SefazConsultaInvalidaError,
     SefazComunicacaoError,
+    SefazTransportError,
 )
 
 from arq.jobs import Job
@@ -52,6 +54,26 @@ def _mascarar_chave_acesso(chave_acesso: str) -> str:
     if len(chave_acesso) < 8:
         return "<chave-redigida>"
     return f"{chave_acesso[:4]}...{chave_acesso[-4:]}"
+
+
+def _mascarar_identificador_importacao(identificador: str) -> str:
+    classificacao = classificar_identificador_importacao(identificador)
+    if classificacao.access_key:
+        return _mascarar_chave_acesso(classificacao.access_key)
+    if classificacao.qrcode_payload:
+        return "<payload-redigido>"
+    return "<identificador-redigido>"
+
+
+def _validar_identificador_importacao(identificador: str) -> tuple[str, str]:
+    classificacao = classificar_identificador_importacao(identificador)
+    if classificacao.kind == "invalid":
+        return "failed", classificacao.error_code or "invalid_identifier"
+    if not classificacao.access_key:
+        return "failed", classificacao.error_code or "missing_access_key"
+    if not validar_chave_acesso(classificacao.access_key):
+        return "failed", "invalid_access_key_check_digit"
+    return "ok", ""
 
 
 def _is_chave_acesso_integrity_error(exc: IntegrityError) -> bool:
@@ -210,18 +232,18 @@ async def importar_nota_por_chave(
 
     try:
         payload = ImportacaoChaveRequest.model_validate(payload_bruto)
-        # Validação P5: Dígito Verificador
-        if not validar_chave_acesso(payload.chave_acesso):
+        validation_status, _validation_error = _validar_identificador_importacao(payload.chave_acesso)
+        if validation_status != "ok":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Dígito verificador da chave de acesso inválido."
+                detail="Identificador invalido para importacao por chave.",
             )
     except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "mensagem": "Payload invalido para importacao por chave.",
-                "erros": exc.errors(),
+                "erros": "Formato invalido.",
             },
         ) from exc
 
@@ -249,10 +271,22 @@ async def importar_nota_por_chave(
                 detail=DUPLICATE_NOTA_DETAIL,
             ) from exc
         raise
+    except SefazTransportError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
     except SefazComunicacaoError as exc:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    except SefazConsultaInvalidaError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=422,
             detail=str(exc),
         ) from exc
     except ImportacaoSemProdutosError as exc:
@@ -299,16 +333,21 @@ async def importar_lote_chaves(
             detail="Payload invalido para importacao em lote.",
         ) from exc
 
-    if not all(validar_chave_acesso(chave) for chave in payload.chaves_acesso):
-        raise HTTPException(
-            status_code=422,
-            detail="Payload invalido para importacao em lote.",
-        )
-
     results: list[ImportacaoLoteResultadoResponse] = []
 
     for chave in payload.chaves_acesso:
-        chave_mascarada = _mascarar_chave_acesso(chave)
+        chave_mascarada = _mascarar_identificador_importacao(chave)
+        validation_status, validation_error = _validar_identificador_importacao(chave)
+        if validation_status != "ok":
+            results.append(
+                ImportacaoLoteResultadoResponse(
+                    chave_acesso=chave_mascarada,
+                    status="failed",
+                    mensagem="Identificador invalido para importacao.",
+                    error_code=validation_error,
+                )
+            )
+            continue
         try:
             servico = ImportadorSefazService(db=db, http_client=client)
             resultado = await servico.importar_por_chave(
@@ -359,6 +398,16 @@ async def importar_lote_chaves(
                     error_code="integrity_error",
                 )
             )
+        except SefazTransportError as exc:
+            await db.rollback()
+            results.append(
+                ImportacaoLoteResultadoResponse(
+                    chave_acesso=chave_mascarada,
+                    status="failed",
+                    mensagem=str(exc),
+                    error_code=exc.error_code,
+                )
+            )
         except SefazComunicacaoError:
             await db.rollback()
             results.append(
@@ -367,6 +416,16 @@ async def importar_lote_chaves(
                     status="failed",
                     mensagem="Falha ao consultar SEFAZ para esta chave.",
                     error_code="sefaz_error",
+                )
+            )
+        except SefazConsultaInvalidaError as exc:
+            await db.rollback()
+            results.append(
+                ImportacaoLoteResultadoResponse(
+                    chave_acesso=chave_mascarada,
+                    status="failed",
+                    mensagem=str(exc),
+                    error_code=exc.error_code,
                 )
             )
         except ImportacaoSemProdutosError as exc:

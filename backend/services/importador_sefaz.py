@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import re
 import asyncio
+import ssl
+from dataclasses import dataclass
 from html import unescape
-from typing import Any
+from typing import Any, Literal
+from urllib.parse import quote, unquote
 
 import httpx
 from sqlalchemy import select
@@ -13,11 +16,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.core.config import settings
+from backend.core.fiscal import classificar_identificador_importacao
 from backend.models.compras import NotaFiscal
 from backend.services.ai_processor import AIStructuredExtractor
 from backend.services.extraction_quality import build_extraction_quality
 from backend.services.repository import ProcurementRepository
 from backend.services.parsers.sefaz_go import SefazGoParser
+from backend.services.sefaz_diagnostics import (
+    classify_sefaz_html_response,
+    summarize_fallback_text,
+    summarize_sefaz_html,
+)
 from core.logger import get_logger, ContextAdapter
 from backend.schemas.importacao import (
     FornecedorImportadoResponse,
@@ -29,7 +38,24 @@ from backend.schemas.importacao import (
 logger = get_logger("services.importador")
 RETRYABLE_SEFAZ_STATUS_CODES = {429, 502, 503, 504}
 AI_FALLBACK_TEXT_LIMIT = 20000
+SEFAZ_GO_DANFE_NFCE_URL = "https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={payload}"
+SEFAZ_ACCESS_KEY_UNSUPPORTED_MESSAGE = (
+    "Consulta automatica por chave de acesso NFC-e GO nao esta disponivel sem QR Code completo. "
+    "Use a URL completa do QR Code NFC-e, importe PDF/HTML/XML quando suportado, "
+    "ou consulte manualmente no portal SEFAZ GO."
+)
+SEFAZ_NO_INVOICE_CONTENT_MESSAGE = "SEFAZ retornou pagina sem conteudo fiscal suficiente para extracao."
+SEFAZ_QRCODE_INCOMPLETE_MESSAGE = "QR Code NFC-e incompleto ou invalido para consulta SEFAZ GO."
 IMPORTACAO_SEM_PRODUTOS_MESSAGE = "Não foi possível extrair produtos desta nota. A importação não foi concluída."
+
+
+@dataclass(frozen=True)
+class SefazGoQueryStrategy:
+    kind: Literal["access_key", "qrcode_payload", "unsupported"]
+    chave_acesso: str
+    url: str
+    error_code: str | None = None
+    error_message: str | None = None
 
 
 def _mascarar_chave(chave: str) -> str:
@@ -40,7 +66,74 @@ def _mascarar_chave(chave: str) -> str:
 
 
 def _redigir_chaves(texto: str) -> str:
-    return re.sub(r"\d{44}", "<chave-redigida>", str(texto))
+    redigido = re.sub(r"\d{44}", "<chave-redigida>", str(texto))
+    redigido = re.sub(r"([?&]p=)[^\s&]+", r"\1<payload-redigido>", redigido)
+    redigido = re.sub(r"(chaveAcesso=)[^\s&]+", r"\1<chave-redigida>", redigido)
+    return redigido
+
+
+def _safe_log_info(log, message: str) -> None:
+    log_method = getattr(log, "info", None) or getattr(log, "debug", None)
+    if log_method:
+        log_method(message)
+
+
+def is_access_key_44_digits(value: str) -> bool:
+    return bool(re.fullmatch(r"\d{44}", re.sub(r"\D", "", value or ""))) and "|" not in (value or "")
+
+
+def is_qrcode_payload(value: str) -> bool:
+    return "|" in unquote(value or "")
+
+
+def _extract_access_key_from_text(value: str) -> str:
+    match = re.search(r"\d{44}", value or "")
+    return match.group(0) if match else ""
+
+
+def _extract_qrcode_payload_from_url(value: str) -> str:
+    return classificar_identificador_importacao(value).qrcode_payload
+
+
+def build_sefaz_go_query_strategy(identificador: str) -> SefazGoQueryStrategy:
+    raw = (identificador or "").strip()
+    classificacao = classificar_identificador_importacao(raw)
+    candidate = classificacao.qrcode_payload if classificacao.kind == "qrcode_url" else raw
+
+    if classificacao.kind in {"qrcode_payload", "qrcode_url"}:
+        chave_acesso = classificacao.access_key
+        if not chave_acesso:
+            return SefazGoQueryStrategy(
+                kind="unsupported",
+                chave_acesso="",
+                url="",
+                error_code=classificacao.error_code or "sefaz_qrcode_payload_incomplete",
+                error_message=SEFAZ_QRCODE_INCOMPLETE_MESSAGE,
+            )
+        payload_encoded = quote(classificacao.qrcode_payload, safe="")
+        return SefazGoQueryStrategy(
+            kind="qrcode_payload",
+            chave_acesso=chave_acesso,
+            url=SEFAZ_GO_DANFE_NFCE_URL.format(payload=payload_encoded),
+        )
+
+    if classificacao.kind == "plain_access_key":
+        chave_acesso = classificacao.access_key
+        return SefazGoQueryStrategy(
+            kind="access_key",
+            chave_acesso=chave_acesso,
+            url="",
+            error_code="plain_access_key_not_supported_for_go",
+            error_message=SEFAZ_ACCESS_KEY_UNSUPPORTED_MESSAGE,
+        )
+
+    return SefazGoQueryStrategy(
+        kind="unsupported",
+        chave_acesso=classificacao.access_key,
+        url="",
+        error_code=classificacao.error_code or "sefaz_unsupported_identifier",
+        error_message="Identificador SEFAZ GO nao suportado para consulta.",
+    )
 
 
 class NotaJaCadastradaError(Exception):
@@ -49,6 +142,31 @@ class NotaJaCadastradaError(Exception):
 
 class SefazComunicacaoError(Exception):
     """Erro de comunicacao ou indisponibilidade do servico externo."""
+
+
+class SefazTransportError(SefazComunicacaoError):
+    """Erro de transporte, SSL ou timeout ao consultar a SEFAZ."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str = "sefaz_transport_error",
+        stage: str = "fetch_url",
+        chave_mascarada: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+        self.stage = stage
+        self.chave_mascarada = chave_mascarada
+
+
+class SefazConsultaInvalidaError(Exception):
+    """Erro controlado para resposta SEFAZ sem conteudo fiscal util."""
+
+    def __init__(self, message: str, *, error_code: str) -> None:
+        super().__init__(message)
+        self.error_code = error_code
 
 
 class ExtracaoDadosNotaError(Exception):
@@ -62,7 +180,7 @@ class ImportacaoSemProdutosError(Exception):
 class ImportadorSefazService:
     """Orquestrador (Facade) para importação de notas fiscais."""
 
-    URL_BASE_CONSULTA = "https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}"
+    URL_BASE_CONSULTA = SEFAZ_GO_DANFE_NFCE_URL
     USER_AGENT = "SistemaGestaoCompras/2.0 (Procurement AI Agent)"
 
     def __init__(self, db: AsyncSession, http_client: httpx.AsyncClient) -> None:
@@ -85,6 +203,8 @@ class ImportadorSefazService:
         url_consulta = ""
         chave_acesso = ""
         html_pasted = ""
+        strategy_error_code: str | None = None
+        strategy_error_message: str | None = None
 
         if identificador.startswith("<html") or "<html>" in identificador.lower() or "<body" in identificador.lower():
             # Caso 2: Usuário colou o HTML bruto
@@ -92,36 +212,62 @@ class ImportadorSefazService:
             self._log.info("Processando importação via HTML colado.")
             operacao_tipo = "IMPORT_HTML_PASTE"
         else:
-            operacao_tipo = "IMPORT_SEFAZ_GO"
-            if identificador.startswith("http"):
-                url_consulta = identificador
-                match = re.search(r"p=([0-9]{44})", identificador)
-                chave_acesso = match.group(1) if match else ""
-            else:
-                chave_acesso = re.sub(r"\D", "", identificador)
-                url_consulta = self.URL_BASE_CONSULTA.format(chave=chave_acesso)
+            strategy = build_sefaz_go_query_strategy(identificador)
+            operacao_tipo = "IMPORT_SEFAZ_GO_QRCODE" if strategy.kind == "qrcode_payload" else "IMPORT_SEFAZ_GO"
+            chave_acesso = strategy.chave_acesso
+            url_consulta = strategy.url
+            strategy_error_code = strategy.error_code
+            strategy_error_message = strategy.error_message
 
         # 2. Fetch/Preparação e Validação de Idempotência
-        categorias_contexto = await self.repo.obter_categorias_unicas()
-        
         if chave_acesso:
             self._log = ContextAdapter(logger, {"chave_acesso": _mascarar_chave(chave_acesso)})
             if await self.repo.nota_existe(chave_acesso):
                 raise NotaJaCadastradaError("Nota fiscal ja cadastrada.")
+            if strategy_error_code:
+                raise SefazConsultaInvalidaError(
+                    strategy_error_message or "Consulta SEFAZ GO invalida.",
+                    error_code=strategy_error_code,
+                )
             
             if not html_pasted:
+                _safe_log_info(self._log, f"Consultando SEFAZ GO: {_redigir_chaves(url_consulta)}")
                 html_content = await self._fetch_url(url_consulta)
             else:
                 html_content = html_pasted
         else:
+            if strategy_error_code:
+                raise SefazConsultaInvalidaError(
+                    strategy_error_message or "Consulta SEFAZ GO invalida.",
+                    error_code=strategy_error_code,
+                )
             html_content = html_pasted
 
+        html_summary = summarize_sefaz_html(html_content)
+        _safe_log_info(self._log, f"Diagnostico sanitizado do HTML SEFAZ: {html_summary}")
+        html_error_code = classify_sefaz_html_response(html_summary)
+        if html_error_code:
+            message = (
+                SEFAZ_ACCESS_KEY_UNSUPPORTED_MESSAGE
+                if html_error_code == "sefaz_invalid_parameters"
+                else SEFAZ_NO_INVOICE_CONTENT_MESSAGE
+            )
+            raise SefazConsultaInvalidaError(message, error_code=html_error_code)
+
         # 3. Extração (Parser Determinístico -> Fallback IA)
+        categorias_contexto = await self.repo.obter_categorias_unicas()
         nota_dto = self.parser.parse(html_content)
         
         if not nota_dto:
             parser_source = "ai_fallback"
             texto_limpo, html_truncated, clean_text_length = self._limpar_html_com_metadados(html_content)
+            fallback_summary = summarize_fallback_text(
+                texto_limpo,
+                html_truncated=html_truncated,
+                clean_text_length=clean_text_length,
+                text_limit=AI_FALLBACK_TEXT_LIMIT,
+            )
+            _safe_log_info(self._log, f"Diagnostico sanitizado do texto enviado ao fallback IA: {fallback_summary}")
             quality_details: dict[str, Any] = {}
             if html_truncated:
                 quality_details = {
@@ -219,6 +365,7 @@ class ImportadorSefazService:
         if not self._client:
             raise RuntimeError("Cliente HTTP não iniciado.")
 
+        chave_mascarada = _mascarar_chave(_extract_access_key_from_text(url))
         max_retries = settings.sefaz_max_retries
         timeout_seconds = settings.sefaz_request_timeout_seconds
         backoff_base = settings.sefaz_backoff_base_seconds
@@ -231,6 +378,11 @@ class ImportadorSefazService:
                     headers={"User-Agent": self.USER_AGENT},
                 )
                 resp.raise_for_status()
+                _safe_log_info(
+                    self._log,
+                    "Resposta SEFAZ recebida "
+                    f"(status_code={resp.status_code}, content_length={len(resp.text)}, url={_redigir_chaves(str(resp.url))})."
+                )
                 return resp.text
             except httpx.HTTPStatusError as exc:
                 status_code = exc.response.status_code
@@ -252,14 +404,24 @@ class ImportadorSefazService:
                         "Timeout definitivo ao consultar SEFAZ "
                         f"apos {max_retries} tentativas: {_redigir_chaves(str(exc))}"
                     )
-                    raise SefazComunicacaoError("Falha ao consultar SEFAZ (timeout).")
-            except httpx.RequestError as exc:
+                    raise SefazTransportError(
+                        "Falha ao consultar SEFAZ (timeout).",
+                        error_code="sefaz_timeout",
+                        stage="fetch_url",
+                        chave_mascarada=chave_mascarada,
+                    )
+            except (httpx.TransportError, ssl.SSLError) as exc:
                 if attempt == max_retries:
                     self._log.error(
-                        "Falha de conexao definitiva ao consultar SEFAZ "
+                        "Falha de transporte definitiva ao consultar SEFAZ "
                         f"apos {max_retries} tentativas: {_redigir_chaves(str(exc))}"
                     )
-                    raise SefazComunicacaoError("Falha ao consultar SEFAZ (tentativas esgotadas).")
+                    raise SefazTransportError(
+                        "Falha de transporte ao consultar SEFAZ.",
+                        error_code="sefaz_transport_error",
+                        stage="fetch_url",
+                        chave_mascarada=chave_mascarada,
+                    )
 
             wait_time = backoff_base * (2 ** (attempt - 1))
             self._log.warning(
