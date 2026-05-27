@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Archive, Bot, CheckCircle2, FilePlus2, Loader2, ReceiptText, RefreshCw, ShieldAlert, X } from 'lucide-react';
-import { ApiError, apiClient, importarLoteChaves } from '../api/client';
+import { AlertCircle, Archive, Bot, CheckCircle2, FilePlus2, FileText, Loader2, ReceiptText, RefreshCw, ShieldAlert, X } from 'lucide-react';
+import { ApiError, apiClient, importarLoteChaves, importarPdfNfce } from '../api/client';
 import {
   ArchiveImportacaoRequest,
   ArchiveImportacaoResponse,
@@ -376,7 +376,7 @@ const ImportHistorySection: React.FC<{ refreshKey: number }> = ({ refreshKey }) 
                     <tr key={item.id} className="text-slate-700 dark:text-slate-200">
                       <td className="px-4 py-4">
                         <p className="font-bold">{item.numero_nota}</p>
-                        <p className="font-mono text-xs text-slate-400">{item.chave_acesso}</p>
+                        <p className="font-mono text-xs text-slate-400">{maskKeyPreview(item.chave_acesso)}</p>
                       </td>
                       <td className="px-4 py-4 max-w-[240px] truncate">{item.fornecedor}</td>
                       <td className="px-4 py-4">{formatDate(item.data_emissao)}</td>
@@ -412,7 +412,7 @@ const ImportHistorySection: React.FC<{ refreshKey: number }> = ({ refreshKey }) 
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-slate-900 dark:text-white">Nota {item.numero_nota}</p>
-                        <p className="font-mono text-xs text-slate-400 mt-1">{item.chave_acesso}</p>
+                        <p className="font-mono text-xs text-slate-400 mt-1">{maskKeyPreview(item.chave_acesso)}</p>
                       </div>
                       <StatusBadge status={item.status} />
                     </div>
@@ -454,11 +454,33 @@ const ImportHistorySection: React.FC<{ refreshKey: number }> = ({ refreshKey }) 
   );
 };
 
+const resolvePdfError = (err: unknown): string => {
+  if (err instanceof ApiError) {
+    const msg = (err.message || '').toLowerCase();
+    if (msg.includes('ja cadastrada') || msg.includes('já cadastrada') || msg.includes('duplicada') || err.status === 409) {
+      return 'Nota fiscal já cadastrada.';
+    }
+    if (msg.includes('texto') || msg.includes('escaneado') || msg.includes('imagem') || msg.includes('extraível')) {
+      return 'Este PDF não possui texto extraível. Use o PDF detalhado baixado da SEFAZ.';
+    }
+    if (msg.includes('inválido') || msg.includes('invalido') || msg.includes('reconhecido') || msg.includes('não parece ser') || msg.includes('nao parece ser') || msg.includes('tabela ausente') || msg.includes('fiscal') || msg.includes('estrutura') || msg.includes('produtos') || msg.includes('chave') || msg.includes('emissão') || msg.includes('cnpj')) {
+      return 'O arquivo enviado não parece ser uma NFC-e detalhada da SEFAZ.';
+    }
+  }
+  return 'Não foi possível importar a nota fiscal. Verifique o arquivo e tente novamente.';
+};
+
 export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }) => {
   const [chaveAcesso, setChaveAcesso] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState<ImportacaoNotaResponse | null>(null);
   const [error, setError] = useState('');
+
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfSuccess, setPdfSuccess] = useState<ImportacaoNotaResponse | null>(null);
+  const [pdfError, setPdfError] = useState('');
+
   const [batchKeysInput, setBatchKeysInput] = useState('');
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchResult, setBatchResult] = useState<ImportacaoLoteChavesResponse | null>(null);
@@ -540,6 +562,37 @@ export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }
     setArchiveMotivo(event.target.value.slice(0, 500));
     setArchiveError('');
     setArchiveSuccess(null);
+  };
+
+  const handlePdfChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    setPdfFile(file);
+    setPdfError('');
+    setPdfSuccess(null);
+  };
+
+  const handlePdfSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setPdfError('');
+    setPdfSuccess(null);
+
+    if (!pdfFile) {
+      setPdfError('Selecione um arquivo PDF.');
+      return;
+    }
+
+    setPdfLoading(true);
+    try {
+      const response = await importarPdfNfce(pdfFile);
+      setPdfSuccess(response);
+      setPdfFile(null);
+      setHistoryRefreshKey((value) => value + 1);
+      onImported?.();
+    } catch (err) {
+      setPdfError(resolvePdfError(err));
+    } finally {
+      setPdfLoading(false);
+    }
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -752,6 +805,79 @@ export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }
             <p className="text-xs text-slate-400 dark:text-slate-500">
               Apos a importacao, os dados do painel e catalogo serao atualizados automaticamente.
             </p>
+          </div>
+        </form>
+      </div>
+
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden transition-colors">
+        <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex items-start gap-4">
+          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-2xl">
+            <FileText size={24} />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white">Importar PDF da NFC-e</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Envie o PDF detalhado da NFC-e (com produtos) baixado da SEFAZ.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handlePdfSubmit} className="p-8 space-y-6" noValidate>
+          <div className="space-y-2">
+            <label htmlFor="arquivo-pdf" className="text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+              Arquivo PDF
+            </label>
+            <input
+              id="arquivo-pdf"
+              type="file"
+              accept="application/pdf"
+              onChange={handlePdfChange}
+              className="block w-full text-sm text-slate-500 dark:text-slate-400
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-full file:border-0
+                file:text-sm file:font-semibold
+                file:bg-blue-50 file:text-blue-700
+                dark:file:bg-blue-900/20 dark:file:text-blue-400
+                hover:file:bg-blue-100 dark:hover:file:bg-blue-900/30"
+            />
+          </div>
+
+          {pdfError && (
+            <div className="flex items-start gap-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/40 text-rose-700 dark:text-rose-300 p-4 rounded-2xl" role="alert">
+              <AlertCircle size={18} className="mt-0.5 shrink-0" />
+              <p className="text-sm font-semibold">{pdfError}</p>
+            </div>
+          )}
+
+          {pdfSuccess && (
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300 p-4 rounded-2xl" role="status" aria-live="polite">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+                <div className="text-sm">
+                  <p className="font-bold">Nota fiscal importada com sucesso.</p>
+                  <p className="mt-1">
+                    Fornecedor: {pdfSuccess.fornecedor.razao_social}<br/>
+                    Número: {pdfSuccess.nota_fiscal.numero_nota || 'Não informado'}<br/>
+                    Data de emissão: {formatDate(pdfSuccess.nota_fiscal.data_emissao)}<br/>
+                    Valor total: {formatCurrency(pdfSuccess.nota_fiscal.valor_total)}<br/>
+                    Itens extraídos: {countValue(pdfSuccess.total_itens)}<br/>
+                    Total dos itens: {formatCurrency(pdfSuccess.nota_fiscal.extraction_total_itens)}<br/>
+                    Qualidade da extração: {pdfSuccess.nota_fiscal.extraction_quality_status || 'Não informado'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <button
+              type="submit"
+              disabled={pdfLoading || !pdfFile}
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl text-sm font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-900/10"
+            >
+              {pdfLoading ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
+              {pdfLoading ? 'Importando PDF...' : 'Importar PDF'}
+            </button>
           </div>
         </form>
       </div>
