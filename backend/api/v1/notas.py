@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Annotated, Literal
 from pathlib import Path
 
-from fastapi import APIRouter, Body, HTTPException, Query, status, Request, Depends
+from fastapi import APIRouter, Body, File, HTTPException, Query, status, Request, Depends, UploadFile
 from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -33,6 +33,8 @@ from backend.services.import_archive_service import (
     ImportArchiveError,
     archive_importacao_por_chave,
 )
+from backend.services.nfce_pdf_import import NfcePdfImportError, NfcePdfImportService
+from backend.services.repository import ProcurementRepository
 from backend.services.importador_sefaz import (
     ExtracaoDadosNotaError,
     ImportacaoSemProdutosError,
@@ -301,6 +303,73 @@ async def importar_nota_por_chave(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from exc
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@router.post(
+    "/importacao-pdf-nfce",
+    response_model=ImportacaoNotaResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Importar NFC-e detalhada por PDF",
+    description=(
+        "Extrai dados de uma NFC-e detalhada baixada em PDF pelo usuario, "
+        "sem consultar SEFAZ, OCR externo ou IA."
+    ),
+)
+async def importar_nfce_pdf(
+    request: Request,
+    db: DbSession,
+    user: CurrentUser,
+    arquivo: UploadFile = File(...),
+) -> ImportacaoNotaResponse:
+    """Importa uma NFC-e detalhada a partir do PDF salvo pelo usuario."""
+
+    filename = arquivo.filename or "nfce.pdf"
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Arquivo PDF invalido para importacao NFC-e.",
+        )
+
+    try:
+        conteudo = await arquivo.read()
+        if not conteudo:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Arquivo PDF vazio.",
+            )
+        servico = NfcePdfImportService(ProcurementRepository(db))
+        resultado = await servico.importar_pdf_bytes(
+            conteudo,
+            filename=filename,
+            usuario=user.username,
+            ip_origem=request.client.host if request.client else None,
+            department_id=user.department_id,
+        )
+        await db.commit()
+        return resultado
+    except NotaJaCadastradaError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=DUPLICATE_NOTA_DETAIL,
+        ) from exc
+    except ImportacaoSemProdutosError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except NfcePdfImportError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        await db.rollback()
+        if _is_chave_acesso_integrity_error(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=DUPLICATE_NOTA_DETAIL,
+            ) from exc
+        raise
     except Exception:
         await db.rollback()
         raise
