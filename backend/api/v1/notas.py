@@ -35,6 +35,7 @@ from backend.services.import_archive_service import (
 )
 from backend.services.importador_sefaz import (
     ExtracaoDadosNotaError,
+    ImportacaoSemProdutosError,
     ImportadorSefazService,
     NotaJaCadastradaError,
     SefazComunicacaoError,
@@ -254,6 +255,12 @@ async def importar_nota_por_chave(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
         ) from exc
+    except ImportacaoSemProdutosError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
     except ExtracaoDadosNotaError as exc:
         await db.rollback()
         raise HTTPException(
@@ -360,6 +367,16 @@ async def importar_lote_chaves(
                     status="failed",
                     mensagem="Falha ao consultar SEFAZ para esta chave.",
                     error_code="sefaz_error",
+                )
+            )
+        except ImportacaoSemProdutosError as exc:
+            await db.rollback()
+            results.append(
+                ImportacaoLoteResultadoResponse(
+                    chave_acesso=chave_mascarada,
+                    status="failed",
+                    mensagem=str(exc),
+                    error_code="no_items",
                 )
             )
         except ExtracaoDadosNotaError:

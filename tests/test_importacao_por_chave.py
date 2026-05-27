@@ -33,7 +33,11 @@ from backend.schemas.importacao import (
 )
 from backend.schemas.internal import FornecedorDTO, ItemNotaDTO, NotaFiscalDTO
 from backend.services.ai_processor import AIStructuredExtractor
-from backend.services.importador_sefaz import ImportadorSefazService, SefazComunicacaoError
+from backend.services.importador_sefaz import (
+    IMPORTACAO_SEM_PRODUTOS_MESSAGE,
+    ImportadorSefazService,
+    SefazComunicacaoError,
+)
 from backend.services.parsers.sefaz_go import SefazGoParser
 
 
@@ -163,6 +167,20 @@ def _dto_for_batch_key(chave: str, suffix: str) -> NotaFiscalDTO:
                 categoria="OUTROS",
             )
         ],
+    )
+
+
+def _dto_without_items(chave: str, suffix: str) -> NotaFiscalDTO:
+    return NotaFiscalDTO(
+        chave_acesso=chave,
+        numero_nota=f"EMPTY-{suffix}",
+        data_emissao=date(2026, 5, 26),
+        valor_total=Decimal("0.00"),
+        fornecedor=FornecedorDTO(
+            cnpj=f"17457405{suffix.zfill(6)}",
+            razao_social=f"MERCADO SEM PRODUTOS {suffix} LTDA",
+        ),
+        itens=[],
     )
 
 
@@ -435,6 +453,43 @@ async def test_importacao_por_chave_fallback_ia_mockado_grava_parser_source(monk
 
 
 @pytest.mark.anyio
+async def test_importacao_por_chave_fallback_zero_itens_retorna_erro_e_nao_persiste(monkeypatch):
+    chave = _valid_access_key("5226051745740400118365511000040935127519760")
+    token = await _create_user("import_zero_items_admin")
+    dto = _dto_without_items(chave, "701")
+    _mock_ai_fallback_import_dependencies(monkeypatch, dto)
+    before = {
+        NotaFiscal: await _count(NotaFiscal),
+        ItemNotaFiscal: await _count(ItemNotaFiscal),
+        Produto: await _count(Produto),
+        HistoricoPreco: await _count(HistoricoPreco),
+        AuditLog: await _count(AuditLog),
+    }
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-por-chave",
+            json={"chave_acesso": chave},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == IMPORTACAO_SEM_PRODUTOS_MESSAGE
+    assert chave not in response.text
+    assert "Traceback" not in response.text
+    assert "<html" not in response.text
+    assert await _count(NotaFiscal) == before[NotaFiscal]
+    assert await _count(ItemNotaFiscal) == before[ItemNotaFiscal]
+    assert await _count(Produto) == before[Produto]
+    assert await _count(HistoricoPreco) == before[HistoricoPreco]
+    assert await _count(AuditLog) == before[AuditLog]
+
+    async with SessionLocal() as db:
+        assert await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave)) is None
+        assert await db.scalar(select(AuditLog).where(AuditLog.entidade_id == chave)) is None
+
+
+@pytest.mark.anyio
 async def test_importacao_html_longo_fallback_truncado_grava_warning_sem_groq_real(monkeypatch):
     fixtures_root = Path(__file__).parent / "fixtures" / "sefaz"
     html = (fixtures_root / "html" / "nfe_longa_multiplos_itens.html").read_text(encoding="utf-8")
@@ -555,6 +610,74 @@ async def test_importacao_lote_chaves_duas_validas_retorna_success_com_quality(m
     async with SessionLocal() as db:
         assert await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave_1)) is not None
         assert await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave_2)) is not None
+
+
+@pytest.mark.anyio
+async def test_importacao_lote_chaves_misto_zero_itens_retorna_failed_e_continua(monkeypatch):
+    chave_success = _valid_access_key("5226051745740400118365511000040935127519770")
+    chave_empty = _valid_access_key("5226051745740400118365511000040935127519780")
+    token = await _create_user("batch_zero_items_admin")
+    success_dto = _dto_for_batch_key(chave_success, "702")
+    empty_dto = _dto_without_items(chave_empty, "703")
+
+    async def fake_fetch_url(self, url: str) -> str:
+        if chave_success in url:
+            return f"<html>{chave_success}</html>"
+        if chave_empty in url:
+            return f"<html>{chave_empty}</html>"
+        raise AssertionError("Chave inesperada no mock de lote com zero itens")
+
+    def fake_parse(self, html: str):
+        if chave_success in html:
+            return success_dto
+        if chave_empty in html:
+            return None
+        raise AssertionError("HTML inesperado no parser de lote")
+
+    async def fake_extrair_nota(self, texto_limpo: str, categorias_contexto=None):
+        assert chave_empty in texto_limpo
+        return empty_dto
+
+    async def fake_classificar_itens_lote(self, itens, categorias_contexto):
+        for item in itens:
+            if item.categoria:
+                item.categoria_sugerida_origem = "groq"
+                item.categoria_sugerida_modelo = "test-model"
+        return itens
+
+    monkeypatch.setattr(ImportadorSefazService, "_fetch_url", fake_fetch_url)
+    monkeypatch.setattr(SefazGoParser, "parse", fake_parse)
+    monkeypatch.setattr(AIStructuredExtractor, "extrair_nota", fake_extrair_nota)
+    monkeypatch.setattr(AIStructuredExtractor, "classificar_itens_lote", fake_classificar_itens_lote)
+    app.state.http_client = AsyncMock()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-lote-chaves",
+            json={"chaves_acesso": [chave_success, chave_empty]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 2
+    assert body["success_count"] == 1
+    assert body["duplicate_count"] == 0
+    assert body["failed_count"] == 1
+    assert [result["status"] for result in body["results"]] == ["success", "failed"]
+    assert body["results"][1]["chave_acesso"] == f"{chave_empty[:4]}...{chave_empty[-4:]}"
+    assert body["results"][1]["mensagem"] == IMPORTACAO_SEM_PRODUTOS_MESSAGE
+    assert body["results"][1]["error_code"] == "no_items"
+    assert body["results"][1]["nota_fiscal"] is None
+    assert chave_success not in response.text
+    assert chave_empty not in response.text
+
+    async with SessionLocal() as db:
+        assert await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave_success)) is not None
+        assert await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave_empty)) is None
+        assert await db.scalar(select(AuditLog).where(AuditLog.entidade_id == chave_success)) is not None
+        assert await db.scalar(select(AuditLog).where(AuditLog.entidade_id == chave_empty)) is None
+        assert await db.scalar(select(Fornecedor).where(Fornecedor.cnpj == empty_dto.fornecedor.cnpj)) is None
 
 
 @pytest.mark.anyio
