@@ -361,7 +361,7 @@ def _extract_items_rowwise(lines: list[str]) -> list[NfcePdfItem]:
         if not in_products or not line:
             continue
         if any(marker in normalized for marker in STOP_MARKERS):
-            break
+            continue
         if normalized.startswith(("item ", "n item", "descricao", "codigo")):
             continue
 
@@ -444,7 +444,7 @@ def _extract_items_columnar(lines: list[str]) -> list[NfcePdfItem]:
                 state = "qty"
                 continue
             flush_group()
-            break
+            continue
         if normalized.startswith(("item ", "n item", "descricao", "codigo")):
             continue
 
