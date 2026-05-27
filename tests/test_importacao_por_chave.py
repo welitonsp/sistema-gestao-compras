@@ -27,6 +27,8 @@ from backend.models.compras import (
 )
 from backend.schemas.importacao import (
     FornecedorImportadoResponse,
+    ImportacaoChaveRequest,
+    ImportacaoLoteChavesRequest,
     ImportacaoNotaResponse,
     ItemNotaFiscalImportadoResponse,
     NotaFiscalImportadaResponse,
@@ -36,7 +38,10 @@ from backend.services.ai_processor import AIStructuredExtractor
 from backend.services.importador_sefaz import (
     IMPORTACAO_SEM_PRODUTOS_MESSAGE,
     ImportadorSefazService,
+    SefazGoQueryStrategy,
+    SefazConsultaInvalidaError,
     SefazComunicacaoError,
+    SefazTransportError,
 )
 from backend.services.parsers.sefaz_go import SefazGoParser
 
@@ -48,6 +53,14 @@ def _valid_access_key(seed: str) -> str:
     remainder = total % 11
     check_digit = 0 if remainder in (0, 1) else 11 - remainder
     return f"{base}{check_digit}"
+
+
+def _qrcode_payload_for_key(chave: str) -> str:
+    return f"{chave}|2|1|1|HASH-SINTETICO"
+
+
+def _qrcode_url_for_key(chave: str) -> str:
+    return f"https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}%7C2%7C1%7C1%7CHASH-SINTETICO"
 
 
 async def _create_user(username: str, role: str = UserRole.ADMIN) -> str:
@@ -69,6 +82,50 @@ async def _create_user(username: str, role: str = UserRole.ADMIN) -> str:
 async def _count(model) -> int:
     async with SessionLocal() as db:
         return await db.scalar(select(func.count()).select_from(model)) or 0
+
+
+def _allow_plain_access_key_fetch_in_test(monkeypatch) -> None:
+    def fake_strategy(identificador: str) -> SefazGoQueryStrategy:
+        chave = "".join(char for char in identificador if char.isdigit())
+        return SefazGoQueryStrategy(
+            kind="access_key",
+            chave_acesso=chave,
+            url=f"https://sefaz.test/consulta-publica?chaveAcesso={chave}",
+        )
+
+    monkeypatch.setattr(
+        "backend.services.importador_sefaz.build_sefaz_go_query_strategy",
+        fake_strategy,
+    )
+
+
+def _fake_import_response(chave: str, suffix: str = "777") -> ImportacaoNotaResponse:
+    return ImportacaoNotaResponse(
+        mensagem="Nota fiscal importada com sucesso.",
+        fornecedor=FornecedorImportadoResponse(
+            id="00000000-0000-0000-0000-000000000001",
+            cnpj=f"17457404{suffix.zfill(6)}",
+            razao_social=f"MERCADO QR {suffix} LTDA",
+        ),
+        nota_fiscal=NotaFiscalImportadaResponse(
+            id="00000000-0000-0000-0000-000000000002",
+            numero_nota=f"QR-{suffix}",
+            chave_acesso=chave,
+            data_emissao=date(2026, 5, 26),
+            valor_total=Decimal("10.00"),
+        ),
+        itens=[
+            ItemNotaFiscalImportadoResponse(
+                id="00000000-0000-0000-0000-000000000003",
+                ean=f"789600000{suffix.zfill(4)}",
+                descricao_original=f"ITEM QR {suffix}",
+                quantidade=Decimal("1"),
+                valor_unitario=Decimal("10.00"),
+                valor_total=Decimal("10.00"),
+            )
+        ],
+        total_itens=1,
+    )
 
 
 async def _create_import_history_note(
@@ -118,8 +175,10 @@ async def _create_import_history_note(
 
 
 def _mock_import_dependencies(monkeypatch, dto: NotaFiscalDTO) -> None:
+    _allow_plain_access_key_fetch_in_test(monkeypatch)
+
     async def fake_fetch_url(self, url: str) -> str:
-        return "<html>nota fiscal mockada</html>"
+        return "<html><body><table><tr><td>Produto Descricao Quantidade Valor</td></tr></table></body></html>"
 
     async def fake_classificar_itens_lote(self, itens, categorias_contexto):
         for item in itens:
@@ -135,8 +194,13 @@ def _mock_import_dependencies(monkeypatch, dto: NotaFiscalDTO) -> None:
 
 
 def _mock_ai_fallback_import_dependencies(monkeypatch, dto: NotaFiscalDTO) -> None:
+    _allow_plain_access_key_fetch_in_test(monkeypatch)
+
     async def fake_fetch_url(self, url: str) -> str:
-        return "<html>sem seletores deterministas</html>"
+        return (
+            "<html><body><table><tr><td>Produto Descricao Quantidade Valor</td></tr></table>"
+            "<p>conteudo sintetico sem seletores deterministas</p></body></html>"
+        )
 
     async def fake_extrair_nota(self, texto_limpo: str, categorias_contexto=None):
         return dto
@@ -185,10 +249,12 @@ def _dto_without_items(chave: str, suffix: str) -> NotaFiscalDTO:
 
 
 def _mock_batch_import_dependencies(monkeypatch, dto_by_key: dict[str, NotaFiscalDTO]) -> None:
+    _allow_plain_access_key_fetch_in_test(monkeypatch)
+
     async def fake_fetch_url(self, url: str) -> str:
         for chave in dto_by_key:
             if chave in url:
-                return f"<html>{chave}</html>"
+                return f"<html><body><table><tr><td>Produto Descricao Quantidade Valor {chave}</td></tr></table></body></html>"
         raise AssertionError("Chave inesperada no mock de lote")
 
     def fake_parse(self, html: str):
@@ -208,6 +274,80 @@ def _mock_batch_import_dependencies(monkeypatch, dto_by_key: dict[str, NotaFisca
     monkeypatch.setattr(SefazGoParser, "parse", fake_parse)
     monkeypatch.setattr(AIStructuredExtractor, "classificar_itens_lote", fake_classificar_itens_lote)
     app.state.http_client = AsyncMock()
+
+
+def test_schema_preserva_url_qrcode_e_payload_com_pipes():
+    chave = _valid_access_key("5226051745740400118365511000040935127521010")
+    chave_2 = _valid_access_key("5226051745740400118365511000040935127521020")
+    url = _qrcode_url_for_key(chave)
+    payload = _qrcode_payload_for_key(chave_2)
+
+    request_url = ImportacaoChaveRequest.model_validate({"chave_acesso": url})
+    request_payload = ImportacaoChaveRequest.model_validate({"chave_acesso": payload})
+    lote = ImportacaoLoteChavesRequest.model_validate({"chaves_acesso": [url, payload]})
+
+    assert request_url.chave_acesso == url
+    assert request_payload.chave_acesso == payload
+    assert lote.chaves_acesso == [url, payload]
+
+
+def test_schema_normaliza_apenas_chave_pura():
+    chave = _valid_access_key("5226051745740400118365511000040935127521020")
+    chave_mascarada = f"{chave[:4]} {chave[4:20]} {chave[20:]}"
+
+    request = ImportacaoChaveRequest.model_validate({"chave_acesso": chave_mascarada})
+
+    assert request.chave_acesso == chave
+
+
+@pytest.mark.anyio
+async def test_importacao_por_chave_url_qrcode_chega_preservada_ao_servico(monkeypatch):
+    chave = _valid_access_key("5226051745740400118365511000040935127521030")
+    url = _qrcode_url_for_key(chave)
+    token = await _create_user("qr_url_preserved_admin")
+    seen_identificador = None
+
+    async def fake_importar_por_chave(self, identificador: str, **kwargs):
+        nonlocal seen_identificador
+        seen_identificador = identificador
+        return _fake_import_response(chave, "901")
+
+    monkeypatch.setattr(ImportadorSefazService, "importar_por_chave", fake_importar_por_chave)
+    app.state.http_client = AsyncMock()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-por-chave",
+            json={"chave_acesso": url},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 201
+    assert seen_identificador == url
+    assert url not in response.text
+
+
+@pytest.mark.anyio
+async def test_importacao_por_chave_url_qrcode_sem_parametro_p_retorna_erro_controlado(monkeypatch):
+    url = "https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?x=1"
+    token = await _create_user("qr_url_missing_p_admin")
+
+    async def fail_importar_por_chave(self, identificador: str, **kwargs):
+        raise AssertionError("Servico nao deveria ser chamado para URL QR Code sem parametro p")
+
+    monkeypatch.setattr(ImportadorSefazService, "importar_por_chave", fail_importar_por_chave)
+    app.state.http_client = AsyncMock()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-por-chave",
+            json={"chave_acesso": url},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Identificador invalido para importacao por chave."
+    assert url not in response.text
 
 
 @pytest.mark.anyio
@@ -613,6 +753,98 @@ async def test_importacao_lote_chaves_duas_validas_retorna_success_com_quality(m
 
 
 @pytest.mark.anyio
+async def test_importacao_lote_aceita_url_qrcode_e_continua_com_chave_pura(monkeypatch):
+    chave_qr = _valid_access_key("5226051745740400118365511000040935127521040")
+    chave_plain = _valid_access_key("5226051745740400118365511000040935127521050")
+    url = _qrcode_url_for_key(chave_qr)
+    token = await _create_user("batch_qr_url_admin")
+
+    async def fake_importar_por_chave(self, identificador: str, **kwargs):
+        if identificador == url:
+            return _fake_import_response(chave_qr, "902")
+        if identificador == chave_plain:
+            raise SefazConsultaInvalidaError(
+                "Consulta por chave de acesso na SEFAZ GO nao esta disponivel sem QR Code completo ou HTML da nota.",
+                error_code="plain_access_key_not_supported_for_go",
+            )
+        raise AssertionError("Identificador inesperado no lote")
+
+    monkeypatch.setattr(ImportadorSefazService, "importar_por_chave", fake_importar_por_chave)
+    app.state.http_client = AsyncMock()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-lote-chaves",
+            json={"chaves_acesso": [url, chave_plain]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success_count"] == 1
+    assert body["failed_count"] == 1
+    assert body["results"][0]["status"] == "success"
+    assert body["results"][0]["chave_acesso"] == f"{chave_qr[:4]}...{chave_qr[-4:]}"
+    assert body["results"][1]["error_code"] == "plain_access_key_not_supported_for_go"
+    assert url not in response.text
+    assert _qrcode_payload_for_key(chave_qr) not in response.text
+
+
+@pytest.mark.anyio
+async def test_importacao_lote_chave_pura_go_failed_orientativo_sem_sefaz_ou_groq(monkeypatch):
+    chave = _valid_access_key("5226051745740400118365511000040935127521060")
+    token = await _create_user("batch_plain_key_assisted_admin")
+    before = {
+        NotaFiscal: await _count(NotaFiscal),
+        Fornecedor: await _count(Fornecedor),
+        ItemNotaFiscal: await _count(ItemNotaFiscal),
+        Produto: await _count(Produto),
+        HistoricoPreco: await _count(HistoricoPreco),
+        AuditLog: await _count(AuditLog),
+    }
+
+    async def fake_nota_existe(self, chave_acesso: str) -> bool:
+        return False
+
+    async def fail_fetch_url(self, url: str) -> str:
+        raise AssertionError("Lote com chave pura GO nao deve consultar SEFAZ")
+
+    async def fail_extrair_nota(self, *args, **kwargs):
+        raise AssertionError("Groq nao deveria ser chamado para chave pura GO sem HTML")
+
+    monkeypatch.setattr("backend.services.repository.ProcurementRepository.nota_existe", fake_nota_existe)
+    monkeypatch.setattr(ImportadorSefazService, "_fetch_url", fail_fetch_url)
+    monkeypatch.setattr(AIStructuredExtractor, "extrair_nota", fail_extrair_nota)
+    app.state.http_client = AsyncMock()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-lote-chaves",
+            json={"chaves_acesso": [chave]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success_count"] == 0
+    assert body["failed_count"] == 1
+    result = body["results"][0]
+    assert result["status"] == "failed"
+    assert result["error_code"] == "plain_access_key_not_supported_for_go"
+    assert result["chave_acesso"] == f"{chave[:4]}...{chave[-4:]}"
+    assert "URL completa do QR Code NFC-e" in result["mensagem"]
+    assert "PDF/HTML/XML" in result["mensagem"]
+    assert "portal SEFAZ GO" in result["mensagem"]
+    assert chave not in response.text
+    assert await _count(NotaFiscal) == before[NotaFiscal]
+    assert await _count(Fornecedor) == before[Fornecedor]
+    assert await _count(ItemNotaFiscal) == before[ItemNotaFiscal]
+    assert await _count(Produto) == before[Produto]
+    assert await _count(HistoricoPreco) == before[HistoricoPreco]
+    assert await _count(AuditLog) == before[AuditLog]
+
+
+@pytest.mark.anyio
 async def test_importacao_lote_chaves_misto_zero_itens_retorna_failed_e_continua(monkeypatch):
     chave_success = _valid_access_key("5226051745740400118365511000040935127519770")
     chave_empty = _valid_access_key("5226051745740400118365511000040935127519780")
@@ -622,9 +854,9 @@ async def test_importacao_lote_chaves_misto_zero_itens_retorna_failed_e_continua
 
     async def fake_fetch_url(self, url: str) -> str:
         if chave_success in url:
-            return f"<html>{chave_success}</html>"
+            return f"<html><body><table><tr><td>Produto Descricao Quantidade Valor {chave_success}</td></tr></table></body></html>"
         if chave_empty in url:
-            return f"<html>{chave_empty}</html>"
+            return f"<html><body><table><tr><td>Produto Descricao Quantidade Valor {chave_empty}</td></tr></table></body></html>"
         raise AssertionError("Chave inesperada no mock de lote com zero itens")
 
     def fake_parse(self, html: str):
@@ -645,6 +877,7 @@ async def test_importacao_lote_chaves_misto_zero_itens_retorna_failed_e_continua
                 item.categoria_sugerida_modelo = "test-model"
         return itens
 
+    _allow_plain_access_key_fetch_in_test(monkeypatch)
     monkeypatch.setattr(ImportadorSefazService, "_fetch_url", fake_fetch_url)
     monkeypatch.setattr(SefazGoParser, "parse", fake_parse)
     monkeypatch.setattr(AIStructuredExtractor, "extrair_nota", fake_extrair_nota)
@@ -777,6 +1010,103 @@ async def test_importacao_lote_chaves_misto_continua_e_faz_rollback_por_chave(mo
         )
 
     assert partial_supplier is None
+
+
+@pytest.mark.anyio
+async def test_importacao_lote_chaves_falha_tecnica_sefaz_controlada_sem_chave_completa(monkeypatch):
+    chave_success = _valid_access_key("5226051745740400118365511000040935127519750")
+    chave_failed = _valid_access_key("5226051745740400118365511000040935127519760")
+    token = await _create_user("batch_invalid_params_admin")
+    _mock_batch_import_dependencies(
+        monkeypatch,
+        {chave_success: _dto_for_batch_key(chave_success, "505")},
+    )
+    original_importar = ImportadorSefazService.importar_por_chave
+
+    async def fake_importar_por_chave(self, identificador: str, **kwargs):
+        if identificador == chave_failed:
+            raise SefazConsultaInvalidaError(
+                "SEFAZ retornou pagina de parametros invalidos para chave de 44 digitos.",
+                error_code="sefaz_invalid_parameters",
+            )
+        return await original_importar(self, identificador=identificador, **kwargs)
+
+    monkeypatch.setattr(ImportadorSefazService, "importar_por_chave", fake_importar_por_chave)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-lote-chaves",
+            json={"chaves_acesso": [chave_success, chave_failed]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success_count"] == 1
+    assert body["failed_count"] == 1
+    assert body["results"][1]["status"] == "failed"
+    assert body["results"][1]["error_code"] == "sefaz_invalid_parameters"
+    assert chave_success not in response.text
+    assert chave_failed not in response.text
+
+
+@pytest.mark.anyio
+async def test_importacao_lote_chaves_erro_transporte_sefaz_retorna_failed_sanitizado(monkeypatch):
+    chave_success = _valid_access_key("5226051745740400118365511000040935127519870")
+    chave_failed = _valid_access_key("5226051745740400118365511000040935127519880")
+    token = await _create_user("batch_transport_admin")
+    _mock_batch_import_dependencies(
+        monkeypatch,
+        {chave_success: _dto_for_batch_key(chave_success, "506")},
+    )
+
+    async def fake_importar_por_chave(self, identificador: str, **kwargs):
+        if identificador == chave_failed:
+            raise SefazTransportError("Falha de transporte ao consultar SEFAZ.")
+        return ImportacaoNotaResponse(
+            mensagem="Nota fiscal importada com sucesso.",
+            fornecedor=FornecedorImportadoResponse(
+                id="00000000-0000-0000-0000-000000000001",
+                cnpj="17457404001506",
+                razao_social="MERCADO LOTE 506 LTDA",
+            ),
+            nota_fiscal=NotaFiscalImportadaResponse(
+                id="00000000-0000-0000-0000-000000000002",
+                numero_nota="BATCH-506",
+                chave_acesso=chave_success,
+                data_emissao=date(2026, 5, 26),
+                valor_total=Decimal("10.00"),
+            ),
+            itens=[
+                ItemNotaFiscalImportadoResponse(
+                    id="00000000-0000-0000-0000-000000000003",
+                    ean="7896000000506",
+                    descricao_original="ITEM LOTE 506",
+                    quantidade=Decimal("1"),
+                    valor_unitario=Decimal("10.00"),
+                    valor_total=Decimal("10.00"),
+                )
+            ],
+            total_itens=1,
+        )
+
+    monkeypatch.setattr(ImportadorSefazService, "importar_por_chave", fake_importar_por_chave)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-lote-chaves",
+            json={"chaves_acesso": [chave_success, chave_failed]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success_count"] == 1
+    assert body["failed_count"] == 1
+    assert body["results"][1]["status"] == "failed"
+    assert body["results"][1]["error_code"] == "sefaz_transport_error"
+    assert chave_success not in response.text
+    assert chave_failed not in response.text
 
 
 @pytest.mark.anyio
@@ -1507,6 +1837,100 @@ async def test_importacao_por_chave_integrity_error_retorna_409_sem_traceback(mo
 
 
 @pytest.mark.anyio
+async def test_importacao_por_chave_erro_transporte_retorna_503_sem_chave_completa(monkeypatch):
+    chave = _valid_access_key("5226051745740400118365511000040935127519890")
+    token = await _create_user("import_transport_admin")
+    before = {
+        NotaFiscal: await _count(NotaFiscal),
+        Fornecedor: await _count(Fornecedor),
+        ItemNotaFiscal: await _count(ItemNotaFiscal),
+        Produto: await _count(Produto),
+        HistoricoPreco: await _count(HistoricoPreco),
+        AuditLog: await _count(AuditLog),
+    }
+
+    async def fail_fetch_url(self, url: str) -> str:
+        raise SefazTransportError("Falha de transporte ao consultar SEFAZ.")
+
+    async def fake_nota_existe(self, chave_acesso: str) -> bool:
+        return False
+
+    async def fail_extrair_nota(self, *args, **kwargs):
+        raise AssertionError("Groq nao deveria ser chamado sem HTML valido")
+
+    _allow_plain_access_key_fetch_in_test(monkeypatch)
+    monkeypatch.setattr(ImportadorSefazService, "_fetch_url", fail_fetch_url)
+    monkeypatch.setattr("backend.services.repository.ProcurementRepository.nota_existe", fake_nota_existe)
+    monkeypatch.setattr(AIStructuredExtractor, "extrair_nota", fail_extrair_nota)
+    app.state.http_client = AsyncMock()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-por-chave",
+            json={"chave_acesso": chave},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Falha de transporte ao consultar SEFAZ."
+    assert chave not in response.text
+    assert await _count(NotaFiscal) == before[NotaFiscal]
+    assert await _count(Fornecedor) == before[Fornecedor]
+    assert await _count(ItemNotaFiscal) == before[ItemNotaFiscal]
+    assert await _count(Produto) == before[Produto]
+    assert await _count(HistoricoPreco) == before[HistoricoPreco]
+    assert await _count(AuditLog) == before[AuditLog]
+
+
+@pytest.mark.anyio
+async def test_importacao_por_chave_pura_sem_fluxo_go_retorna_422_controlado(monkeypatch):
+    chave = _valid_access_key("5226051745740400118365511000040935127519960")
+    token = await _create_user("plain_key_unsupported_admin")
+    before = {
+        NotaFiscal: await _count(NotaFiscal),
+        Fornecedor: await _count(Fornecedor),
+        ItemNotaFiscal: await _count(ItemNotaFiscal),
+        Produto: await _count(Produto),
+        HistoricoPreco: await _count(HistoricoPreco),
+        AuditLog: await _count(AuditLog),
+    }
+
+    async def fake_nota_existe(self, chave_acesso: str) -> bool:
+        return False
+
+    async def fail_fetch_url(self, url: str) -> str:
+        raise AssertionError("Chave pura nao deve chamar endpoint SEFAZ GO sem fluxo suportado")
+
+    async def fail_extrair_nota(self, *args, **kwargs):
+        raise AssertionError("Groq nao deveria ser chamado para chave pura sem HTML")
+
+    monkeypatch.setattr("backend.services.repository.ProcurementRepository.nota_existe", fake_nota_existe)
+    monkeypatch.setattr(ImportadorSefazService, "_fetch_url", fail_fetch_url)
+    monkeypatch.setattr(AIStructuredExtractor, "extrair_nota", fail_extrair_nota)
+    app.state.http_client = AsyncMock()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-por-chave",
+            json={"chave_acesso": chave},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "URL completa do QR Code NFC-e" in detail
+    assert "PDF/HTML/XML" in detail
+    assert "portal SEFAZ GO" in detail
+    assert chave not in response.text
+    assert await _count(NotaFiscal) == before[NotaFiscal]
+    assert await _count(Fornecedor) == before[Fornecedor]
+    assert await _count(ItemNotaFiscal) == before[ItemNotaFiscal]
+    assert await _count(Produto) == before[Produto]
+    assert await _count(HistoricoPreco) == before[HistoricoPreco]
+    assert await _count(AuditLog) == before[AuditLog]
+
+
+@pytest.mark.anyio
 async def test_importacao_por_chave_falha_externa_nao_persiste(monkeypatch):
     chave = _valid_access_key("5226051745740400118365511000040935127511820")
     token = await _create_user("import_failure_admin")
@@ -1522,6 +1946,7 @@ async def test_importacao_por_chave_falha_externa_nao_persiste(monkeypatch):
     async def fail_fetch_url(self, url: str) -> str:
         raise SefazComunicacaoError("SEFAZ indisponivel no teste")
 
+    _allow_plain_access_key_fetch_in_test(monkeypatch)
     monkeypatch.setattr(ImportadorSefazService, "_fetch_url", fail_fetch_url)
     app.state.http_client = AsyncMock()
 

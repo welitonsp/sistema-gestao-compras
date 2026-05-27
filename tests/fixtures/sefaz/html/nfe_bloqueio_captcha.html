@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Consulta NFC-e - validação de acesso</title>
+    <script src="/assets/consulta.js"></script>
+  </head>
+  <body>
+    <main id="consulta-publica" class="consulta bloqueio">
+      <h1>Consulta de documento fiscal</h1>
+      <p>Não foi possível continuar a consulta. Confirme o captcha para prosseguir.</p>
+      <form id="captcha-form" class="form-validacao">
+        <div class="captcha-box">captcha</div>
+        <button type="submit">Validar</button>
+      </form>
+      <table id="mensagens" class="resultado">
+        <tr>
+          <td>Documento não encontrado ou página expirada.</td>
+        </tr>
+      </table>
+    </main>
+  </body>
+</html>

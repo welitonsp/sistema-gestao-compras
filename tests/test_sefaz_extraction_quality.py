@@ -195,6 +195,9 @@ def test_fixtures_sefaz_sao_sinteticas_e_sem_dados_fiscais_reais():
         text = path.read_text(encoding="utf-8")
         assert "nfeweb.sefaz.go.gov.br" not in text
         assert "<?xml" not in text.lower()
-        assert "MERCADO SINTETICO" in text or path.name == "nfe_parser_falha_ai_fallback.html"
+        assert "MERCADO SINTETICO" in text or path.name in {
+            "nfe_parser_falha_ai_fallback.html",
+            "nfe_bloqueio_captcha.html",
+        }
         for chave in re.findall(r"\d{44}", text):
             assert chave in expected_keys
