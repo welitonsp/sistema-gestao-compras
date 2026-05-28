@@ -127,6 +127,40 @@ async def _count(model) -> int:
         return await db.scalar(select(func.count()).select_from(model)) or 0
 
 
+async def _assert_can_reimport_same_key(chave: str, cnpj: str, ean: str) -> None:
+    dto = NotaFiscalDTO(
+        chave_acesso=chave,
+        numero_nota="70301",
+        data_emissao=date(2026, 5, 26),
+        valor_total=Decimal("21.90"),
+        fornecedor=FornecedorDTO(
+            cnpj=cnpj,
+            razao_social="MERCADO DELETE 301 LTDA",
+        ),
+        itens=[
+            ItemNotaDTO(
+                ean=ean,
+                descricao="PRODUTO DELETE 301",
+                quantidade=Decimal("1"),
+                valor_unitario=Decimal("21.90"),
+                valor_total=Decimal("21.90"),
+                marca="TESTE",
+                categoria="ALIMENTOS BASICOS",
+            )
+        ],
+    )
+
+    async with SessionLocal() as db:
+        transaction = await db.begin()
+        try:
+            repo = ProcurementRepository(db)
+            reimported = await repo.salvar_nota_completa(chave, dto)
+            await db.flush()
+            assert reimported.id is not None
+        finally:
+            await transaction.rollback()
+
+
 @pytest.mark.anyio
 async def test_delete_endpoint_remove_nota_itens_historicos_e_orfaos_sem_vazar_dados():
     chave = _valid_access_key("5226051745740400118365511000040935127513010")
@@ -158,6 +192,7 @@ async def test_delete_endpoint_remove_nota_itens_historicos_e_orfaos_sem_vazar_d
 
     async with SessionLocal() as db:
         nota = await db.scalar(select(NotaFiscal).where(NotaFiscal.id == nota_id))
+        nota_por_chave = await db.scalar(select(NotaFiscal).where(NotaFiscal.chave_acesso == chave))
         itens = (
             await db.execute(select(ItemNotaFiscal).where(ItemNotaFiscal.nota_fiscal_id == nota_id))
         ).scalars().all()
@@ -176,6 +211,7 @@ async def test_delete_endpoint_remove_nota_itens_historicos_e_orfaos_sem_vazar_d
         )
 
     assert nota is None
+    assert nota_por_chave is None
     assert itens == []
     assert historicos == []
     assert produto is None
@@ -187,6 +223,7 @@ async def test_delete_endpoint_remove_nota_itens_historicos_e_orfaos_sem_vazar_d
     assert chave not in (audit_log.detalhes or "")
     assert cnpj not in (audit_log.detalhes or "")
     assert "https://example.local/qrcode" not in (audit_log.detalhes or "")
+    await _assert_can_reimport_same_key(chave, cnpj, ean)
 
 
 @pytest.mark.anyio
