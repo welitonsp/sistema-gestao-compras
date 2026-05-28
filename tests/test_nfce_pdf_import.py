@@ -532,6 +532,28 @@ def _synthetic_nfce_150_itens_text(chave: str | None = None) -> str:
     )
 
 
+def _synthetic_nfce_150_itens_ultimo_bloco_um_item_text(chave: str | None = None) -> str:
+    chave = chave or _nfce_key("15014901")
+    items = _generated_rowwise_items(count=149, total=Decimal("1490.01"), prefix="PRODUTO STRESS")
+    body = "\n".join(
+        [
+            _insert_marker_blocks(items, block_size=35),
+            "Totais",
+            "ICMS",
+            "Dados do Transporte",
+            "Formas de Pagamento",
+            "Informações Adicionais",
+            "150 PRODUTO FINAL 1,0000 UN 9,99",
+        ]
+    )
+    return _synthetic_nfce_go_text(
+        chave=chave,
+        numero="150149",
+        total=Decimal("1500.00"),
+        body=body,
+    )
+
+
 def test_detecta_texto_pdf_nfce_detalhado():
     assert is_nfce_detalhada_text(_synthetic_nfce_text()) is True
     assert is_nfce_detalhada_text("recibo comum sem produtos") is False
@@ -667,10 +689,45 @@ def test_nfce_150_itens_stress_multiplas_paginas():
     assert len({item.numero_item for item in parsed.itens}) == 150
 
 
+def test_nfce_150_itens_ultimo_bloco_com_um_item_apos_informacoes_adicionais():
+    parsed = parse_nfce_detalhada_text(_synthetic_nfce_150_itens_ultimo_bloco_um_item_text())
+
+    assert len(parsed.itens) == 150
+    assert parsed.item_total == Decimal("1500.00")
+    assert parsed.valor_total_nota == Decimal("1500.00")
+    assert parsed.itens[-1].numero_item == 150
+    assert parsed.itens[-1].descricao == "PRODUTO FINAL"
+
+
+def test_nfce_nao_aceita_falso_item_final_se_houver_texto_livre_antes_do_qrcode():
+    text = _synthetic_nfce_text().replace(
+        "\nQR-Code",
+        (
+            "\nFormas de Pagamento\n"
+            "Informações Adicionais\n"
+            "5 BALA NAO DEVE ENTRAR 1,0000 UN 99,99\n"
+            "DESCRICAO LIVRE DO CONTRIBUINTE SEM ESTRUTURA\n\n"
+            "QR-Code"
+        ),
+        1,
+    )
+    parsed = parse_nfce_detalhada_text(text)
+
+    assert [item.numero_item for item in parsed.itens] == [1, 2, 3, 4]
+    assert all("BALA" not in item.descricao for item in parsed.itens)
+
+
 def test_extrai_produtos_nao_importa_falso_item_apos_informacoes_adicionais_terminal():
     text = _synthetic_nfce_text().replace(
-        "\nPágina 4\nQR-Code",
-        "\nFormas de Pagamento\nInformações Adicionais\n5 BALA NAO DEVE ENTRAR 1,0000 UN 99,99\n\nPágina 4\nQR-Code",
+        "\nQR-Code",
+        (
+            "\nFormas de Pagamento\n"
+            "Informações Adicionais\n"
+            "5 BALA NAO DEVE ENTRAR 1,0000 UN 99,99\n"
+            "DESCRICAO LIVRE DO CONTRIBUINTE SEM ESTRUTURA\n\n"
+            "QR-Code"
+        ),
+        1,
     )
     parsed = parse_nfce_detalhada_text(text)
 

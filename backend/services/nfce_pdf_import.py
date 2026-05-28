@@ -384,10 +384,22 @@ def _is_stop_marker(normalized_line: str) -> bool:
     return any(marker in normalized_line for marker in STOP_MARKERS)
 
 
+def _is_rowwise_header_line(normalized_line: str) -> bool:
+    return (
+        normalized_line.startswith(("item ", "n item", "codigo"))
+        or normalized_line == "descricao"
+        or (
+            "descricao" in normalized_line
+            and "quantidade" in normalized_line
+            and "valor" in normalized_line
+        )
+    )
+
+
 def _is_rowwise_lookahead_ignored_line(normalized_line: str) -> bool:
     return (
         not normalized_line
-        or normalized_line.startswith(ROWWISE_HEADER_PREFIXES)
+        or _is_rowwise_header_line(normalized_line)
         or normalized_line.startswith("pagina ")
         or "dados dos produtos e servicos" in normalized_line
         or normalized_line == "informacoes adicionais"
@@ -422,6 +434,19 @@ def _has_next_consecutive_rowwise_item(
     return False
 
 
+def _is_single_final_item_before_terminal(lines: list[str], start_index: int) -> bool:
+    for raw_line in lines[start_index:]:
+        line = raw_line.strip()
+        normalized = _normalize_text(line)
+        if _is_rowwise_lookahead_terminal_line(normalized):
+            return True
+        if _is_rowwise_lookahead_ignored_line(normalized):
+            continue
+        return False
+
+    return False
+
+
 def _has_future_rowwise_item_continuation(
     lines: list[str],
     start_index: int,
@@ -444,7 +469,10 @@ def _has_future_rowwise_item_continuation(
             if numero_item != last_item_number + 1:
                 return False
             if saw_additional_info and last_item_number > 0:
-                return _has_next_consecutive_rowwise_item(lines, index + 1, numero_item)
+                return (
+                    _has_next_consecutive_rowwise_item(lines, index + 1, numero_item)
+                    or _is_single_final_item_before_terminal(lines, index + 1)
+                )
             return True
         return False
 
@@ -460,7 +488,7 @@ def _match_rowwise_item_from_lines(lines: list[str], start_index: int) -> tuple[
             not line
             or _is_rowwise_lookahead_terminal_line(normalized)
             or _is_stop_marker(normalized)
-            or normalized.startswith(ROWWISE_HEADER_PREFIXES)
+            or _is_rowwise_header_line(normalized)
             or "dados dos produtos e servicos" in normalized
         ):
             break
