@@ -206,7 +206,7 @@ def _synthetic_multipagem_nfce_text(chave: str | None = None) -> str:
     itens_1_36 = "\n".join([f"{i} PRODUTO TESTE {i} 1,0000 UN 10,00" for i in range(1, 37)])
     itens_37_58 = "\n".join([f"{i} PRODUTO TESTE {i} 1,0000 UN 10,00" for i in range(37, 59)])
     item_59 = "59 PRODUTO TESTE 59 1,0000 UN 290,70"
-    
+
     return f"""
 Nota Fiscal do Consumidor Eletrônica
 Chave de Acesso: {chave}
@@ -1015,11 +1015,14 @@ def test_extrai_produtos_nao_abre_continuacao_quando_item_fora_de_ordem_aparece_
         "Informações Adicionais\n37 PRODUTO TESTE 37",
         "Informações Adicionais\n40 BALA NAO DEVE ENTRAR 1,0000 UN 99,99\n37 PRODUTO TESTE 37",
     )
-    parsed = parse_nfce_detalhada_text(text)
-
-    assert len(parsed.itens) == 36
-    assert parsed.itens[-1].numero_item == 36
-    assert all("BALA" not in item.descricao for item in parsed.itens)
+    # Com a nova validação dura, a falha na continuação (que para no 36)
+    # fará a nota ter um total extraído diferente do valor_total_produtos (que é 870,70 na fixture),
+    # lançando a exceção NfcePdfImportError ao invés de retornar parcial.
+    import pytest
+    from backend.services.nfce_pdf_import import NfcePdfImportError
+    with pytest.raises(NfcePdfImportError) as exc:
+        parse_nfce_detalhada_text(text)
+    assert exc.value.error_code == "extraction_total_mismatch"
 
 
 def test_extrai_produtos_multiplas_paginas_nao_importa_linha_pos_totais_terminal():
@@ -1223,3 +1226,85 @@ async def test_importacao_pdf_logs_sanitizados(monkeypatch):
     assert "Nota Fiscal do Consumidor" not in rendered_logs
     assert "item_count=4" in rendered_logs
     assert "quality_status=ok" in rendered_logs
+
+
+def test_extrai_nf189258_continuacao_itens_apos_marcadores_pagina_seguinte():
+    from backend.services.nfce_pdf_import import is_nfce_detalhada_text, parse_nfce_detalhada_text
+    from decimal import Decimal
+
+    lines = [
+        "documento auxiliar da nota fiscal de consumidor eletronica",
+        "dados dos produtos e servicos",
+        "Item Codigo Descricao Qtd Unid Vlr Unit Vlr Total",
+        "1 ITEM GENERICO 1 1,0000 UN 834,98"
+    ]
+    for i in range(2, 84):
+        lines.append(f"{i} ITEM GENERICO {i} 1,0000 UN 1,00")
+
+    lines.extend([
+        "84 COBERT HARALD CONFEIT MAMARGO GTS1,01KG 1,0000 UN 21,89",
+        "85 AZEITE TP UNICO PORT ANDORINHA PURO500ML 1,0000 UN 34,99",
+        "Totais",
+        "ICMS",
+        "Dados do Transporte",
+        "Formas de Pagamento",
+        "Informações Adicionais",
+        "86 LOCAO LIMP LEITE DE COLONIA 200ML TRAD 1,0000 UN 7,49"
+    ])
+
+    for i in range(87, 111):
+        lines.append(f"{i} ITEM GENERICO {i} 1,0000 UN 1,00")
+
+    lines.append("111 ARROZ TP1 AGULHINHA PATOSUL 5KG 1,0000 UN 24,99")
+
+    text = "\n".join(lines) + f"\nValor Total dos Produtos 1.030,34\nValor Total dos Descontos 0,00\nValor Total da Nota Fiscal 1.030,34\nChave de Acesso {_nfce_key('18925800')}\nEmitente: ATACADAO DIA A DIA S.A\nCNPJ 11.222.333/0001-99\nData Emissao 07/04/2025\nurl nfc-e"
+
+    assert is_nfce_detalhada_text(text) == True
+    parsed = parse_nfce_detalhada_text(text)
+
+    assert len(parsed.itens) == 111
+    assert parsed.itens[0].numero_item == 1
+    assert parsed.itens[-1].numero_item == 111
+    assert any(i.numero_item == 84 for i in parsed.itens)
+    assert any(i.numero_item == 85 for i in parsed.itens)
+    assert any(i.numero_item == 86 for i in parsed.itens)
+    assert any(i.numero_item == 111 for i in parsed.itens)
+    assert "ARROZ TP1 AGULHINHA PATOSUL 5KG" in parsed.itens[-1].descricao
+
+    assert parsed.item_total == Decimal("1030.34")
+    assert parsed.valor_total_produtos == Decimal("1030.34")
+    assert parsed.valor_total_descontos == Decimal("0.00")
+    assert parsed.valor_total_nota == Decimal("1030.34")
+
+
+@pytest.mark.anyio
+async def test_negativo_integridade_importacao_parcial(monkeypatch):
+    from backend.services.nfce_pdf_import import NfcePdfImportService, NfcePdfImportError
+    from backend.services.repository import ProcurementRepository
+    from backend.core.database import SessionLocal
+    import pytest
+
+    # Fixture missing items 84-111, simulating a partial extraction bug, but with total 1030.34
+    lines = [
+        "documento auxiliar da nota fiscal de consumidor eletronica",
+        "dados dos produtos e servicos",
+        "Item Codigo Descricao Qtd Unid Vlr Unit Vlr Total",
+        "1 ITEM GENERICO 1 1,0000 UN 834,98"
+    ]
+    for i in range(2, 84):
+        lines.append(f"{i} ITEM GENERICO {i} 1,0000 UN 1,00")
+
+    text = "\n".join(lines) + f"\nValor Total dos Produtos 1.030,34\nValor Total dos Descontos 0,00\nValor Total da Nota Fiscal 1.030,34\nChave de Acesso {_nfce_key('18925800')}\nEmitente: ATACADAO DIA A DIA S.A\nCNPJ 11.222.333/0001-99\nData Emissao 07/04/2025\nurl nfc-e"
+
+    monkeypatch.setattr("backend.services.nfce_pdf_import.extract_text_from_pdf_bytes", lambda content: text)
+
+    async with SessionLocal() as db:
+        service = NfcePdfImportService(repo=ProcurementRepository(db))
+        with pytest.raises(NfcePdfImportError) as exc_info:
+            await service.importar_pdf_bytes(
+                b"%PDF-sintetico",
+                filename="nfce-parcial.pdf",
+                usuario="test"
+            )
+        assert exc_info.value.error_code == "extraction_total_mismatch"
+        assert "difere do valor total dos produtos" in str(exc_info.value)
