@@ -207,13 +207,13 @@ def parse_nfce_detalhada_text(text: str) -> NfcePdfParseResult:
     if not itens:
         raise ImportacaoSemProdutosError(NFCE_PDF_NO_PRODUCTS_MESSAGE)
 
-    valor_total_nota = _extract_money(text, r"Valor Total da Nota Fiscal\s*[:\-]?\s*([0-9.]+,\d{2})")
-    valor_total_nota = valor_total_nota or _extract_money(text, r"Valor Total da NF-?e\s*[:\-]?\s*([0-9.]+,\d{2})")
-    valor_total_produtos = _extract_money(text, r"Valor Total dos Produtos\s*[:\-]?\s*([0-9.]+,\d{2})")
-    valor_total_descontos = _extract_money(text, r"Valor Total dos Descontos\s*[:\-]?\s*([0-9.]+,\d{2})")
-    valor_total_frete = _extract_money(text, r"Valor Total do Frete\s*[:\-]?\s*([0-9.]+,\d{2})")
-    valor_total_seguro = _extract_money(text, r"Valor Total do Seguro\s*[:\-]?\s*([0-9.]+,\d{2})")
-    valor_outras_despesas = _extract_money(text, r"Outras Despesas(?:\s+Acess[oó]rias)?\s*[:\-]?\s*([0-9.]+,\d{2})")
+    totals = _extract_all_totals(text)
+    valor_total_nota = totals.get("valor_total_nota")
+    valor_total_produtos = totals.get("valor_total_produtos")
+    valor_total_descontos = totals.get("valor_total_descontos")
+    valor_total_frete = totals.get("valor_total_frete")
+    valor_total_seguro = totals.get("valor_total_seguro")
+    valor_outras_despesas = totals.get("valor_outras_despesas")
     item_total = sum((item.valor_total_item for item in itens), Decimal("0.00")).quantize(Decimal("0.01"))
 
     modelo, serie, numero = _extract_nf_metadata(text)
@@ -237,6 +237,61 @@ def parse_nfce_detalhada_text(text: str) -> NfcePdfParseResult:
         itens=itens,
         item_total=item_total,
     )
+
+
+def _extract_all_totals(text: str) -> dict[str, Decimal | None]:
+    labels = {
+        "valor_total_nota": [r"Valor Total da Nota Fiscal", r"Valor Total da NF-?e"],
+        "valor_total_produtos": [r"Valor Total dos Produtos"],
+        "valor_total_descontos": [r"Valor Total dos Descontos"],
+        "valor_total_frete": [r"Valor(?: Total)? do Frete"],
+        "valor_total_seguro": [r"Valor(?: Total)? do Seguro"],
+        "valor_outras_despesas": [r"Outras Despesas(?:\s+Acess[oó]rias)?", r"Valor Total Outras Despesas"],
+    }
+    results: dict[str, Decimal | None] = {k: None for k in labels}
+
+    # Matrix/Bundled extraction FIRST for common pharmacy layouts
+    lines = _non_empty_lines(text)
+    fiscal_labels = [
+        ("valor_total_frete", "Valor do Frete"),
+        ("valor_total_seguro", "Valor do Seguro"),
+        ("valor_total_descontos", "Valor Total dos Descontos"),
+        ("valor_total_ii", "Valor Total do II"),
+        ("valor_total_ipi", "Valor Total do IPI"),
+    ]
+    found_labels = []
+    for i, line in enumerate(lines):
+        norm = _normalize_text(line)
+        for key, label_text in fiscal_labels:
+            if _normalize_text(label_text) == norm:
+                found_labels.append((i, key))
+
+    if len(found_labels) >= 3:
+        found_labels.sort()
+        first_label_idx = found_labels[0][0]
+        # Find all money values in the vicinity of the label block
+        money_in_window = []
+        for j in range(first_label_idx + 1, min(len(lines), first_label_idx + 30)):
+            candidate = lines[j].strip()
+            if re.fullmatch(r"[0-9.]+,\d{2}", candidate):
+                money_in_window.append(br_decimal(candidate))
+
+        if len(money_in_window) >= len(found_labels):
+            for idx, (line_idx, key) in enumerate(found_labels):
+                if key in results:
+                    results[key] = money_in_window[idx]
+
+    # Standard extraction for remaining or if matrix failed
+    for key, patterns in labels.items():
+        if results[key] is not None:
+            continue
+        for pattern in patterns:
+            val = _extract_money(text, pattern + r"\s*[:\-]?\s*([0-9.]+,\d{2})")
+            if val is not None:
+                results[key] = val
+                break
+
+    return results
 
 
 def _extract_access_key(text: str) -> str:
@@ -346,6 +401,10 @@ def _extract_date(text: str) -> date:
         flags=re.I,
     )
     if not match:
+        # Fallback: look for the first date-like pattern if the label-anchored one fails
+        match = re.search(r"(\d{2}/\d{2}/\d{4})", text)
+
+    if not match:
         raise NfcePdfImportError("Data de emissão ausente no PDF.", error_code="missing_issue_date")
     return datetime.strptime(match.group(1), "%d/%m/%Y").date()
 
@@ -385,8 +444,16 @@ def _is_stop_marker(normalized_line: str) -> bool:
 
 
 def _is_rowwise_header_line(normalized_line: str) -> bool:
-    if normalized_line.startswith(("item ", "n item", "n. item", "num.", "codigo")):
+    if normalized_line.startswith(("item ", "n item", "n. item", "num.")):
         return True
+
+    if normalized_line == "codigo" or (normalized_line.startswith("codigo ") and "regime tributario" not in normalized_line):
+        return True
+
+    # Exclude global total labels that might trip keyword counts
+    if "valor total da" in normalized_line or "valor total do" in normalized_line:
+        return False
+
     keywords = {
         "descricao",
         "quantidade",
@@ -406,7 +473,9 @@ def _is_rowwise_header_line(normalized_line: str) -> bool:
     for kw in keywords:
         if kw in normalized_line:
             found_count += 1
-    return found_count >= 2
+
+    # Require at least 3 keywords for multi-word header lines to avoid metadata overlap
+    return found_count >= 3
 
 
 def _is_rowwise_lookahead_ignored_line(normalized_line: str) -> bool:
@@ -570,7 +639,7 @@ def _extract_items_rowwise(lines: list[str]) -> list[NfcePdfItem]:
         if index <= skip_until_index:
             continue
         normalized = _normalize_text(line)
-        if "dados dos produtos e servicos" in normalized:
+        if "dados dos produtos e servicos" in normalized or _is_rowwise_header_line(normalized):
             in_products = True
             continue
         if not in_products or not line:
@@ -653,12 +722,14 @@ def _extract_items_columnar(lines: list[str]) -> list[NfcePdfItem]:
     for index, raw_line in enumerate(lines):
         line = raw_line.strip()
         normalized = _normalize_text(line)
-        if "dados dos produtos e servicos" in normalized:
-            in_products = True
-            state = "desc"
+        if "dados dos produtos e servicos" in normalized or _is_rowwise_header_line(normalized):
+            if not in_products:
+                in_products = True
+                state = "desc"
             continue
         if not in_products or not line:
             continue
+
         if _is_rowwise_lookahead_terminal_line(normalized):
             flush_group()
             break
