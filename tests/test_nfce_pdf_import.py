@@ -684,6 +684,62 @@ https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}%7C2%7C1%7C1
 """
 
 
+def _synthetic_nfce_1522_reproduction_text(chave: str | None = None) -> str:
+    chave = chave or _nfce_key("00001522")
+    return f"""
+Nota Fiscal do Consumidor Eletrônica
+Chave de Acesso: {chave}
+Modelo: 65
+Série: 98
+Número: 1522
+Data de Emissão: 12/03/2025
+Emitente: RAIADROGASIL S.A.
+CNPJ: 99.999.999/0001-91
+Valor Total dos Produtos 99,98
+Valor Total dos Descontos 25,00
+Valor Total da Nota Fiscal 74,98
+
+Dados dos Produtos e Serviços
+Totais
+ICMS
+Dados do Transporte
+Formas de Pagamento
+Informações Adicionais
+Informações Complementares
+Informações Suplementares
+Num. Descrição Qtd. Unidade
+Comercial
+Valor(R$)
+1 NINHO FASES 1+ 800G 2,0000 UN 99,98
+
+Valor Total dos Produtos 99,98
+Valor Total dos Descontos 25,00
+Valor Total da NFe 74,98
+QR-Code
+URL NFC-e: https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}%7C2
+"""
+
+
+def test_extrai_nf1522_item_unico_com_desconto_apos_marcadores_reais():
+    text = _synthetic_nfce_1522_reproduction_text()
+    assert is_nfce_detalhada_text(text) is True
+
+    parsed = parse_nfce_detalhada_text(text)
+
+    assert len(parsed.itens) == 1
+    item = parsed.itens[0]
+    assert item.numero_item == 1
+    assert item.descricao == "NINHO FASES 1+ 800G"
+    assert item.quantidade == Decimal("2.0000")
+    assert item.unidade == "UN"
+    assert item.valor_total_item == Decimal("99.98")
+    assert parsed.item_total == Decimal("99.98")
+    assert parsed.valor_total_produtos == Decimal("99.98")
+    assert parsed.valor_total_descontos == Decimal("25.00")
+    assert parsed.valor_total_nota == Decimal("74.98")
+    assert _fiscal_totals_reconcile(parsed) is True
+
+
 def test_detecta_texto_pdf_nfce_detalhado():
     assert is_nfce_detalhada_text(_synthetic_nfce_text()) is True
     assert is_nfce_detalhada_text("recibo comum sem produtos") is False
