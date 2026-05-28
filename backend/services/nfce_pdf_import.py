@@ -44,6 +44,18 @@ STOP_MARKERS = (
     "dados do transporte",
     "formas de pagamento",
 )
+ROWWISE_ITEM_RE = re.compile(
+    r"^\s*(\d{1,4})\s+(.+?)\s+(\d+,\d{1,4})\s+([A-Za-z]{1,8})\s+([0-9.]+,\d{2})\s*$"
+)
+ROWWISE_HEADER_PREFIXES = ("item ", "n item", "descricao", "codigo")
+ROWWISE_LOOKAHEAD_TERMINAL_MARKERS = (
+    "qr-code",
+    "qr code",
+    "url nfc-e",
+    "chave de acesso",
+    "protocolo de autorizacao",
+    "informacoes adicionais",
+)
 
 
 @dataclass(frozen=True)
@@ -349,26 +361,64 @@ def _extract_items(text: str) -> list[NfcePdfItem]:
     return columnar_items if len(columnar_items) > len(row_items) else row_items
 
 
+def _match_rowwise_item(line: str) -> re.Match[str] | None:
+    return ROWWISE_ITEM_RE.match(line)
+
+
+def _is_stop_marker(normalized_line: str) -> bool:
+    return any(marker in normalized_line for marker in STOP_MARKERS)
+
+
+def _is_rowwise_lookahead_ignored_line(normalized_line: str) -> bool:
+    return (
+        not normalized_line
+        or normalized_line.startswith(ROWWISE_HEADER_PREFIXES)
+        or normalized_line.startswith("pagina ")
+        or "dados dos produtos e servicos" in normalized_line
+        or _is_stop_marker(normalized_line)
+    )
+
+
+def _has_future_rowwise_item_continuation(
+    lines: list[str],
+    start_index: int,
+    last_item_number: int,
+) -> bool:
+    for raw_line in lines[start_index:]:
+        line = raw_line.strip()
+        normalized = _normalize_text(line)
+        if any(marker in normalized for marker in ROWWISE_LOOKAHEAD_TERMINAL_MARKERS):
+            return False
+        if _is_rowwise_lookahead_ignored_line(normalized):
+            continue
+
+        match = _match_rowwise_item(line)
+        if match:
+            return int(match.group(1)) > last_item_number
+
+    return False
+
+
 def _extract_items_rowwise(lines: list[str]) -> list[NfcePdfItem]:
     in_products = False
     items: list[NfcePdfItem] = []
+    last_item_number = 0
 
-    for line in lines:
+    for index, line in enumerate(lines):
         normalized = _normalize_text(line)
         if "dados dos produtos e servicos" in normalized:
             in_products = True
             continue
         if not in_products or not line:
             continue
-        if any(marker in normalized for marker in STOP_MARKERS):
-            continue
-        if normalized.startswith(("item ", "n item", "descricao", "codigo")):
+        if _is_stop_marker(normalized):
+            if _has_future_rowwise_item_continuation(lines, index + 1, last_item_number):
+                continue
+            break
+        if normalized.startswith(ROWWISE_HEADER_PREFIXES):
             continue
 
-        match = re.match(
-            r"^\s*(\d{1,4})\s+(.+?)\s+(\d+,\d{1,4})\s+([A-Za-z]{1,8})\s+([0-9.]+,\d{2})\s*$",
-            line,
-        )
+        match = _match_rowwise_item(line)
         if not match:
             continue
 
@@ -392,6 +442,7 @@ def _extract_items_rowwise(lines: list[str]) -> list[NfcePdfItem]:
                 confianca=Decimal(str(categoria.confianca)),
             )
         )
+        last_item_number = max(last_item_number, numero_item)
 
     return items
 
@@ -404,9 +455,10 @@ def _extract_items_columnar(lines: list[str]) -> list[NfcePdfItem]:
     units: list[str] = []
     values: list[Decimal] = []
     items: list[NfcePdfItem] = []
+    last_item_number = 0
 
     def flush_group() -> None:
-        nonlocal descriptions, quantities, units, values
+        nonlocal descriptions, quantities, units, values, last_item_number
         count = min(len(descriptions), len(quantities), len(units), len(values))
         for idx in range(count):
             numero_item, descricao = descriptions[idx]
@@ -425,12 +477,13 @@ def _extract_items_columnar(lines: list[str]) -> list[NfcePdfItem]:
                     confianca=Decimal(str(categoria.confianca)),
                 )
             )
+            last_item_number = max(last_item_number, numero_item)
         descriptions = descriptions[count:]
         quantities = quantities[count:]
         units = units[count:]
         values = values[count:]
 
-    for raw_line in lines:
+    for index, raw_line in enumerate(lines):
         line = raw_line.strip()
         normalized = _normalize_text(line)
         if "dados dos produtos e servicos" in normalized:
@@ -439,13 +492,19 @@ def _extract_items_columnar(lines: list[str]) -> list[NfcePdfItem]:
             continue
         if not in_products or not line:
             continue
-        if any(marker in normalized for marker in STOP_MARKERS):
+        if _is_stop_marker(normalized):
             if descriptions and not quantities:
                 state = "qty"
                 continue
             flush_group()
-            continue
-        if normalized.startswith(("item ", "n item", "descricao", "codigo")):
+            pending_last_item_number = max(
+                [last_item_number, *(numero_item for numero_item, _ in descriptions)],
+                default=last_item_number,
+            )
+            if _has_future_rowwise_item_continuation(lines, index + 1, pending_last_item_number):
+                continue
+            break
+        if normalized.startswith(ROWWISE_HEADER_PREFIXES):
             continue
 
         item_match = re.match(r"^\s*(\d{1,4})\s+(.+?)\s*$", line)

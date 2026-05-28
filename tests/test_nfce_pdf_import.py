@@ -92,6 +92,7 @@ ICMS
 Página 4
 QR-Code
 URL NFC-e: https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}%7C2%7C1%7C1%7CHASH-SINTETICO
+5 BALA NAO DEVE ENTRAR 1,0000 UN 99,99
 """
 
 
@@ -287,9 +288,10 @@ def test_extrai_produtos_multiplas_paginas_com_stop_markers_no_meio():
     assert parsed.valor_total_nota == Decimal("870.70")
     assert parsed.itens[0].numero_item == 1
     assert parsed.itens[-1].numero_item == 59
+    assert len({item.numero_item for item in parsed.itens}) == 59
 
 
-def test_extrai_produtos_multiplas_paginas_nao_para_mais_em_totais_icms():
+def test_extrai_produtos_multiplas_paginas_nao_importa_linha_pos_totais_terminal():
     parsed = parse_nfce_detalhada_text(_synthetic_nfce_text())
 
     assert [item.numero_item for item in parsed.itens] == [1, 2, 3, 4]
@@ -299,6 +301,7 @@ def test_extrai_produtos_multiplas_paginas_nao_para_mais_em_totais_icms():
         "IOGURTE NATURAL",
         "MASSA RAVIOLI",
     ]
+    assert all("BALA" not in item.descricao for item in parsed.itens)
 
 
 def test_extrai_produtos_em_layout_columnar_do_pdfminer():
