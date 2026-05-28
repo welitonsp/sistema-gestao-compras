@@ -385,15 +385,28 @@ def _is_stop_marker(normalized_line: str) -> bool:
 
 
 def _is_rowwise_header_line(normalized_line: str) -> bool:
-    return (
-        normalized_line.startswith(("item ", "n item", "codigo"))
-        or normalized_line == "descricao"
-        or (
-            "descricao" in normalized_line
-            and "quantidade" in normalized_line
-            and "valor" in normalized_line
-        )
-    )
+    if normalized_line.startswith(("item ", "n item", "n. item", "num.", "codigo")):
+        return True
+    keywords = {
+        "descricao",
+        "quantidade",
+        "qtd.",
+        "qtd",
+        "unidade",
+        "unid",
+        "valor",
+        "vlr",
+        "total",
+        "comercial",
+        "valor(r$)",
+    }
+    if normalized_line in keywords:
+        return True
+    found_count = 0
+    for kw in keywords:
+        if kw in normalized_line:
+            found_count += 1
+    return found_count >= 2
 
 
 def _is_rowwise_lookahead_ignored_line(normalized_line: str) -> bool:
@@ -474,6 +487,8 @@ def _has_future_rowwise_item_continuation(
                     or _is_single_final_item_before_terminal(lines, index + 1)
                 )
             return True
+        if last_item_number == 0:
+            continue
         return False
 
     return False
@@ -511,6 +526,9 @@ def _has_future_columnar_item_continuation(
                 return False
             found_description = True
             expected_number += 1
+            continue
+
+        if last_item_number == 0:
             continue
 
         return False
