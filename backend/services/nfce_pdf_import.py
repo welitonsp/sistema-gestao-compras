@@ -216,6 +216,12 @@ def parse_nfce_detalhada_text(text: str) -> NfcePdfParseResult:
     valor_outras_despesas = totals.get("valor_outras_despesas")
     item_total = sum((item.valor_total_item for item in itens), Decimal("0.00")).quantize(Decimal("0.01"))
 
+    if valor_total_produtos is not None and abs(item_total - valor_total_produtos) > Decimal("0.01"):
+        raise NfcePdfImportError(
+            f"Importação falhou: total extraído dos itens ({item_total}) difere do valor total dos produtos ({valor_total_produtos}).",
+            error_code="extraction_total_mismatch",
+        )
+
     modelo, serie, numero = _extract_nf_metadata(text)
     supplier = _extract_supplier_metadata(text)
 
@@ -511,7 +517,7 @@ def _has_next_consecutive_rowwise_item(
         match = _match_rowwise_item(line)
         if match:
             return int(match.group(1)) == item_number + 1
-        return False
+        continue
 
     return False
 
@@ -597,10 +603,7 @@ def _has_future_columnar_item_continuation(
             expected_number += 1
             continue
 
-        if last_item_number == 0:
-            continue
-
-        return False
+        continue
 
     return False
 
@@ -752,9 +755,16 @@ def _extract_items_columnar(lines: list[str]) -> list[NfcePdfItem]:
             continue
 
         item_match = re.match(r"^\s*(\d{1,4})\s+(.+?)\s*$", line)
-        if state == "value" and item_match and len(values) >= len(descriptions):
-            flush_group()
-            state = "desc"
+        if item_match:
+            numero = int(item_match.group(1))
+            pending_last = max(
+                [last_item_number, *(n for n, _ in descriptions)],
+                default=last_item_number,
+            )
+            if numero == pending_last + 1:
+                if state == "value" and len(values) >= len(descriptions):
+                    flush_group()
+                state = "desc"
 
         if normalized.startswith("qtd"):
             state = "qty"
@@ -767,7 +777,8 @@ def _extract_items_columnar(lines: list[str]) -> list[NfcePdfItem]:
             continue
 
         if state == "desc":
-            if descriptions and re.fullmatch(r"\d+,\d{1,4}", line):
+            # Transição heurística para qty apenas se for 3 ou 4 casas decimais (para evitar preços promocionais de 2 casas)
+            if descriptions and re.fullmatch(r"\d+,\d{3,4}", line):
                 state = "qty"
                 quantities.append(br_decimal(line))
                 continue
@@ -911,6 +922,12 @@ class NfcePdfImportService:
             parser_source="deterministic",
             details=quality_details,
         )
+        if parsed.valor_total_produtos is not None and abs(parsed.item_total - parsed.valor_total_produtos) > Decimal("0.01"):
+            raise NfcePdfImportError(
+                f"Importação falhou: total extraído dos itens ({parsed.item_total}) difere do valor total dos produtos ({parsed.valor_total_produtos}).",
+                error_code="extraction_total_mismatch",
+            )
+
         if _fiscal_totals_reconcile(parsed) and extraction_quality.total_mismatch:
             quality_details["pdf_fiscal_total_reconciled"] = True
             extraction_quality = replace(
