@@ -306,6 +306,31 @@ def _generated_rowwise_items(
     return items
 
 
+def _money_br(value: Decimal | str) -> str:
+    return str(Decimal(str(value)).quantize(Decimal("0.01"))).replace(".", ",")
+
+
+def _columnar_items_block(
+    descriptions: list[tuple[int, str]],
+    values: list[Decimal],
+    *,
+    include_quantity_header: bool,
+    include_unit_header: bool,
+    include_value_header: bool,
+) -> str:
+    lines = [f"{numero} {descricao}" for numero, descricao in descriptions]
+    if include_quantity_header:
+        lines.append("Qtd.")
+    lines.extend(["1,0000"] * len(descriptions))
+    if include_unit_header:
+        lines.extend(["Unidade", "Comercial"])
+    lines.extend(["un"] * len(descriptions))
+    if include_value_header:
+        lines.append("Valor(R$)")
+    lines.extend(_money_br(value) for value in values)
+    return "\n".join(lines)
+
+
 def _insert_marker_blocks(items: list[str], *, block_size: int = 35) -> str:
     parts: list[str] = []
     for start in range(0, len(items), block_size):
@@ -554,6 +579,111 @@ def _synthetic_nfce_150_itens_ultimo_bloco_um_item_text(chave: str | None = None
     )
 
 
+def _synthetic_nfce_22464_real_columnar_continuation_text(chave: str | None = None) -> str:
+    chave = chave or _nfce_key("02246400")
+    page_2_descriptions = [(numero, f"PRODUTO NF22464 {numero}") for numero in range(1, 36)]
+    page_2_descriptions.append((36, "LEITE LV UHT ITALAC C TAMPA 1L SEMI DESN"))
+    page_2_values = [Decimal("10.00")] * 35 + [Decimal("155.86")]
+    page_3_descriptions = [
+        (37, "VINAGRE ALCOOL CASTELO 750ML LIMAO"),
+        (38, "REPELENTE LOCAO REPELEX PROM 200ML"),
+        (39, "LENCO UMED PIQUITUCHO 120UN PREM"),
+        (40, "LAVA ROUPAS LIQ ARIEL 1.8L TOQ DOWNY"),
+        (41, "SAB LIQ HUGGIES DISNEY REF 200ML EXT SUAVE"),
+        (42, "CR DENT SORRISO 90G DENTES BRANCOS"),
+        (43, "LIMP PERF UAU PROM 2L LAV"),
+        (44, "LIMP LIMPEZA PESADA AJAX 1L LIMAO"),
+        (45, "SAB DAVENE LA FLORE 150G MOR"),
+        (46, "SAB DAVENE LA FLORE 150G FLOR CEREJA"),
+        (47, "TIRA MANCHAS GEL VANISH SCH 1.2L BCO"),
+        (48, "LAVA ROUPAS LIQ ARIEL 2L SENS"),
+        (49, "AMAC YPE 2L DELICADO"),
+        (50, "AGUA SANIT QBOA 5L"),
+        (51, "BATATA CONG BEM BRASIL 1.05kg CARIN"),
+        (52, "PAO QJO MAQUI 800G TRAD 800G TRAD"),
+        (53, "EMP PERDIGAO MINI CHICKEN 1kg TRAD"),
+        (54, "FILEZINHO SASSAMI COPACOL IQF 800G"),
+        (55, "MARGARINA DELICIA 500G EXT CREM S SAL"),
+        (56, "REQUEIJAO IMBAUBA 400G"),
+        (57, "IOG NESTLE 170G INTG"),
+        (58, "LING FGO CONG SUPER FRANGO 800G CHURR"),
+        (59, "LING FGO CONG SUPER FRANGO 800G BACON"),
+    ]
+    page_3_values = [
+        Decimal("7.99"),
+        Decimal("16.49"),
+        Decimal("11.99"),
+        Decimal("29.99"),
+        Decimal("9.99"),
+        Decimal("3.79"),
+        Decimal("11.99"),
+        Decimal("16.99"),
+        Decimal("6.98"),
+        Decimal("3.49"),
+        Decimal("25.99"),
+        Decimal("45.99"),
+        Decimal("9.79"),
+        Decimal("12.99"),
+        Decimal("9.99"),
+        Decimal("9.39"),
+        Decimal("21.99"),
+        Decimal("30.98"),
+        Decimal("7.79"),
+        Decimal("12.99"),
+        Decimal("3.79"),
+        Decimal("17.49"),
+        Decimal("35.98"),
+    ]
+    page_2_block = _columnar_items_block(
+        page_2_descriptions,
+        page_2_values,
+        include_quantity_header=True,
+        include_unit_header=True,
+        include_value_header=True,
+    )
+    page_3_block = _columnar_items_block(
+        page_3_descriptions,
+        page_3_values,
+        include_quantity_header=False,
+        include_unit_header=False,
+        include_value_header=False,
+    )
+    return f"""
+Nota Fiscal do Consumidor Eletrônica
+Chave de Acesso: {chave}
+Modelo: 65
+Série: 514
+Número: 22464
+Data de Emissão: 10/02/2026
+Emitente: MERCADO SINTETICO 22464 LTDA
+CNPJ: 99.999.999/0001-91
+Valor Total dos Produtos: 870,70
+Valor Total da Nota Fiscal: 870,70
+
+Página 2
+Dados dos Produtos e Serviços
+Num. Descrição
+{page_2_block}
+
+Página 3
+Totais
+ICMS
+Dados do Transporte
+Formas de Pagamento
+Informações Adicionais
+{page_3_block}
+
+ICMS
+Totais
+Valor Total dos Produtos 870,70
+Valor Total da NFe 870,70
+QR-Code
+HASH-SINTETICO-SEM-PAYLOAD-REAL
+URL NFC-e
+https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}%7C2%7C1%7C1%7CHASH-SINTETICO
+"""
+
+
 def test_detecta_texto_pdf_nfce_detalhado():
     assert is_nfce_detalhada_text(_synthetic_nfce_text()) is True
     assert is_nfce_detalhada_text("recibo comum sem produtos") is False
@@ -610,6 +740,22 @@ def test_extrai_produtos_nf34805_com_informacoes_adicionais_antes_da_continuacao
     assert parsed.itens[0].numero_item == 1
     assert parsed.itens[-1].numero_item == 62
     assert len({item.numero_item for item in parsed.itens}) == 62
+
+
+def test_extrai_produtos_nf22464_real_columnar_com_continuacao_apos_marcadores():
+    parsed = parse_nfce_detalhada_text(_synthetic_nfce_22464_real_columnar_continuation_text())
+
+    assert len(parsed.itens) == 59
+    assert parsed.item_total == Decimal("870.70")
+    assert parsed.valor_total_produtos == Decimal("870.70")
+    assert parsed.valor_total_nota == Decimal("870.70")
+    assert parsed.itens[0].numero_item == 1
+    assert parsed.itens[-1].numero_item == 59
+    assert [item.numero_item for item in parsed.itens] == list(range(1, 60))
+    assert parsed.itens[36].numero_item == 37
+    assert parsed.itens[36].descricao == "VINAGRE ALCOOL CASTELO 750ML LIMAO"
+    assert parsed.itens[-1].descricao == "LING FGO CONG SUPER FRANGO 800G BACON"
+    assert _fiscal_totals_reconcile(parsed) is True
 
 
 def test_nfce_um_item_com_desconto_e_marcadores_antes_da_tabela():

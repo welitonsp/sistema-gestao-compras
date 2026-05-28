@@ -479,6 +479,45 @@ def _has_future_rowwise_item_continuation(
     return False
 
 
+def _match_columnar_description_item(line: str) -> re.Match[str] | None:
+    if _match_rowwise_item(line):
+        return None
+    return re.match(r"^\s*(\d{1,4})\s+(.+?)\s*$", line)
+
+
+def _has_future_columnar_item_continuation(
+    lines: list[str],
+    start_index: int,
+    last_item_number: int,
+) -> bool:
+    expected_number = last_item_number + 1
+    found_description = False
+
+    for raw_line in lines[start_index:]:
+        line = raw_line.strip()
+        normalized = _normalize_text(line)
+        if _is_rowwise_lookahead_terminal_line(normalized):
+            return False
+        if _is_rowwise_lookahead_ignored_line(normalized):
+            continue
+
+        if found_description and re.fullmatch(r"\d+,\d{1,4}", line):
+            return True
+
+        match = _match_columnar_description_item(line)
+        if match:
+            numero_item = int(match.group(1))
+            if numero_item != expected_number:
+                return False
+            found_description = True
+            expected_number += 1
+            continue
+
+        return False
+
+    return False
+
+
 def _match_rowwise_item_from_lines(lines: list[str], start_index: int) -> tuple[re.Match[str] | None, int]:
     combined_parts: list[str] = []
     for index in range(start_index, min(len(lines), start_index + 5)):
@@ -616,6 +655,9 @@ def _extract_items_columnar(lines: list[str]) -> list[NfcePdfItem]:
             )
             if _has_future_rowwise_item_continuation(lines, index + 1, pending_last_item_number):
                 continue
+            if _has_future_columnar_item_continuation(lines, index + 1, pending_last_item_number):
+                state = "desc"
+                continue
             break
         if normalized.startswith(ROWWISE_HEADER_PREFIXES):
             continue
@@ -636,6 +678,10 @@ def _extract_items_columnar(lines: list[str]) -> list[NfcePdfItem]:
             continue
 
         if state == "desc":
+            if descriptions and re.fullmatch(r"\d+,\d{1,4}", line):
+                state = "qty"
+                quantities.append(br_decimal(line))
+                continue
             if item_match:
                 descriptions.append((int(item_match.group(1)), re.sub(r"\s+", " ", item_match.group(2)).strip()))
             continue
