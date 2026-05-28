@@ -720,6 +720,79 @@ URL NFC-e: https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}%
 """
 
 
+def _synthetic_nfce_1522_real_layout_text(chave: str | None = None) -> str:
+    chave = chave or _nfce_key("00001522")
+    return f"""
+Governo do Estado de Goiás
+Modelo
+Série
+Número
+Data de Emissão
+Data Saída/Entrada
+Valor Total da Nota Fiscal
+65
+98
+1522
+12/03/2025 21:36:08-03:00
+74,98
+Emitente: RAIADROGASIL S.A.
+CNPJ: 99.999.999/0001-91
+Chave de Acesso: {chave}
+
+Num. Descrição
+1 NINHO FASES 1+ 800G
+ICMS
+Dados dos Produtos e Serviços
+Qtd.
+2,0000
+Unidade
+Comercial
+UN
+Valor(R$)
+99,98
+
+Totais
+Base de Cálculo ICMS
+Valor do ICMS
+74,98
+
+Valor Total dos Produtos
+99,98
+Valor do Frete
+Valor do Seguro
+Valor Total dos Descontos
+Valor Total do II
+0,00
+0,00
+25,00
+0,00
+Valor Total da NFe
+74,98
+QR-Code
+URL NFC-e: https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}%7C2
+"""
+
+
+def test_extrai_nf1522_real_text_layout_item_unico_com_desconto():
+    text = _synthetic_nfce_1522_real_layout_text()
+    assert is_nfce_detalhada_text(text) is True
+
+    parsed = parse_nfce_detalhada_text(text)
+
+    assert len(parsed.itens) == 1
+    item = parsed.itens[0]
+    assert item.numero_item == 1
+    assert item.descricao == "NINHO FASES 1+ 800G"
+    assert item.quantidade == Decimal("2.0000")
+    assert item.unidade == "UN"
+    assert item.valor_total_item == Decimal("99.98")
+    assert parsed.item_total == Decimal("99.98")
+    assert parsed.valor_total_produtos == Decimal("99.98")
+    assert parsed.valor_total_descontos == Decimal("25.00")
+    assert parsed.valor_total_nota == Decimal("74.98")
+    assert _fiscal_totals_reconcile(parsed) is True
+
+
 def test_extrai_nf1522_item_unico_com_desconto_apos_marcadores_reais():
     text = _synthetic_nfce_1522_reproduction_text()
     assert is_nfce_detalhada_text(text) is True
