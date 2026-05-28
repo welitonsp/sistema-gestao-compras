@@ -336,6 +336,29 @@ def test_extrai_produtos_nf34805_com_informacoes_adicionais_antes_da_continuacao
     assert len({item.numero_item for item in parsed.itens}) == 62
 
 
+def test_extrai_produtos_nao_importa_falso_item_apos_informacoes_adicionais_terminal():
+    text = _synthetic_nfce_text().replace(
+        "\nPágina 4\nQR-Code",
+        "\nFormas de Pagamento\nInformações Adicionais\n5 BALA NAO DEVE ENTRAR 1,0000 UN 99,99\n\nPágina 4\nQR-Code",
+    )
+    parsed = parse_nfce_detalhada_text(text)
+
+    assert [item.numero_item for item in parsed.itens] == [1, 2, 3, 4]
+    assert all("BALA" not in item.descricao for item in parsed.itens)
+
+
+def test_extrai_produtos_nao_abre_continuacao_quando_item_fora_de_ordem_aparece_antes_do_esperado():
+    text = _synthetic_multipagem_nfce_text().replace(
+        "Informações Adicionais\n37 PRODUTO TESTE 37",
+        "Informações Adicionais\n40 BALA NAO DEVE ENTRAR 1,0000 UN 99,99\n37 PRODUTO TESTE 37",
+    )
+    parsed = parse_nfce_detalhada_text(text)
+
+    assert len(parsed.itens) == 36
+    assert parsed.itens[-1].numero_item == 36
+    assert all("BALA" not in item.descricao for item in parsed.itens)
+
+
 def test_extrai_produtos_multiplas_paginas_nao_importa_linha_pos_totais_terminal():
     parsed = parse_nfce_detalhada_text(_synthetic_nfce_text())
 

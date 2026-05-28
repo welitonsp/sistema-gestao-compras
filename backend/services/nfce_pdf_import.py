@@ -379,22 +379,56 @@ def _is_rowwise_lookahead_ignored_line(normalized_line: str) -> bool:
     )
 
 
-def _has_future_rowwise_item_continuation(
+def _is_rowwise_lookahead_terminal_line(normalized_line: str) -> bool:
+    return any(marker in normalized_line for marker in ROWWISE_LOOKAHEAD_TERMINAL_MARKERS)
+
+
+def _has_next_consecutive_rowwise_item(
     lines: list[str],
     start_index: int,
-    last_item_number: int,
+    item_number: int,
 ) -> bool:
     for raw_line in lines[start_index:]:
         line = raw_line.strip()
         normalized = _normalize_text(line)
-        if any(marker in normalized for marker in ROWWISE_LOOKAHEAD_TERMINAL_MARKERS):
+        if _is_rowwise_lookahead_terminal_line(normalized):
             return False
         if _is_rowwise_lookahead_ignored_line(normalized):
             continue
 
         match = _match_rowwise_item(line)
         if match:
-            return int(match.group(1)) > last_item_number
+            return int(match.group(1)) == item_number + 1
+        return False
+
+    return False
+
+
+def _has_future_rowwise_item_continuation(
+    lines: list[str],
+    start_index: int,
+    last_item_number: int,
+) -> bool:
+    saw_additional_info = False
+    for index, raw_line in enumerate(lines[start_index:], start=start_index):
+        line = raw_line.strip()
+        normalized = _normalize_text(line)
+        if _is_rowwise_lookahead_terminal_line(normalized):
+            return False
+        if normalized == "informacoes adicionais":
+            saw_additional_info = True
+        if _is_rowwise_lookahead_ignored_line(normalized):
+            continue
+
+        match = _match_rowwise_item(line)
+        if match:
+            numero_item = int(match.group(1))
+            if numero_item != last_item_number + 1:
+                return False
+            if saw_additional_info:
+                return _has_next_consecutive_rowwise_item(lines, index + 1, numero_item)
+            return True
+        return False
 
     return False
 
@@ -411,6 +445,8 @@ def _extract_items_rowwise(lines: list[str]) -> list[NfcePdfItem]:
             continue
         if not in_products or not line:
             continue
+        if _is_rowwise_lookahead_terminal_line(normalized):
+            break
         if _is_stop_marker(normalized):
             if _has_future_rowwise_item_continuation(lines, index + 1, last_item_number):
                 continue
@@ -492,6 +528,9 @@ def _extract_items_columnar(lines: list[str]) -> list[NfcePdfItem]:
             continue
         if not in_products or not line:
             continue
+        if _is_rowwise_lookahead_terminal_line(normalized):
+            flush_group()
+            break
         if _is_stop_marker(normalized):
             if descriptions and not quantities:
                 state = "qty"
