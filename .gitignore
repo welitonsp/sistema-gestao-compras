@@ -47,7 +47,15 @@ Thumbs.db
 
 # DADOS DA APLICAÇÃO
 NOVAS_NOTAS/
+NOVAS_NOTAS/*.pdf
+NOVAS_NOTAS/**/*.pdf
 PROCESSADAS/
+PROCESSADAS/*.pdf
+PROCESSADAS/**/*.pdf
+NF_*.pdf
+NF_*.pdf.pdf
+nfce*.pdf
+nfce*.pdf.pdf
 
 # CÓPIAS / BACKUPS
 * - Copia.*
