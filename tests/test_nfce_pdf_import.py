@@ -279,9 +279,15 @@ URL NFC-e: https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}%
 """
 
 
-def _rowwise_item(numero: int, descricao: str, valor: Decimal | str, quantidade: str = "1,0000") -> str:
+def _rowwise_item(
+    numero: int,
+    descricao: str,
+    valor: Decimal | str,
+    quantidade: str = "1,0000",
+    unidade: str = "UN",
+) -> str:
     valor_decimal = Decimal(str(valor)).quantize(Decimal("0.01"))
-    return f"{numero} {descricao} {quantidade} UN {str(valor_decimal).replace('.', ',')}"
+    return f"{numero} {descricao} {quantidade} {unidade} {str(valor_decimal).replace('.', ',')}"
 
 
 def _generated_rowwise_items(
@@ -298,6 +304,24 @@ def _generated_rowwise_items(
         subtotal += base_value
     items.append(_rowwise_item(count, f"{prefix} {count}", total - subtotal))
     return items
+
+
+def _insert_marker_blocks(items: list[str], *, block_size: int = 35) -> str:
+    parts: list[str] = []
+    for start in range(0, len(items), block_size):
+        if start:
+            parts.extend(
+                [
+                    f"Página {start // block_size + 2}",
+                    "Totais",
+                    "ICMS",
+                    "Dados do Transporte",
+                    "Formas de Pagamento",
+                    "Informações Adicionais",
+                ]
+            )
+        parts.extend(items[start : start + block_size])
+    return "\n".join(parts)
 
 
 def _synthetic_nfce_go_text(
@@ -413,7 +437,10 @@ def _synthetic_nfce_210106_text(chave: str | None = None) -> str:
 
 def _synthetic_nfce_4977_text(chave: str | None = None) -> str:
     chave = chave or _nfce_key("00497700")
-    items = [_rowwise_item(numero, f"PRODUTO NF4977 {numero}", Decimal("10.00")) for numero in range(1, 5)]
+    items = [
+        _rowwise_item(numero, f"PRODUTO NF4977 {numero}", Decimal("10.00"), unidade="kg" if numero % 2 == 0 else "un")
+        for numero in range(1, 5)
+    ]
     items.extend(
         [
             "5 PRODUTO PROMOCIONAL",
@@ -421,8 +448,11 @@ def _synthetic_nfce_4977_text(chave: str | None = None) -> str:
             "1,0000 UN 16,49",
         ]
     )
-    items.extend(_rowwise_item(numero, f"PRODUTO NF4977 {numero}", Decimal("10.00")) for numero in range(6, 77))
-    items.append(_rowwise_item(77, "PRODUTO NF4977 77", Decimal("263.88")))
+    items.extend(
+        _rowwise_item(numero, f"PRODUTO NF4977 {numero}", Decimal("10.00"), unidade="kg" if numero % 10 == 0 else "un")
+        for numero in range(6, 77)
+    )
+    items.append(_rowwise_item(77, "PRODUTO NF4977 77", Decimal("263.88"), unidade="un"))
     body = "\n".join(
         [
             "Página 2",
@@ -490,6 +520,18 @@ def _synthetic_nfce_15925_text(chave: str | None = None) -> str:
     )
 
 
+def _synthetic_nfce_150_itens_text(chave: str | None = None) -> str:
+    chave = chave or _nfce_key("15015000")
+    items = _generated_rowwise_items(count=150, total=Decimal("1500.00"), prefix="PRODUTO STRESS")
+    body = _insert_marker_blocks(items, block_size=35)
+    return _synthetic_nfce_go_text(
+        chave=chave,
+        numero="150150",
+        total=Decimal("1500.00"),
+        body=body,
+    )
+
+
 def test_detecta_texto_pdf_nfce_detalhado():
     assert is_nfce_detalhada_text(_synthetic_nfce_text()) is True
     assert is_nfce_detalhada_text("recibo comum sem produtos") is False
@@ -524,7 +566,7 @@ def test_extrai_data_brasileira_com_hora_timezone_e_deriva_ano_mes():
     assert fiscal_year_month(parsed.data_emissao) == "2026-03"
 
 
-def test_extrai_produtos_multiplas_paginas_com_stop_markers_no_meio():
+def test_nfce_59_itens_continua_passando():
     chave = _nfce_key("98989898")
     text = _synthetic_multipagem_nfce_text(chave)
     parsed = parse_nfce_detalhada_text(text)
@@ -561,7 +603,7 @@ def test_nfce_um_item_com_desconto_e_marcadores_antes_da_tabela():
     assert _fiscal_totals_reconcile(parsed) is True
 
 
-def test_nfce_189258_111_itens_multiplas_paginas():
+def test_nfce_111_itens_multiplas_paginas():
     parsed = parse_nfce_detalhada_text(_synthetic_nfce_189258_text())
 
     assert len(parsed.itens) == 111
@@ -571,7 +613,7 @@ def test_nfce_189258_111_itens_multiplas_paginas():
     assert len({item.numero_item for item in parsed.itens}) == 111
 
 
-def test_nfce_210106_71_itens_totais_antes_da_continuacao():
+def test_nfce_71_itens_totais_antes_da_continuacao():
     parsed = parse_nfce_detalhada_text(_synthetic_nfce_210106_text())
 
     assert len(parsed.itens) == 71
@@ -581,7 +623,7 @@ def test_nfce_210106_71_itens_totais_antes_da_continuacao():
     assert parsed.itens[-1].numero_item == 71
 
 
-def test_nfce_4977_77_itens_com_promocoes_multilinha():
+def test_nfce_77_itens_promocoes_multilinha():
     parsed = parse_nfce_detalhada_text(_synthetic_nfce_4977_text())
 
     assert len(parsed.itens) == 77
@@ -590,10 +632,12 @@ def test_nfce_4977_77_itens_com_promocoes_multilinha():
     assert parsed.itens[4].numero_item == 5
     assert parsed.itens[4].descricao == "PRODUTO PROMOCIONAL DE 24,99 POR 16,49"
     assert parsed.itens[4].valor_total_item == Decimal("16.49")
+    assert parsed.itens[0].unidade == "UN"
+    assert parsed.itens[1].unidade == "KG"
     assert parsed.itens[-1].numero_item == 77
 
 
-def test_nfce_24345_56_itens_informacoes_complementares_antes_continuacao():
+def test_nfce_56_itens_informacoes_complementares_antes_continuacao():
     parsed = parse_nfce_detalhada_text(_synthetic_nfce_24345_text())
 
     assert len(parsed.itens) == 56
@@ -603,13 +647,24 @@ def test_nfce_24345_56_itens_informacoes_complementares_antes_continuacao():
     assert len({item.numero_item for item in parsed.itens}) == 56
 
 
-def test_nfce_15925_4_itens_marcadores_antes_da_tabela():
+def test_nfce_4_itens_marcadores_antes_tabela():
     parsed = parse_nfce_detalhada_text(_synthetic_nfce_15925_text())
 
     assert len(parsed.itens) == 4
     assert parsed.item_total == Decimal("33.15")
     assert parsed.valor_total_nota == Decimal("33.15")
     assert [item.numero_item for item in parsed.itens] == [1, 2, 3, 4]
+
+
+def test_nfce_150_itens_stress_multiplas_paginas():
+    parsed = parse_nfce_detalhada_text(_synthetic_nfce_150_itens_text())
+
+    assert len(parsed.itens) == 150
+    assert parsed.item_total == Decimal("1500.00")
+    assert parsed.valor_total_nota == Decimal("1500.00")
+    assert parsed.itens[0].numero_item == 1
+    assert parsed.itens[-1].numero_item == 150
+    assert len({item.numero_item for item in parsed.itens}) == 150
 
 
 def test_extrai_produtos_nao_importa_falso_item_apos_informacoes_adicionais_terminal():

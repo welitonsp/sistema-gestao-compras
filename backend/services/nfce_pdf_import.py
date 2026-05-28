@@ -208,6 +208,7 @@ def parse_nfce_detalhada_text(text: str) -> NfcePdfParseResult:
         raise ImportacaoSemProdutosError(NFCE_PDF_NO_PRODUCTS_MESSAGE)
 
     valor_total_nota = _extract_money(text, r"Valor Total da Nota Fiscal\s*[:\-]?\s*([0-9.]+,\d{2})")
+    valor_total_nota = valor_total_nota or _extract_money(text, r"Valor Total da NF-?e\s*[:\-]?\s*([0-9.]+,\d{2})")
     valor_total_produtos = _extract_money(text, r"Valor Total dos Produtos\s*[:\-]?\s*([0-9.]+,\d{2})")
     valor_total_descontos = _extract_money(text, r"Valor Total dos Descontos\s*[:\-]?\s*([0-9.]+,\d{2})")
     valor_total_frete = _extract_money(text, r"Valor Total do Frete\s*[:\-]?\s*([0-9.]+,\d{2})")
