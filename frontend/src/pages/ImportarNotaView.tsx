@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Archive, Bot, CheckCircle2, FilePlus2, FileText, Loader2, ReceiptText, RefreshCw, ShieldAlert, X } from 'lucide-react';
-import { ApiError, apiClient, importarLoteChaves, importarPdfNfce } from '../api/client';
+import { AlertCircle, Archive, Bot, CheckCircle2, FilePlus2, FileText, Loader2, ReceiptText, RefreshCw, ShieldAlert, Trash2, X } from 'lucide-react';
+import { ApiError, apiClient, excluirImportacao, importarLoteChaves, importarPdfNfce } from '../api/client';
 import {
   ArchiveImportacaoRequest,
   ArchiveImportacaoResponse,
@@ -18,6 +18,7 @@ interface ImportarNotaViewProps {
 }
 
 const MAX_BATCH_KEYS = 5;
+const DEFAULT_DELETE_MOTIVO = 'Exclusão solicitada pelo usuário.';
 
 const qualityBadgeConfig = {
   ok: {
@@ -248,13 +249,17 @@ const importAlerts = (item: ImportacaoHistoricoItem) => {
   ].filter((message): message is string => Boolean(message));
 };
 
-const ImportHistorySection: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
+const ImportHistorySection: React.FC<{ refreshKey: number; onDeleted?: () => void }> = ({ refreshKey, onDeleted }) => {
   const [items, setItems] = useState<ImportacaoHistoricoItem[]>([]);
   const [total, setTotal] = useState(0);
   const [statusFilter, setStatusFilter] = useState<'active' | 'archived' | 'all'>('active');
   const [qualityFilter, setQualityFilter] = useState<'all' | 'ok' | 'warning' | 'failed'>('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<ImportacaoHistoricoItem | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteSuccess, setDeleteSuccess] = useState('');
 
   const loadImports = useCallback(async () => {
     setLoading(true);
@@ -286,6 +291,56 @@ const ImportHistorySection: React.FC<{ refreshKey: number }> = ({ refreshKey }) 
     failed: items.filter((item) => item.extraction_quality_status === 'failed').length,
     fallback: items.filter((item) => item.extraction_parser_source === 'ai_fallback').length,
   }), [items]);
+
+  const resolveDeleteError = (err: unknown) => {
+    if (err instanceof ApiError) {
+      if (err.status === 404) return 'Nota importada nao encontrada ou indisponivel para este usuario.';
+      if (err.message) return err.message;
+    }
+    return 'Nao foi possivel excluir a nota importada. Tente novamente.';
+  };
+
+  const openDeleteConfirm = (item: ImportacaoHistoricoItem) => {
+    setDeleteTarget(item);
+    setDeleteError('');
+    setDeleteSuccess('');
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    setDeleteError('');
+    try {
+      const response = await excluirImportacao(deleteTarget.id, { motivo: DEFAULT_DELETE_MOTIVO });
+      setItems((current) => current.filter((item) => item.id !== deleteTarget.id));
+      setTotal((current) => Math.max(0, current - 1));
+      setDeleteSuccess(response.mensagem);
+      setDeleteTarget(null);
+      onDeleted?.();
+    } catch (err) {
+      setDeleteError(resolveDeleteError(err));
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const renderDeleteButton = (item: ImportacaoHistoricoItem, compact = false) => {
+    if (item.status !== 'active') return null;
+    return (
+      <button
+        type="button"
+        onClick={() => openDeleteConfirm(item)}
+        disabled={deleteLoading}
+        className={`inline-flex items-center justify-center gap-2 border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-200 font-bold hover:bg-rose-100 dark:hover:bg-rose-900/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all ${
+          compact ? 'rounded-xl px-3 py-2 text-xs' : 'rounded-2xl px-4 py-2 text-sm'
+        }`}
+        aria-label={`Excluir nota ${item.numero_nota}`}
+      >
+        <Trash2 size={compact ? 14 : 16} />
+        Excluir
+      </button>
+    );
+  };
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden transition-colors">
@@ -344,6 +399,20 @@ const ImportHistorySection: React.FC<{ refreshKey: number }> = ({ refreshKey }) 
           </div>
         )}
 
+        {!error && deleteSuccess && (
+          <div className="mb-4 flex items-start gap-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300 p-4 rounded-2xl" role="status" aria-live="polite">
+            <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+            <p className="text-sm font-semibold">{deleteSuccess}</p>
+          </div>
+        )}
+
+        {!error && deleteError && !deleteTarget && (
+          <div className="mb-4 flex items-start gap-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/40 text-rose-700 dark:text-rose-300 p-4 rounded-2xl" role="alert">
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            <p className="text-sm font-semibold">{deleteError}</p>
+          </div>
+        )}
+
         {!error && loading && (
           <div className="flex items-center gap-3 text-sm font-semibold text-slate-500 dark:text-slate-400" role="status" aria-live="polite">
             <Loader2 size={18} className="animate-spin" />
@@ -369,6 +438,7 @@ const ImportHistorySection: React.FC<{ refreshKey: number }> = ({ refreshKey }) 
                     <th className="px-4 py-3">Qualidade</th>
                     <th className="px-4 py-3">Origem</th>
                     <th className="px-4 py-3">Alertas</th>
+                    <th className="px-4 py-3 text-right">Acoes</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -398,6 +468,7 @@ const ImportHistorySection: React.FC<{ refreshKey: number }> = ({ refreshKey }) 
                           )) : <span className="text-xs text-slate-400">Sem alertas</span>}
                         </div>
                       </td>
+                      <td className="px-4 py-4 text-right">{renderDeleteButton(item, true)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -443,6 +514,11 @@ const ImportHistorySection: React.FC<{ refreshKey: number }> = ({ refreshKey }) 
                         </span>
                       )) : <span className="text-xs font-semibold text-slate-400">Sem alertas</span>}
                     </div>
+                    {item.status === 'active' && (
+                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+                        {renderDeleteButton(item)}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -450,6 +526,69 @@ const ImportHistorySection: React.FC<{ refreshKey: number }> = ({ refreshKey }) 
           </>
         )}
       </div>
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="delete-import-title">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-300 rounded-2xl">
+                  <Trash2 size={22} />
+                </div>
+                <div>
+                  <h3 id="delete-import-title" className="text-lg font-bold text-slate-900 dark:text-white">Excluir esta nota importada?</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                    Nota {deleteTarget.numero_nota} · Chave {maskKeyPreview(deleteTarget.chave_acesso)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleteLoading}
+                className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors disabled:opacity-50"
+                aria-label="Fechar confirmacao"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                Essa ação removerá a nota, seus itens e histórico de preços vinculado. Depois será possível importar o PDF novamente.
+              </p>
+              <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 rounded-2xl p-4">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Motivo</p>
+                <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">{DEFAULT_DELETE_MOTIVO}</p>
+              </div>
+              {deleteError && (
+                <div className="flex items-start gap-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/40 text-rose-700 dark:text-rose-300 p-4 rounded-2xl" role="alert">
+                  <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                  <p className="text-sm font-semibold">{deleteError}</p>
+                </div>
+              )}
+            </div>
+            <div className="p-6 bg-slate-50 dark:bg-slate-950/40 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleteLoading}
+                className="px-5 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl text-sm font-bold hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deleteLoading}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-rose-600 text-white rounded-2xl text-sm font-bold hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                {deleteLoading ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                {deleteLoading ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1146,7 +1285,13 @@ export const ImportarNotaView: React.FC<ImportarNotaViewProps> = ({ onImported }
         </form>
       </div>
 
-      <ImportHistorySection refreshKey={historyRefreshKey} />
+      <ImportHistorySection
+        refreshKey={historyRefreshKey}
+        onDeleted={() => {
+          setHistoryRefreshKey((value) => value + 1);
+          onImported?.();
+        }}
+      />
 
       {showArchiveConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="archive-confirm-title">
