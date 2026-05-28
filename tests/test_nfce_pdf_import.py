@@ -202,10 +202,6 @@ URL NFC-e: https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}%
 
 def _synthetic_multipagem_nfce_text(chave: str | None = None) -> str:
     chave = chave or _nfce_key("98989898")
-    # Itens 1 a 36, depois marcadores, depois itens 37 a 59
-    # Total esperado 870,70. 59 itens.
-    # Vamos fazer 58 itens de 10,00 e o último de 290,70? 
-    # Não, melhor 58 * 10 = 580. 870.70 - 580 = 290.70.
     itens_1_36 = "\n".join([f"{i} PRODUTO TESTE {i} 1,0000 UN 10,00" for i in range(1, 37)])
     itens_37_58 = "\n".join([f"{i} PRODUTO TESTE {i} 1,0000 UN 10,00" for i in range(37, 59)])
     item_59 = "59 PRODUTO TESTE 59 1,0000 UN 290,70"
@@ -231,12 +227,52 @@ Totais
 ICMS
 Dados do Transporte
 Formas de Pagamento
+Informações Adicionais
 {itens_37_58}
 {item_59}
 
 Página 4
 Valor Total dos Produtos 870,70
 Valor Total da NFe 870,70
+QR-Code
+URL NFC-e: https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}%7C2
+"""
+
+
+def _synthetic_multipagem_nfce_34805_text(chave: str | None = None) -> str:
+    chave = chave or _nfce_key("34805348")
+    itens_1_36 = "\n".join([f"{i} PRODUTO NF34805 {i} 1,0000 UN 10,00" for i in range(1, 37)])
+    itens_37_61 = "\n".join([f"{i} PRODUTO NF34805 {i} 1,0000 UN 10,00" for i in range(37, 62)])
+    item_62 = "62 PRODUTO NF34805 62 1,0000 UN 197,12"
+
+    return f"""
+Nota Fiscal do Consumidor Eletrônica
+Chave de Acesso: {chave}
+Modelo: 65
+Série: 514
+Número: 34805
+Data de Emissão: 27/05/2026
+Emitente: MERCADO MULTIPAGINA LTDA
+CNPJ: 99.999.999/0001-91
+Valor Total dos Produtos: 807,12
+Valor Total da Nota Fiscal: 807,12
+
+Página 2
+Dados dos Produtos e Serviços
+{itens_1_36}
+
+Página 3
+Totais
+ICMS
+Dados do Transporte
+Formas de Pagamento
+Informações Adicionais
+{itens_37_61}
+{item_62}
+
+Página 4
+Valor Total dos Produtos 807,12
+Valor Total da NFe 807,12
 QR-Code
 URL NFC-e: https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}%7C2
 """
@@ -281,14 +317,23 @@ def test_extrai_produtos_multiplas_paginas_com_stop_markers_no_meio():
     text = _synthetic_multipagem_nfce_text(chave)
     parsed = parse_nfce_detalhada_text(text)
 
-    # Atualmente deve falhar (pegar apenas 36 ou parar no primeiro stop marker)
-    # Esperado após o fix: 59 itens
     assert len(parsed.itens) == 59
     assert parsed.item_total == Decimal("870.70")
     assert parsed.valor_total_nota == Decimal("870.70")
     assert parsed.itens[0].numero_item == 1
     assert parsed.itens[-1].numero_item == 59
     assert len({item.numero_item for item in parsed.itens}) == 59
+
+
+def test_extrai_produtos_nf34805_com_informacoes_adicionais_antes_da_continuacao():
+    parsed = parse_nfce_detalhada_text(_synthetic_multipagem_nfce_34805_text())
+
+    assert len(parsed.itens) == 62
+    assert parsed.item_total == Decimal("807.12")
+    assert parsed.valor_total_nota == Decimal("807.12")
+    assert parsed.itens[0].numero_item == 1
+    assert parsed.itens[-1].numero_item == 62
+    assert len({item.numero_item for item in parsed.itens}) == 62
 
 
 def test_extrai_produtos_multiplas_paginas_nao_importa_linha_pos_totais_terminal():

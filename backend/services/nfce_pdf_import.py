@@ -54,7 +54,6 @@ ROWWISE_LOOKAHEAD_TERMINAL_MARKERS = (
     "url nfc-e",
     "chave de acesso",
     "protocolo de autorizacao",
-    "informacoes adicionais",
 )
 
 
@@ -375,6 +374,7 @@ def _is_rowwise_lookahead_ignored_line(normalized_line: str) -> bool:
         or normalized_line.startswith(ROWWISE_HEADER_PREFIXES)
         or normalized_line.startswith("pagina ")
         or "dados dos produtos e servicos" in normalized_line
+        or normalized_line == "informacoes adicionais"
         or _is_stop_marker(normalized_line)
     )
 
