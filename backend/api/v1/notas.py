@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Annotated, Literal
 from pathlib import Path
+from uuid import UUID
 
 from fastapi import APIRouter, Body, File, HTTPException, Query, status, Request, Depends, UploadFile
 from pydantic import ValidationError
@@ -18,6 +19,8 @@ from backend.schemas.importacao import (
     ArchiveImportacaoRequest,
     ArchiveImportacaoResponse,
     ChaveAcesso44,
+    DeleteImportacaoRequest,
+    DeleteImportacaoResponse,
     ImportacaoChaveRequest,
     ImportacaoHistoricoItemResponse,
     ImportacaoLoteChavesRequest,
@@ -32,6 +35,11 @@ from backend.services.import_archive_service import (
     ImportacaoNaoEncontradaError,
     ImportArchiveError,
     archive_importacao_por_chave,
+)
+from backend.services.import_delete_service import (
+    ImportDeleteError,
+    ImportDeleteNotFoundError,
+    delete_importacao_por_id,
 )
 from backend.services.nfce_pdf_import import NfcePdfImportError, NfcePdfImportService
 from backend.services.repository import ProcurementRepository
@@ -535,6 +543,63 @@ async def importar_lote_chaves(
         failed_count=sum(1 for result in results if result.status == "failed"),
         results=results,
     )
+
+
+@router.post(
+    "/importacoes/{nota_id}/excluir",
+    response_model=DeleteImportacaoResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Excluir importacao por id",
+    description=(
+        "Exclui uma nota fiscal importada, seus itens e historico de precos "
+        "vinculado usando o UUID publico da nota."
+    ),
+)
+async def excluir_importacao_por_id(
+    nota_id: UUID,
+    db: DbSession,
+    user: CurrentUser,
+    payload: DeleteImportacaoRequest | None = Body(default=None),
+) -> DeleteImportacaoResponse:
+    """Exclui uma importacao usando transacao controlada pelo endpoint."""
+
+    try:
+        resultado = await delete_importacao_por_id(
+            nota_id=nota_id,
+            usuario=user.username,
+            department_id=user.department_id,
+            motivo=payload.motivo if payload else None,
+            db=db,
+        )
+        await db.commit()
+        return DeleteImportacaoResponse(
+            id=resultado.id,
+            numero_nota=resultado.numero_nota,
+            status="deleted",
+            itens_deletados=resultado.itens_deletados,
+            historico_precos_deletados=resultado.historico_precos_deletados,
+            produtos_orfaos_deletados=resultado.produtos_orfaos_deletados,
+            fornecedores_orfaos_deletados=resultado.fornecedores_orfaos_deletados,
+            mensagem=resultado.mensagem,
+        )
+    except ImportDeleteNotFoundError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Importacao nao encontrada.",
+        ) from exc
+    except ImportDeleteError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao excluir importacao.",
+        ) from exc
 
 
 @router.post(

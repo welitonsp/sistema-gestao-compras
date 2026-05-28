@@ -1,4 +1,10 @@
-import type { ImportacaoLoteChavesRequest, ImportacaoLoteChavesResponse, ImportacaoNotaResponse } from '../types/api';
+import type {
+  DeleteImportacaoRequest,
+  DeleteImportacaoResponse,
+  ImportacaoLoteChavesRequest,
+  ImportacaoLoteChavesResponse,
+  ImportacaoNotaResponse,
+} from '../types/api';
 
 const API_BASE = '/api/v1';
 
@@ -105,6 +111,11 @@ export const apiClient = {
 export const importarLoteChaves = (
   payload: ImportacaoLoteChavesRequest,
 ): Promise<ImportacaoLoteChavesResponse> => apiClient.post<ImportacaoLoteChavesResponse>('/notas/importacao-lote-chaves', payload);
+
+export const excluirImportacao = (
+  notaId: string,
+  payload: DeleteImportacaoRequest = {},
+): Promise<DeleteImportacaoResponse> => apiClient.post<DeleteImportacaoResponse>(`/notas/importacoes/${notaId}/excluir`, payload);
 
 export const importarPdfNfce = async (arquivo: File): Promise<ImportacaoNotaResponse> => {
   const formData = new FormData();

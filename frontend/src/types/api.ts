@@ -104,6 +104,21 @@ export interface ArchiveImportacaoResponse {
   archive_reason: string;
 }
 
+export interface DeleteImportacaoRequest {
+  motivo?: string | null;
+}
+
+export interface DeleteImportacaoResponse {
+  id: string;
+  numero_nota: string;
+  status: 'deleted';
+  itens_deletados: number;
+  historico_precos_deletados: number;
+  produtos_orfaos_deletados: number;
+  fornecedores_orfaos_deletados: number;
+  mensagem: string;
+}
+
 export interface ImportacaoHistoricoItem {
   id: string;
   chave_acesso: string;

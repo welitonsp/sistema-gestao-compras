@@ -209,6 +209,34 @@ class ArchiveImportacaoResponse(BaseModel):
     archive_reason: str
 
 
+class DeleteImportacaoRequest(BaseModel):
+    """Payload opcional para exclusao controlada de importacao."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    motivo: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Motivo operacional opcional para excluir a importacao.",
+    )
+
+
+class DeleteImportacaoResponse(BaseModel):
+    """Resumo da exclusao controlada de uma importacao."""
+
+    id: UUID
+    numero_nota: str
+    status: Literal["deleted"]
+    itens_deletados: int
+    historico_precos_deletados: int
+    produtos_orfaos_deletados: int
+    fornecedores_orfaos_deletados: int
+    mensagem: str
+
+
 class ImportacaoHistoricoItemResponse(BaseModel):
     """Item operacional do historico de importacoes."""
 
