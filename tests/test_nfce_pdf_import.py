@@ -18,6 +18,7 @@ from backend.services.importador_sefaz import ImportacaoSemProdutosError, Import
 from backend.services.nfce_pdf_import import (
     NfcePdfImportError,
     NfcePdfImportService,
+    _fiscal_totals_reconcile,
     br_decimal,
     build_pdf_deduplication_identity,
     decimal_to_centavos,
@@ -278,6 +279,217 @@ URL NFC-e: https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}%
 """
 
 
+def _rowwise_item(numero: int, descricao: str, valor: Decimal | str, quantidade: str = "1,0000") -> str:
+    valor_decimal = Decimal(str(valor)).quantize(Decimal("0.01"))
+    return f"{numero} {descricao} {quantidade} UN {str(valor_decimal).replace('.', ',')}"
+
+
+def _generated_rowwise_items(
+    *,
+    count: int,
+    total: Decimal,
+    prefix: str,
+    base_value: Decimal = Decimal("9.00"),
+) -> list[str]:
+    items = []
+    subtotal = Decimal("0.00")
+    for numero in range(1, count):
+        items.append(_rowwise_item(numero, f"{prefix} {numero}", base_value))
+        subtotal += base_value
+    items.append(_rowwise_item(count, f"{prefix} {count}", total - subtotal))
+    return items
+
+
+def _synthetic_nfce_go_text(
+    *,
+    chave: str,
+    numero: str,
+    total: Decimal,
+    body: str,
+    extra_totals: str = "",
+) -> str:
+    total_br = str(total.quantize(Decimal("0.01"))).replace(".", ",")
+    return f"""
+Nota Fiscal do Consumidor Eletrônica
+Chave de Acesso: {chave}
+Modelo: 65
+Série: 1
+Número: {numero}
+Data de Emissão: 27/05/2026
+Emitente: MERCADO SINTETICO GO LTDA
+CNPJ: 99.999.999/0001-91
+Valor Total dos Produtos: {total_br}
+{extra_totals}
+Valor Total da Nota Fiscal: {total_br}
+
+Dados dos Produtos e Serviços
+{body}
+
+QR-Code
+URL NFC-e: https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}%7C2
+"""
+
+
+def _synthetic_nfce_um_item_com_desconto_text(chave: str | None = None) -> str:
+    chave = chave or _nfce_key("00152200")
+    return f"""
+Nota Fiscal do Consumidor Eletrônica
+Chave de Acesso: {chave}
+Modelo: 65
+Série: 1
+Número: 1522
+Data de Emissão: 27/05/2026
+Emitente: DROGASIL SINTETICA LTDA
+CNPJ: 99.999.999/0001-91
+Valor Total dos Produtos: 99,98
+Valor Total dos Descontos: 25,00
+Valor Total do Frete: 0,00
+Valor Total do Seguro: 0,00
+Outras Despesas Acessórias: 0,00
+Valor Total da Nota Fiscal: 74,98
+
+Dados dos Produtos e Serviços
+Totais
+ICMS
+Dados do Transporte
+Formas de Pagamento
+Informações Adicionais
+Informações Complementares de interesse do contribuinte
+Informações Suplementares do documento fiscal
+Item Descrição Quantidade Un Valor Total
+1 NINHO FASES 1+ 800G 2,0000 UN 99,98
+
+QR-Code
+URL NFC-e: https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}%7C2
+"""
+
+
+def _synthetic_nfce_189258_text(chave: str | None = None) -> str:
+    chave = chave or _nfce_key("18925800")
+    items = _generated_rowwise_items(count=111, total=Decimal("1030.34"), prefix="PRODUTO NF189258")
+    body = "\n".join(
+        [
+            "Página 2",
+            *items[:35],
+            "Página 3",
+            *items[35:85],
+            "Página 4",
+            "Totais",
+            "ICMS",
+            "Dados do Transporte",
+            "Formas de Pagamento",
+            "Informações Adicionais",
+            *items[85:],
+        ]
+    )
+    return _synthetic_nfce_go_text(
+        chave=chave,
+        numero="189258",
+        total=Decimal("1030.34"),
+        body=body,
+    )
+
+
+def _synthetic_nfce_210106_text(chave: str | None = None) -> str:
+    chave = chave or _nfce_key("21010600")
+    items = _generated_rowwise_items(count=71, total=Decimal("849.68"), prefix="PRODUTO NF210106")
+    body = "\n".join(
+        [
+            "Página 2",
+            *items[:34],
+            "Página 3",
+            "Totais",
+            "ICMS",
+            *items[34:],
+        ]
+    )
+    return _synthetic_nfce_go_text(
+        chave=chave,
+        numero="210106",
+        total=Decimal("849.68"),
+        body=body,
+    )
+
+
+def _synthetic_nfce_4977_text(chave: str | None = None) -> str:
+    chave = chave or _nfce_key("00497700")
+    items = [_rowwise_item(numero, f"PRODUTO NF4977 {numero}", Decimal("10.00")) for numero in range(1, 5)]
+    items.extend(
+        [
+            "5 PRODUTO PROMOCIONAL",
+            "DE 24,99 POR 16,49",
+            "1,0000 UN 16,49",
+        ]
+    )
+    items.extend(_rowwise_item(numero, f"PRODUTO NF4977 {numero}", Decimal("10.00")) for numero in range(6, 77))
+    items.append(_rowwise_item(77, "PRODUTO NF4977 77", Decimal("263.88")))
+    body = "\n".join(
+        [
+            "Página 2",
+            *items[:45],
+            "Página 3",
+            "Totais",
+            "ICMS",
+            "Dados do Transporte",
+            "Formas de Pagamento",
+            "Informações Adicionais",
+            *items[45:],
+        ]
+    )
+    return _synthetic_nfce_go_text(
+        chave=chave,
+        numero="4977",
+        total=Decimal("1030.37"),
+        body=body,
+    )
+
+
+def _synthetic_nfce_24345_text(chave: str | None = None) -> str:
+    chave = chave or _nfce_key("02434500")
+    items = _generated_rowwise_items(count=56, total=Decimal("652.06"), prefix="PRODUTO NF24345")
+    body = "\n".join(
+        [
+            "Página 2",
+            *items[:36],
+            "Página 3",
+            "Totais",
+            "ICMS",
+            "Dados do Transporte",
+            "Formas de Pagamento",
+            "Informações Adicionais",
+            "Informações Complementares da NFC-e",
+            *items[36:],
+        ]
+    )
+    return _synthetic_nfce_go_text(
+        chave=chave,
+        numero="24345",
+        total=Decimal("652.06"),
+        body=body,
+    )
+
+
+def _synthetic_nfce_15925_text(chave: str | None = None) -> str:
+    chave = chave or _nfce_key("01592500")
+    items = _generated_rowwise_items(count=4, total=Decimal("33.15"), prefix="PRODUTO NF15925", base_value=Decimal("10.00"))
+    body = "\n".join(
+        [
+            "Totais",
+            "ICMS",
+            "Dados do Transporte",
+            "Formas de Pagamento",
+            "Item Descrição Quantidade Un Valor Total",
+            *items,
+        ]
+    )
+    return _synthetic_nfce_go_text(
+        chave=chave,
+        numero="15925",
+        total=Decimal("33.15"),
+        body=body,
+    )
+
+
 def test_detecta_texto_pdf_nfce_detalhado():
     assert is_nfce_detalhada_text(_synthetic_nfce_text()) is True
     assert is_nfce_detalhada_text("recibo comum sem produtos") is False
@@ -334,6 +546,70 @@ def test_extrai_produtos_nf34805_com_informacoes_adicionais_antes_da_continuacao
     assert parsed.itens[0].numero_item == 1
     assert parsed.itens[-1].numero_item == 62
     assert len({item.numero_item for item in parsed.itens}) == 62
+
+
+def test_nfce_um_item_com_desconto_e_marcadores_antes_da_tabela():
+    parsed = parse_nfce_detalhada_text(_synthetic_nfce_um_item_com_desconto_text())
+
+    assert len(parsed.itens) == 1
+    assert parsed.itens[0].descricao == "NINHO FASES 1+ 800G"
+    assert parsed.itens[0].quantidade == Decimal("2.0000")
+    assert parsed.item_total == Decimal("99.98")
+    assert parsed.valor_total_produtos == Decimal("99.98")
+    assert parsed.valor_total_descontos == Decimal("25.00")
+    assert parsed.valor_total_nota == Decimal("74.98")
+    assert _fiscal_totals_reconcile(parsed) is True
+
+
+def test_nfce_189258_111_itens_multiplas_paginas():
+    parsed = parse_nfce_detalhada_text(_synthetic_nfce_189258_text())
+
+    assert len(parsed.itens) == 111
+    assert parsed.item_total == Decimal("1030.34")
+    assert parsed.valor_total_nota == Decimal("1030.34")
+    assert parsed.itens[-1].numero_item == 111
+    assert len({item.numero_item for item in parsed.itens}) == 111
+
+
+def test_nfce_210106_71_itens_totais_antes_da_continuacao():
+    parsed = parse_nfce_detalhada_text(_synthetic_nfce_210106_text())
+
+    assert len(parsed.itens) == 71
+    assert parsed.item_total == Decimal("849.68")
+    assert parsed.valor_total_nota == Decimal("849.68")
+    assert parsed.itens[34].numero_item == 35
+    assert parsed.itens[-1].numero_item == 71
+
+
+def test_nfce_4977_77_itens_com_promocoes_multilinha():
+    parsed = parse_nfce_detalhada_text(_synthetic_nfce_4977_text())
+
+    assert len(parsed.itens) == 77
+    assert parsed.item_total == Decimal("1030.37")
+    assert parsed.valor_total_nota == Decimal("1030.37")
+    assert parsed.itens[4].numero_item == 5
+    assert parsed.itens[4].descricao == "PRODUTO PROMOCIONAL DE 24,99 POR 16,49"
+    assert parsed.itens[4].valor_total_item == Decimal("16.49")
+    assert parsed.itens[-1].numero_item == 77
+
+
+def test_nfce_24345_56_itens_informacoes_complementares_antes_continuacao():
+    parsed = parse_nfce_detalhada_text(_synthetic_nfce_24345_text())
+
+    assert len(parsed.itens) == 56
+    assert parsed.item_total == Decimal("652.06")
+    assert parsed.valor_total_nota == Decimal("652.06")
+    assert parsed.itens[-1].numero_item == 56
+    assert len({item.numero_item for item in parsed.itens}) == 56
+
+
+def test_nfce_15925_4_itens_marcadores_antes_da_tabela():
+    parsed = parse_nfce_detalhada_text(_synthetic_nfce_15925_text())
+
+    assert len(parsed.itens) == 4
+    assert parsed.item_total == Decimal("33.15")
+    assert parsed.valor_total_nota == Decimal("33.15")
+    assert [item.numero_item for item in parsed.itens] == [1, 2, 3, 4]
 
 
 def test_extrai_produtos_nao_importa_falso_item_apos_informacoes_adicionais_terminal():

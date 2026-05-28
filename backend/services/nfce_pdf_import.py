@@ -45,7 +45,7 @@ STOP_MARKERS = (
     "formas de pagamento",
 )
 ROWWISE_ITEM_RE = re.compile(
-    r"^\s*(\d{1,4})\s+(.+?)\s+(\d+,\d{1,4})\s+([A-Za-z]{1,8})\s+([0-9.]+,\d{2})\s*$"
+    r"^\s*(\d{1,4})\s+(.+)\s+(\d+,\d{1,4})\s+([A-Za-z]{1,8})\s+([0-9.]+,\d{2})\s*$"
 )
 ROWWISE_HEADER_PREFIXES = ("item ", "n item", "descricao", "codigo")
 ROWWISE_LOOKAHEAD_TERMINAL_MARKERS = (
@@ -82,6 +82,10 @@ class NfcePdfParseResult:
     cnpj_emitente: str
     valor_total_nota: Decimal
     valor_total_produtos: Decimal | None
+    valor_total_descontos: Decimal | None
+    valor_total_frete: Decimal | None
+    valor_total_seguro: Decimal | None
+    valor_outras_despesas: Decimal | None
     url_qrcode: str | None
     itens: list[NfcePdfItem]
     item_total: Decimal
@@ -205,6 +209,10 @@ def parse_nfce_detalhada_text(text: str) -> NfcePdfParseResult:
 
     valor_total_nota = _extract_money(text, r"Valor Total da Nota Fiscal\s*[:\-]?\s*([0-9.]+,\d{2})")
     valor_total_produtos = _extract_money(text, r"Valor Total dos Produtos\s*[:\-]?\s*([0-9.]+,\d{2})")
+    valor_total_descontos = _extract_money(text, r"Valor Total dos Descontos\s*[:\-]?\s*([0-9.]+,\d{2})")
+    valor_total_frete = _extract_money(text, r"Valor Total do Frete\s*[:\-]?\s*([0-9.]+,\d{2})")
+    valor_total_seguro = _extract_money(text, r"Valor Total do Seguro\s*[:\-]?\s*([0-9.]+,\d{2})")
+    valor_outras_despesas = _extract_money(text, r"Outras Despesas(?:\s+Acess[oó]rias)?\s*[:\-]?\s*([0-9.]+,\d{2})")
     item_total = sum((item.valor_total_item for item in itens), Decimal("0.00")).quantize(Decimal("0.01"))
 
     modelo, serie, numero = _extract_nf_metadata(text)
@@ -220,6 +228,10 @@ def parse_nfce_detalhada_text(text: str) -> NfcePdfParseResult:
         cnpj_emitente=supplier["cnpj"],
         valor_total_nota=valor_total_nota or valor_total_produtos or item_total,
         valor_total_produtos=valor_total_produtos,
+        valor_total_descontos=valor_total_descontos,
+        valor_total_frete=valor_total_frete,
+        valor_total_seguro=valor_total_seguro,
+        valor_outras_despesas=valor_outras_despesas,
         url_qrcode=_extract_optional(text, r"(https?://\S+)"),
         itens=itens,
         item_total=item_total,
@@ -361,7 +373,10 @@ def _extract_items(text: str) -> list[NfcePdfItem]:
 
 
 def _match_rowwise_item(line: str) -> re.Match[str] | None:
-    return ROWWISE_ITEM_RE.match(line)
+    match = ROWWISE_ITEM_RE.match(line)
+    if match and match.group(4).upper() in {"DE", "POR"}:
+        return None
+    return match
 
 
 def _is_stop_marker(normalized_line: str) -> bool:
@@ -375,6 +390,8 @@ def _is_rowwise_lookahead_ignored_line(normalized_line: str) -> bool:
         or normalized_line.startswith("pagina ")
         or "dados dos produtos e servicos" in normalized_line
         or normalized_line == "informacoes adicionais"
+        or normalized_line.startswith("informacoes complementares")
+        or normalized_line.startswith("informacoes suplementares")
         or _is_stop_marker(normalized_line)
     )
 
@@ -425,7 +442,7 @@ def _has_future_rowwise_item_continuation(
             numero_item = int(match.group(1))
             if numero_item != last_item_number + 1:
                 return False
-            if saw_additional_info:
+            if saw_additional_info and last_item_number > 0:
                 return _has_next_consecutive_rowwise_item(lines, index + 1, numero_item)
             return True
         return False
@@ -433,12 +450,39 @@ def _has_future_rowwise_item_continuation(
     return False
 
 
+def _match_rowwise_item_from_lines(lines: list[str], start_index: int) -> tuple[re.Match[str] | None, int]:
+    combined_parts: list[str] = []
+    for index in range(start_index, min(len(lines), start_index + 5)):
+        line = lines[index].strip()
+        normalized = _normalize_text(line)
+        if index > start_index and (
+            not line
+            or _is_rowwise_lookahead_terminal_line(normalized)
+            or _is_stop_marker(normalized)
+            or normalized.startswith(ROWWISE_HEADER_PREFIXES)
+            or "dados dos produtos e servicos" in normalized
+        ):
+            break
+        if index > start_index and re.match(r"^\s*\d{1,4}\s+", line):
+            break
+
+        combined_parts.append(line)
+        match = _match_rowwise_item(" ".join(combined_parts))
+        if match:
+            return match, index
+
+    return None, start_index
+
+
 def _extract_items_rowwise(lines: list[str]) -> list[NfcePdfItem]:
     in_products = False
     items: list[NfcePdfItem] = []
     last_item_number = 0
+    skip_until_index = -1
 
     for index, line in enumerate(lines):
+        if index <= skip_until_index:
+            continue
         normalized = _normalize_text(line)
         if "dados dos produtos e servicos" in normalized:
             in_products = True
@@ -454,9 +498,10 @@ def _extract_items_rowwise(lines: list[str]) -> list[NfcePdfItem]:
         if normalized.startswith(ROWWISE_HEADER_PREFIXES):
             continue
 
-        match = _match_rowwise_item(line)
+        match, matched_until_index = _match_rowwise_item_from_lines(lines, index)
         if not match:
             continue
+        skip_until_index = matched_until_index
 
         numero_item = int(match.group(1))
         descricao = re.sub(r"\s+", " ", match.group(2)).strip()
@@ -629,6 +674,22 @@ def _to_dto(parsed: NfcePdfParseResult) -> NotaFiscalDTO:
     )
 
 
+def _fiscal_totals_reconcile(parsed: NfcePdfParseResult, *, tolerance: Decimal = Decimal("0.01")) -> bool:
+    if parsed.valor_total_produtos is None:
+        return False
+
+    desconto = parsed.valor_total_descontos or Decimal("0.00")
+    frete = parsed.valor_total_frete or Decimal("0.00")
+    seguro = parsed.valor_total_seguro or Decimal("0.00")
+    outras = parsed.valor_outras_despesas or Decimal("0.00")
+    calculated_note_total = (parsed.valor_total_produtos - desconto + frete + seguro + outras).quantize(Decimal("0.01"))
+
+    return (
+        abs(parsed.item_total - parsed.valor_total_produtos) <= tolerance
+        and abs(calculated_note_total - parsed.valor_total_nota) <= tolerance
+    )
+
+
 class NfcePdfImportService:
     def __init__(self, repo: ProcurementRepository) -> None:
         self.repo = repo
@@ -661,6 +722,10 @@ class NfcePdfImportService:
             "mes": fiscal_month(parsed.data_emissao),
             "ano_mes": fiscal_year_month(parsed.data_emissao),
             "valor_total_produtos": str(parsed.valor_total_produtos) if parsed.valor_total_produtos is not None else None,
+            "valor_total_descontos": str(parsed.valor_total_descontos) if parsed.valor_total_descontos is not None else None,
+            "valor_total_frete": str(parsed.valor_total_frete) if parsed.valor_total_frete is not None else None,
+            "valor_total_seguro": str(parsed.valor_total_seguro) if parsed.valor_total_seguro is not None else None,
+            "valor_outras_despesas": str(parsed.valor_outras_despesas) if parsed.valor_outras_despesas is not None else None,
             "item_total": str(parsed.item_total),
             "item_total_centavos": decimal_to_centavos(parsed.item_total),
             "has_qrcode_url": parsed.url_qrcode is not None,
@@ -682,6 +747,13 @@ class NfcePdfImportService:
             parser_source="deterministic",
             details=quality_details,
         )
+        if _fiscal_totals_reconcile(parsed) and extraction_quality.total_mismatch:
+            quality_details["pdf_fiscal_total_reconciled"] = True
+            extraction_quality = replace(
+                extraction_quality,
+                total_mismatch=False,
+                details=quality_details,
+            )
         if (
             extraction_quality.quality_status == "warning"
             and extraction_quality.missing_ean_count == len(dto.itens)
