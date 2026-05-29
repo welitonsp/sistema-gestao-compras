@@ -18,12 +18,21 @@ export interface TopFornecedor {
   total: number;
 }
 
+export interface AlertaRisco {
+  tipo: string;
+  severidade: string;
+  titulo: string;
+  mensagem: string;
+  valor?: number;
+}
+
 export interface DashboardResumo {
   total_geral: number;
   por_categoria: GastoCategoria[];
   evolucao_mensal: EvolucaoMensal[];
   top_produtos: TopProduto[];
   top_fornecedores: TopFornecedor[];
+  alertas_risco: AlertaRisco[];
 }
 
 export interface AlertaPreco {

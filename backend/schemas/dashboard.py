@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
 
 
@@ -33,6 +33,15 @@ class TopFornecedor(BaseModel):
     total: Decimal
 
 
+class AlertaRisco(BaseModel):
+    """Basic risk alert."""
+    tipo: str  # ex: concentration, catalog_health, mismatch
+    severidade: str  # info, warning, danger
+    titulo: str
+    mensagem: str
+    valor: Optional[float] = None
+
+
 class DashboardResumoResponse(BaseModel):
     """Consolidated summary for the dashboard."""
     total_geral: Decimal
@@ -40,6 +49,7 @@ class DashboardResumoResponse(BaseModel):
     evolucao_mensal: List[EvolucaoMensal]
     top_produtos: List[TopProduto]
     top_fornecedores: List[TopFornecedor]
+    alertas_risco: List[AlertaRisco] = []
 
 
 class AlertaPreco(BaseModel):
