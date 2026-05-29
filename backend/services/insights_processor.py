@@ -514,7 +514,9 @@ class PriceInsightsService:
         """Retorna os top produtos por valor total gasto com filtro de data."""
         stmt = (
             select(
-                Produto.nome_limpo, func.sum(ItemNotaFiscal.valor_total).label("total")
+                Produto.ean,
+                Produto.nome_limpo,
+                func.sum(ItemNotaFiscal.valor_total).label("total"),
             )
             .join(ItemNotaFiscal, Produto.ean == ItemNotaFiscal.ean)
             .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
@@ -535,7 +537,7 @@ class PriceInsightsService:
         )
         result = await self.db.execute(stmt)
         return [
-            {"produto": row.nome_limpo, "total": float(row.total)}
+            {"ean": row.ean, "produto": row.nome_limpo, "total": float(row.total)}
             for row in result.fetchall()
         ]
 
@@ -681,3 +683,58 @@ class PriceInsightsService:
             )
 
         return alertas[:3]  # Limita a 3 alertas
+
+    async def obter_historico_preco_produto(
+        self, ean: str, department_id: UUID | None = None, limit: int = 50
+    ) -> Dict[str, Any]:
+        """Retorna o histórico cronológico de compras de um produto específico."""
+        from backend.models.compras import Fornecedor
+
+        # Busca o nome do produto
+        res_prod = await self.db.execute(
+            select(Produto.nome_limpo).where(Produto.ean == ean)
+        )
+        nome_produto = res_prod.scalar_one_or_none() or "Produto Desconhecido"
+
+        # Busca o histórico de preços
+        stmt = (
+            select(
+                HistoricoPreco.data_compra,
+                HistoricoPreco.local,
+                HistoricoPreco.preco_pago,
+                HistoricoPreco.quantidade,
+                NotaFiscal.numero_nota,
+                (HistoricoPreco.preco_pago * HistoricoPreco.quantidade).label("total"),
+            )
+            .outerjoin(NotaFiscal, NotaFiscal.id == HistoricoPreco.nota_fiscal_id)
+            .where(HistoricoPreco.ean == ean)
+            .where(_historico_visivel_filter())
+        )
+
+        dept_filter = _historico_department_filter(department_id)
+        if dept_filter is not None:
+            stmt = stmt.where(dept_filter)
+
+        stmt = stmt.order_by(
+            desc(HistoricoPreco.data_compra), desc(HistoricoPreco.id)
+        ).limit(limit)
+        result = await self.db.execute(stmt)
+
+        historico = []
+        for row in result.fetchall():
+            historico.append(
+                {
+                    "data_compra": row.data_compra.isoformat(),
+                    "fornecedor": row.local,
+                    "preco_unitario": float(row.preco_pago),
+                    "quantidade": float(row.quantidade),
+                    "valor_total": float(row.total),
+                    "numero_nota": row.numero_nota,
+                }
+            )
+
+        return {
+            "ean": ean,
+            "nome_produto": nome_produto,
+            "historico": historico,
+        }

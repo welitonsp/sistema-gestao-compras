@@ -23,6 +23,7 @@ class EvolucaoMensal(BaseModel):
 
 class TopProduto(BaseModel):
     """Top product by spend."""
+    ean: str
     produto: str
     total: Decimal
 
@@ -40,6 +41,23 @@ class AlertaRisco(BaseModel):
     titulo: str
     mensagem: str
     valor: Optional[float] = None
+
+
+class HistoricoPrecoProduto(BaseModel):
+    """Entry in product price history series."""
+    data_compra: str
+    fornecedor: str
+    preco_unitario: Decimal
+    quantidade: Decimal
+    valor_total: Decimal
+    numero_nota: Optional[str] = None
+
+
+class ProductPriceHistoryResponse(BaseModel):
+    """Complete price history for a product."""
+    ean: str
+    nome_produto: str
+    historico: List[HistoricoPrecoProduto]
 
 
 class DashboardResumoResponse(BaseModel):
