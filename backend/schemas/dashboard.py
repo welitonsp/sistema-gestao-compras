@@ -72,9 +72,18 @@ class ResumoFornecedor(BaseModel):
 
 class NotaFornecedor(BaseModel):
     """Invoice basic details for supplier drill-down."""
+    model_config = ConfigDict(from_attributes=True)
+
     data_emissao: str
     numero_nota: str
     valor_total: Decimal
+
+
+class ConcentracaoFornecedor(BaseModel):
+    """Supplier concentration metric."""
+    percentual: float
+    nivel: str  # info, warning, danger
+    mensagem: str
 
 
 class TopProdutoFornecedor(BaseModel):
@@ -92,6 +101,7 @@ class SupplierDrilldownResponse(BaseModel):
     fornecedor_id: str
     nome_exibicao: str
     resumo: ResumoFornecedor
+    concentracao: Optional[ConcentracaoFornecedor] = None
     notas: List[NotaFornecedor]
     top_produtos: List[TopProdutoFornecedor] = []
 

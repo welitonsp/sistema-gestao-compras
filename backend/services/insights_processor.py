@@ -745,6 +745,45 @@ class PriceInsightsService:
         primeira_compra = r.primeira_compra.isoformat() if r.primeira_compra else None
         ultima_compra = r.ultima_compra.isoformat() if r.ultima_compra else None
 
+        # 2b. Cálculo de Concentração
+        stmt_total_periodo = select(func.sum(NotaFiscal.valor_total)).where(
+            NotaFiscal.status == ACTIVE_INVOICE_STATUS
+        )
+        if department_id:
+            stmt_total_periodo = stmt_total_periodo.where(
+                NotaFiscal.department_id == department_id
+            )
+        if start_date:
+            stmt_total_periodo = stmt_total_periodo.where(
+                NotaFiscal.data_emissao >= start_date
+            )
+        if end_date:
+            stmt_total_periodo = stmt_total_periodo.where(
+                NotaFiscal.data_emissao <= end_date
+            )
+
+        total_periodo = await self.db.scalar(stmt_total_periodo) or Decimal("0")
+
+        concentracao = None
+        if total_periodo > 0:
+            percentual = float((total_gasto / total_periodo) * 100)
+
+            if percentual >= 50:
+                nivel = "danger"
+                msg = f"Concentração alta: este fornecedor representa {percentual:.1f}% dos seus gastos no período selecionado."
+            elif percentual >= 30:
+                nivel = "warning"
+                msg = f"Atenção: este fornecedor concentra {percentual:.1f}% dos seus gastos no período selecionado."
+            else:
+                nivel = "info"
+                msg = f"Este fornecedor representa {percentual:.1f}% dos seus gastos no período selecionado."
+
+            concentracao = {
+                "percentual": round(percentual, 1),
+                "nivel": nivel,
+                "mensagem": msg,
+            }
+
         # 3. Notas
         stmt_notas = (
             select(
@@ -836,6 +875,7 @@ class PriceInsightsService:
                 "primeira_compra": primeira_compra,
                 "ultima_compra": ultima_compra,
             },
+            "concentracao": concentracao,
             "notas": notas,
             "top_produtos": top_produtos,
         }

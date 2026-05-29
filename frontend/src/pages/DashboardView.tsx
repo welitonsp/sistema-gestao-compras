@@ -974,6 +974,58 @@ const SupplierHistoryModal: React.FC<{
                 </div>
               </div>
 
+              {/* Concentration Alert */}
+              {data?.concentracao && (
+                <div
+                  className={`p-4 rounded-2xl flex items-start gap-3 border transition-all ${
+                    data.concentracao.nivel === "danger"
+                      ? "bg-rose-50/50 dark:bg-rose-900/10 border-rose-100 dark:border-rose-800/50"
+                      : data.concentracao.nivel === "warning"
+                        ? "bg-amber-50/50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-800/50"
+                        : "bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-800/50"
+                  }`}
+                >
+                  <ShieldAlert
+                    size={18}
+                    className={`mt-0.5 shrink-0 ${
+                      data.concentracao.nivel === "danger"
+                        ? "text-rose-500"
+                        : data.concentracao.nivel === "warning"
+                          ? "text-amber-500"
+                          : "text-blue-500"
+                    }`}
+                  />
+                  <div>
+                    <p
+                      className={`text-xs font-bold uppercase tracking-tight ${
+                        data.concentracao.nivel === "danger"
+                          ? "text-rose-800 dark:text-rose-300"
+                          : data.concentracao.nivel === "warning"
+                            ? "text-amber-800 dark:text-amber-300"
+                            : "text-blue-800 dark:text-blue-300"
+                      }`}
+                    >
+                      {data.concentracao.nivel === "danger"
+                        ? "Alta Concentração"
+                        : data.concentracao.nivel === "warning"
+                          ? "Atenção"
+                          : "Insight de Gastos"}
+                    </p>
+                    <p
+                      className={`text-[11px] leading-relaxed ${
+                        data.concentracao.nivel === "danger"
+                          ? "text-rose-700 dark:text-rose-400"
+                          : data.concentracao.nivel === "warning"
+                            ? "text-amber-700 dark:text-amber-400"
+                            : "text-blue-700 dark:text-blue-400"
+                      }`}
+                    >
+                      {data.concentracao.mensagem}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Top Products in Supplier */}
                 <section className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
