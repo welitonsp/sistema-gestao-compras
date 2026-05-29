@@ -13,6 +13,7 @@ from backend.schemas.dashboard import (
     DashboardResumoResponse,
     AlertasPrecoResponse,
     ProductPriceHistoryResponse,
+    SupplierDrilldownResponse,
 )
 from backend.services.insights_processor import PriceInsightsService
 from sqlalchemy import select, func, desc
@@ -194,6 +195,39 @@ async def obter_historico_produto(
     dept_id = user.department_id if user.role != UserRole.ADMIN else None
     res = await service.obter_historico_preco_produto(ean, department_id=dept_id)
     return ProductPriceHistoryResponse(**res)
+
+
+@router.get(
+    "/fornecedores/{fornecedor_id}/detalhes",
+    response_model=SupplierDrilldownResponse,
+    summary="Obter detalhes e histórico de um fornecedor",
+)
+async def obter_detalhes_fornecedor(
+    fornecedor_id: str,
+    db: DbSession,
+    user: CurrentUser,
+    start_date: date | None = Query(None, description="Data inicial do filtro"),
+    end_date: date | None = Query(None, description="Data final do filtro"),
+) -> SupplierDrilldownResponse | dict:
+    """Retorna KPIs e histórico de notas de um fornecedor."""
+    from fastapi import HTTPException
+
+    service = PriceInsightsService(db)
+    dept_id = user.department_id if user.role != UserRole.ADMIN else None
+
+    res = await service.obter_detalhes_fornecedor(
+        fornecedor_id=fornecedor_id,
+        department_id=dept_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    if not res:
+        raise HTTPException(
+            status_code=404, detail="Fornecedor não encontrado ou sem acesso."
+        )
+
+    return SupplierDrilldownResponse(**res)
 
 
 @router.get(
