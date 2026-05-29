@@ -51,6 +51,12 @@ export interface ResumoFornecedor {
   ultima_compra?: string | null;
 }
 
+export interface ConcentracaoFornecedor {
+  percentual: number;
+  nivel: string; // info, warning, danger
+  mensagem: string;
+}
+
 export interface NotaFornecedor {
   data_emissao: string;
   numero_nota: string;
@@ -70,6 +76,7 @@ export interface SupplierDrilldownResponse {
   fornecedor_id: string;
   nome_exibicao: string;
   resumo: ResumoFornecedor;
+  concentracao?: ConcentracaoFornecedor;
   notas: NotaFornecedor[];
   top_produtos: TopProdutoFornecedor[];
 }

@@ -201,3 +201,208 @@ async def test_supplier_drilldown_filters():
         notas = res["notas"]
         assert len(notas) == 1
         assert notas[0]["numero_nota"] == "201"
+
+
+@pytest.mark.asyncio
+async def test_supplier_concentration_calculation():
+    async with SessionLocal() as db_session:
+        # Cleanup
+        await db_session.execute(delete(ItemNotaFiscal))
+        await db_session.execute(delete(NotaFiscal))
+        await db_session.execute(delete(Fornecedor))
+        await db_session.commit()
+
+        # Setup 2 Fornecedores
+        f1 = Fornecedor(cnpj="11111111111111", razao_social="Dominante")
+        f2 = Fornecedor(cnpj="22222222222222", razao_social="Minoratario")
+        db_session.add_all([f1, f2])
+        await db_session.flush()
+
+        today = date.today()
+
+        # Notas F1: 60.00 (60%)
+        db_session.add(
+            NotaFiscal(
+                fornecedor_id=f1.id,
+                numero_nota="1",
+                chave_acesso="1" * 44,
+                valor_total=Decimal("60.00"),
+                status="active",
+                data_emissao=today,
+            )
+        )
+
+        # Notas F2: 40.00 (40%)
+        db_session.add(
+            NotaFiscal(
+                fornecedor_id=f2.id,
+                numero_nota="2",
+                chave_acesso="2" * 44,
+                valor_total=Decimal("40.00"),
+                status="active",
+                data_emissao=today,
+            )
+        )
+
+        await db_session.commit()
+
+        service = PriceInsightsService(db_session)
+
+        # Test F1 (60% -> Danger)
+        res1 = await service.obter_detalhes_fornecedor(str(f1.id))
+        assert res1["concentracao"] is not None
+        assert res1["concentracao"]["percentual"] == 60.0
+        assert res1["concentracao"]["nivel"] == "danger"
+        assert "60.0%" in res1["concentracao"]["mensagem"]
+
+        # Test F2 (40% -> Warning)
+        res2 = await service.obter_detalhes_fornecedor(str(f2.id))
+        assert res2["concentracao"] is not None
+        assert res2["concentracao"]["percentual"] == 40.0
+        assert res2["concentracao"]["nivel"] == "warning"
+        assert "40.0%" in res2["concentracao"]["mensagem"]
+
+
+@pytest.mark.asyncio
+async def test_supplier_concentration_info_level():
+    async with SessionLocal() as db_session:
+        # Cleanup
+        await db_session.execute(delete(NotaFiscal))
+        await db_session.execute(delete(Fornecedor))
+        await db_session.commit()
+
+        f1 = Fornecedor(cnpj="1111", razao_social="F1")
+        f2 = Fornecedor(cnpj="2222", razao_social="F2")
+        db_session.add_all([f1, f2])
+        await db_session.flush()
+
+        # F1: 20 / Total 100 = 20% -> Info
+        db_session.add(
+            NotaFiscal(
+                fornecedor_id=f1.id,
+                numero_nota="1",
+                chave_acesso="1" * 44,
+                valor_total=Decimal("20.00"),
+                status="active",
+                data_emissao=date.today(),
+            )
+        )
+        db_session.add(
+            NotaFiscal(
+                fornecedor_id=f2.id,
+                numero_nota="2",
+                chave_acesso="2" * 44,
+                valor_total=Decimal("80.00"),
+                status="active",
+                data_emissao=date.today(),
+            )
+        )
+        await db_session.commit()
+
+        service = PriceInsightsService(db_session)
+        res = await service.obter_detalhes_fornecedor(str(f1.id))
+        assert res["concentracao"]["nivel"] == "info"
+        assert res["concentracao"]["percentual"] == 20.0
+
+
+@pytest.mark.asyncio
+async def test_supplier_concentration_filters_and_tenancy():
+    async with SessionLocal() as db_session:
+        import uuid
+
+        dept1 = uuid.uuid4()
+        dept2 = uuid.uuid4()
+
+        # Cleanup
+        await db_session.execute(delete(NotaFiscal))
+        await db_session.execute(delete(Fornecedor))
+        await db_session.commit()
+
+        f1 = Fornecedor(cnpj="1111", razao_social="F1")
+        db_session.add(f1)
+        await db_session.flush()
+
+        today = date.today()
+
+        # Nota Dept1 - Active - Today: 100.00
+        db_session.add(
+            NotaFiscal(
+                fornecedor_id=f1.id,
+                numero_nota="1",
+                chave_acesso="1" * 44,
+                valor_total=Decimal("100.00"),
+                status="active",
+                data_emissao=today,
+                department_id=dept1,
+            )
+        )
+
+        # Nota Dept1 - Inactive - Today: 50.00 (should be ignored)
+        db_session.add(
+            NotaFiscal(
+                fornecedor_id=f1.id,
+                numero_nota="2",
+                chave_acesso="2" * 44,
+                valor_total=Decimal("50.00"),
+                status="deleted",
+                data_emissao=today,
+                department_id=dept1,
+            )
+        )
+
+        # Nota Dept2 - Active - Today: 200.00 (should be ignored when filtering by dept1)
+        db_session.add(
+            NotaFiscal(
+                fornecedor_id=f1.id,
+                numero_nota="3",
+                chave_acesso="3" * 44,
+                valor_total=Decimal("200.00"),
+                status="active",
+                data_emissao=today,
+                department_id=dept2,
+            )
+        )
+
+        # Nota Dept1 - Active - Yesterday: 300.00 (should be ignored when filtering by today)
+        yesterday = today - timedelta(days=1)
+        db_session.add(
+            NotaFiscal(
+                fornecedor_id=f1.id,
+                numero_nota="4",
+                chave_acesso="4" * 44,
+                valor_total=Decimal("300.00"),
+                status="active",
+                data_emissao=yesterday,
+                department_id=dept1,
+            )
+        )
+
+        await db_session.commit()
+
+        service = PriceInsightsService(db_session)
+
+        # Filter by Dept1 and Today -> Total should be 100.00, F1 is 100.00 -> 100%
+        res = await service.obter_detalhes_fornecedor(
+            str(f1.id), department_id=dept1, start_date=today
+        )
+        assert res["concentracao"]["percentual"] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_supplier_concentration_zero_division():
+    async with SessionLocal() as db_session:
+        # Cleanup
+        await db_session.execute(delete(NotaFiscal))
+        await db_session.execute(delete(Fornecedor))
+        await db_session.commit()
+
+        f1 = Fornecedor(cnpj="1111", razao_social="F1")
+        db_session.add(f1)
+        await db_session.commit()
+
+        service = PriceInsightsService(db_session)
+
+        # No notes in database -> total_periodo is 0
+        res = await service.obter_detalhes_fornecedor(str(f1.id))
+        # My implementation returns None if total_periodo <= 0.
+        assert res["concentracao"] is None
