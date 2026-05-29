@@ -84,19 +84,20 @@ def run_query_with_loading(
 
 
 def check_password() -> bool:
-    """
-    Protege o dashboard com uma senha simples.
 
-    - Tenta ler DASHBOARD_PASSWORD em st.secrets.
-    - Se não existir secrets.toml, usa "admin123" como padrão.
     """
+    Protege o dashboard com uma senha forte definida em DASHBOARD_PASSWORD no st.secrets.
+    Não existe mais fallback para senha padrão.
+    """
+
 
     def password_entered():
         # Descobre a senha esperada
         try:
             expected_password = st.secrets["DASHBOARD_PASSWORD"]
         except Exception:
-            expected_password = "admin123"
+            st.error("Senha do dashboard não configurada. Defina DASHBOARD_PASSWORD em secrets.toml.")
+            st.stop()
 
         if st.session_state.get("password") == expected_password:
             st.session_state["password_correct"] = True
@@ -105,6 +106,7 @@ def check_password() -> bool:
                 del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
+
 
     if "password_correct" not in st.session_state:
         st.text_input(
@@ -124,6 +126,7 @@ def check_password() -> bool:
         )
         st.error("Senha incorreta.")
         return False
+
 
     return True
 
