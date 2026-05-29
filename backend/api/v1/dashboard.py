@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Annotated
 from fastapi import APIRouter, Query, status, Depends
 from fastapi.responses import StreamingResponse
@@ -12,7 +13,14 @@ from backend.schemas.dashboard import DashboardResumoResponse, AlertasPrecoRespo
 from backend.services.insights_processor import PriceInsightsService
 from sqlalchemy import select, func, desc
 from backend.api.dependencies import DbSession, CurrentUser, RoleChecker
-from backend.models.compras import HistoricoPreco, AuditLog, UserRole, User, NotaFiscal, ItemNotaFiscal
+from backend.models.compras import (
+    HistoricoPreco,
+    AuditLog,
+    UserRole,
+    User,
+    NotaFiscal,
+    ItemNotaFiscal,
+)
 
 from backend.services.notifications import dispatcher
 from fastapi.responses import StreamingResponse
@@ -21,23 +29,22 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard & Insights"])
 
 ACTIVE_INVOICE_STATUS = "active"
 
+
 @router.get("/notifications", summary="Stream de notificações em tempo real (SSE)")
 async def stream_notifications(user: CurrentUser):
     """
     Mantém uma conexão aberta para envio de eventos em tempo real para o frontend.
     """
-    return StreamingResponse(
-        dispatcher.subscribe(),
-        media_type="text/event-stream"
-    )
+    return StreamingResponse(dispatcher.subscribe(), media_type="text/event-stream")
+
 
 @router.get(
     "/audit-logs/export",
     summary="Exportar logs de auditoria (CSV - Streamed)",
 )
 async def exportar_audit_logs(
-    db: DbSession, 
-    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.AUDITOR]))]
+    db: DbSession,
+    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.AUDITOR]))],
 ) -> StreamingResponse:
     """Exporta a trilha de auditoria via streaming para suportar grandes volumes (Zero-OOM)."""
 
@@ -47,19 +54,22 @@ async def exportar_audit_logs(
 
         # Stream do Banco via Async iterator do SQLAlchemy
         stmt = select(AuditLog).order_by(desc(AuditLog.created_at))
-        result = await db.stream(stmt) # Uso de stream() para carregar em chunks do DB
+        result = await db.stream(stmt)  # Uso de stream() para carregar em chunks do DB
 
         async for row in result:
             log = row[0]
-            data_str = log.created_at.strftime("%d/%m/%Y %H:%M:%S") if log.created_at else ""
+            data_str = (
+                log.created_at.strftime("%d/%m/%Y %H:%M:%S") if log.created_at else ""
+            )
             detalhes = (log.detalhes or "").replace(";", ",").replace("\n", " ")
             yield f"{data_str};{log.usuario};{log.operacao};{log.entidade};{detalhes};{log.ip_origem}\n"
 
     return StreamingResponse(
         generate_csv(),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=auditoria_logs.csv"}
+        headers={"Content-Disposition": "attachment; filename=auditoria_logs.csv"},
     )
+
 
 @router.get(
     "/audit-logs",
@@ -74,7 +84,7 @@ async def listar_audit_logs(
     """Retorna a trilha de auditoria do sistema com isolamento de departamento."""
 
     stmt = select(AuditLog)
-    
+
     # RLS: Se não for ADMIN global, filtra pelo departamento do usuário
     if user.role != UserRole.ADMIN:
         stmt = stmt.where(AuditLog.department_id == user.department_id)
@@ -82,7 +92,7 @@ async def listar_audit_logs(
     stmt = stmt.order_by(desc(AuditLog.created_at)).limit(limit).offset(offset)
     result = await db.execute(stmt)
     logs = result.scalars().all()
-    
+
     return [
         {
             "id": str(log.id),
@@ -97,58 +107,67 @@ async def listar_audit_logs(
         for log in logs
     ]
 
+
 @router.get(
     "/resumo",
     response_model=DashboardResumoResponse,
-    summary="Obter resumo de gastos por categoria",
+    summary="Obter resumo de gastos consolidado",
 )
 async def obter_resumo_dashboard(
     db: DbSession,
-    user: CurrentUser
+    user: CurrentUser,
+    start_date: date | None = Query(None, description="Data inicial do filtro"),
+    end_date: date | None = Query(None, description="Data final do filtro"),
 ) -> DashboardResumoResponse:
-    """Retorna o total geral gasto com isolamento de departamento."""
+    """Retorna o resumo consolidado de gastos com suporte a filtros de período."""
     service = PriceInsightsService(db)
-    
-    # Total Geral filtrado por Dept
+
+    dept_id = user.department_id if user.role != UserRole.ADMIN else None
+
+    # Total Geral filtrado
     stmt_total = (
         select(func.sum(ItemNotaFiscal.valor_total))
         .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
         .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
     )
-    if user.role != UserRole.ADMIN:
-        stmt_total = stmt_total.where(NotaFiscal.department_id == user.department_id)
-        
+    if dept_id:
+        stmt_total = stmt_total.where(NotaFiscal.department_id == dept_id)
+
+    if start_date:
+        stmt_total = stmt_total.where(NotaFiscal.data_emissao >= start_date)
+    if end_date:
+        stmt_total = stmt_total.where(NotaFiscal.data_emissao <= end_date)
+
     total_geral = await db.scalar(stmt_total) or 0
-    
+
     # Por Categoria
     resumo_categorias = await service.obter_resumo_gastos_por_categoria(
-        department_id=user.department_id if user.role != UserRole.ADMIN else None
+        department_id=dept_id, start_date=start_date, end_date=end_date
     )
 
     # Evolução Mensal
     evolucao_mensal = await service.obter_evolucao_gastos_mensal(
-        department_id=user.department_id if user.role != UserRole.ADMIN else None
+        department_id=dept_id, start_date=start_date, end_date=end_date
     )
 
     # Top Produtos
     top_produtos = await service.obter_top_produtos_gasto(
-        limit=10,
-        department_id=user.department_id if user.role != UserRole.ADMIN else None
+        limit=10, department_id=dept_id, start_date=start_date, end_date=end_date
     )
 
     # Top Fornecedores
     top_fornecedores = await service.obter_top_fornecedores_gasto(
-        limit=10,
-        department_id=user.department_id if user.role != UserRole.ADMIN else None
+        limit=10, department_id=dept_id, start_date=start_date, end_date=end_date
     )
-    
+
     return DashboardResumoResponse(
         total_geral=total_geral,
         por_categoria=resumo_categorias,
         evolucao_mensal=evolucao_mensal,
         top_produtos=top_produtos,
-        top_fornecedores=top_fornecedores
+        top_fornecedores=top_fornecedores,
     )
+
 
 @router.get(
     "/alertas",
@@ -158,74 +177,95 @@ async def obter_resumo_dashboard(
 async def obter_alertas_preco(
     db: DbSession,
     user: CurrentUser,
-    threshold: float = Query(15.0, description="Limiar percentual para detecção de anomalias")
+    threshold: float = Query(
+        15.0, description="Limiar percentual para detecção de anomalias"
+    ),
 ) -> AlertasPrecoResponse:
     """Retorna produtos com variações de preço anômalas com isolamento."""
     service = PriceInsightsService(db)
     dept_id = user.department_id if user.role != UserRole.ADMIN else None
-    alertas = await service.detectar_variacoes_anomalas(threshold_percent=threshold, department_id=dept_id)
+    alertas = await service.detectar_variacoes_anomalas(
+        threshold_percent=threshold, department_id=dept_id
+    )
     return AlertasPrecoResponse(alertas=alertas)
+
 
 @router.get(
     "/alertas/duplicidade",
     summary="Detectar possíveis notas duplicadas",
 )
 async def obter_duplicatas_suspeitas(
-    db: DbSession, 
-    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER, UserRole.AUDITOR]))]
+    db: DbSession,
+    user: Annotated[
+        User, Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER, UserRole.AUDITOR]))
+    ],
 ) -> list[dict[str, Any]]:
     """Identifica notas duplicadas com isolamento de departamento."""
     service = PriceInsightsService(db)
     dept_id = user.department_id if user.role != UserRole.ADMIN else None
     return await service.detectar_notas_duplicadas_suspeitas(department_id=dept_id)
 
+
 @router.get(
     "/alertas/estatisticos",
     summary="Detectar anomalias via Z-Score",
 )
 async def obter_anomalias_estatisticas(
-    db: DbSession, 
-    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER, UserRole.AUDITOR]))],
-    z_threshold: float = 2.0
+    db: DbSession,
+    user: Annotated[
+        User, Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER, UserRole.AUDITOR]))
+    ],
+    z_threshold: float = 2.0,
 ) -> list[dict[str, Any]]:
     """Identifica preços fora da curva com isolamento de departamento."""
     service = PriceInsightsService(db)
     dept_id = user.department_id if user.role != UserRole.ADMIN else None
-    return await service.detectar_anomalias_estatisticas(z_threshold=z_threshold, department_id=dept_id)
+    return await service.detectar_anomalias_estatisticas(
+        z_threshold=z_threshold, department_id=dept_id
+    )
+
 
 @router.get(
     "/insights/tendencia",
     summary="Obter tendência de preços mensal",
 )
 async def obter_tendencia(
-    db: DbSession, 
-    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER, UserRole.AUDITOR]))]
+    db: DbSession,
+    user: Annotated[
+        User, Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER, UserRole.AUDITOR]))
+    ],
 ) -> list[dict[str, Any]]:
     """Retorna a evolução dos preços médios por mês com isolamento."""
     service = PriceInsightsService(db)
     dept_id = user.department_id if user.role != UserRole.ADMIN else None
     return await service.obter_tendencia_precos(department_id=dept_id)
 
+
 @router.get(
     "/insights/forecast",
     summary="Obter previsão de gastos para o próximo mês",
 )
 async def obter_forecast(
-    db: DbSession, 
-    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER, UserRole.AUDITOR]))]
+    db: DbSession,
+    user: Annotated[
+        User, Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER, UserRole.AUDITOR]))
+    ],
 ) -> list[dict[str, Any]]:
     """Projeção de gastos com isolamento de departamento."""
     service = PriceInsightsService(db)
     dept_id = user.department_id if user.role != UserRole.ADMIN else None
     return await service.obter_forecast_gastos(department_id=dept_id)
 
+
 @router.get(
     "/insights/volatilidade",
     summary="Obter produtos com maior volatilidade de preço",
 )
 async def obter_volatilidade(
-    db: DbSession, 
-    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER, UserRole.AUDITOR]))]
+    db: DbSession,
+    user: Annotated[
+        User, Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER, UserRole.AUDITOR]))
+    ],
 ) -> list[dict[str, Any]]:
     """Retorna volatilidade com isolamento de departamento."""
     service = PriceInsightsService(db)

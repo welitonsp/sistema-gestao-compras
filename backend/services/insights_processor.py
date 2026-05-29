@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from typing import List, Dict, Any
 from uuid import UUID
@@ -195,9 +196,12 @@ class PriceInsightsService:
         return sorted(anomalias, key=lambda x: x["z_score"], reverse=True)
 
     async def obter_resumo_gastos_por_categoria(
-        self, department_id: UUID | None = None
+        self,
+        department_id: UUID | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
     ) -> List[Dict[str, Any]]:
-        """Retorna o total gasto agrupado por categoria com isolamento."""
+        """Retorna o total gasto agrupado por categoria com isolamento e filtro de data."""
         stmt = (
             select(
                 Produto.categoria, func.sum(ItemNotaFiscal.valor_total).label("total")
@@ -209,6 +213,11 @@ class PriceInsightsService:
 
         if department_id:
             stmt = stmt.where(NotaFiscal.department_id == department_id)
+
+        if start_date:
+            stmt = stmt.where(NotaFiscal.data_emissao >= start_date)
+        if end_date:
+            stmt = stmt.where(NotaFiscal.data_emissao <= end_date)
 
         stmt = stmt.group_by(Produto.categoria).order_by(desc("total"))
         result = await self.db.execute(stmt)
@@ -450,12 +459,17 @@ class PriceInsightsService:
         ]
 
     async def obter_evolucao_gastos_mensal(
-        self, department_id: UUID | None = None
+        self,
+        department_id: UUID | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
     ) -> List[Dict[str, Any]]:
         """Retorna o total gasto por mês para o gráfico de evolução temporal."""
         from datetime import datetime, timedelta
 
-        inicio = (datetime.now() - timedelta(days=365)).date()  # Último ano
+        # Se houver filtro, respeitamos. Senão, mantemos últimos 12 meses por contexto.
+        if not start_date:
+            start_date = (datetime.now() - timedelta(days=365)).date()
 
         # Dialect handling
         bind = self.db.get_bind()
@@ -468,9 +482,12 @@ class PriceInsightsService:
             select(
                 month_func.label("mes"), func.sum(NotaFiscal.valor_total).label("total")
             )
-            .where(NotaFiscal.data_emissao >= inicio)
+            .where(NotaFiscal.data_emissao >= start_date)
             .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
         )
+        if end_date:
+            stmt = stmt.where(NotaFiscal.data_emissao <= end_date)
+
         if department_id:
             stmt = stmt.where(NotaFiscal.department_id == department_id)
 
@@ -488,9 +505,13 @@ class PriceInsightsService:
         ]
 
     async def obter_top_produtos_gasto(
-        self, limit: int = 10, department_id: UUID | None = None
+        self,
+        limit: int = 10,
+        department_id: UUID | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
     ) -> List[Dict[str, Any]]:
-        """Retorna os top produtos por valor total gasto."""
+        """Retorna os top produtos por valor total gasto com filtro de data."""
         stmt = (
             select(
                 Produto.nome_limpo, func.sum(ItemNotaFiscal.valor_total).label("total")
@@ -501,6 +522,11 @@ class PriceInsightsService:
         )
         if department_id:
             stmt = stmt.where(NotaFiscal.department_id == department_id)
+
+        if start_date:
+            stmt = stmt.where(NotaFiscal.data_emissao >= start_date)
+        if end_date:
+            stmt = stmt.where(NotaFiscal.data_emissao <= end_date)
 
         stmt = (
             stmt.group_by(Produto.ean, Produto.nome_limpo)
@@ -514,9 +540,13 @@ class PriceInsightsService:
         ]
 
     async def obter_top_fornecedores_gasto(
-        self, limit: int = 10, department_id: UUID | None = None
+        self,
+        limit: int = 10,
+        department_id: UUID | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
     ) -> List[Dict[str, Any]]:
-        """Retorna os top fornecedores por valor total gasto."""
+        """Retorna os top fornecedores por valor total gasto com filtro de data."""
         stmt = (
             select(
                 Fornecedor.razao_social, func.sum(NotaFiscal.valor_total).label("total")
@@ -526,6 +556,11 @@ class PriceInsightsService:
         )
         if department_id:
             stmt = stmt.where(NotaFiscal.department_id == department_id)
+
+        if start_date:
+            stmt = stmt.where(NotaFiscal.data_emissao >= start_date)
+        if end_date:
+            stmt = stmt.where(NotaFiscal.data_emissao <= end_date)
 
         stmt = (
             stmt.group_by(Fornecedor.id, Fornecedor.razao_social)
