@@ -551,7 +551,9 @@ class PriceInsightsService:
         """Retorna os top fornecedores por valor total gasto com filtro de data."""
         stmt = (
             select(
-                Fornecedor.razao_social, func.sum(NotaFiscal.valor_total).label("total")
+                Fornecedor.id,
+                Fornecedor.razao_social,
+                func.sum(NotaFiscal.valor_total).label("total"),
             )
             .join(NotaFiscal, Fornecedor.id == NotaFiscal.fornecedor_id)
             .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
@@ -571,7 +573,11 @@ class PriceInsightsService:
         )
         result = await self.db.execute(stmt)
         return [
-            {"fornecedor": row.razao_social, "total": float(row.total)}
+            {
+                "fornecedor_id": str(row.id),
+                "fornecedor": row.razao_social,
+                "total": float(row.total),
+            }
             for row in result.fetchall()
         ]
 
@@ -683,6 +689,106 @@ class PriceInsightsService:
             )
 
         return alertas[:3]  # Limita a 3 alertas
+
+    async def obter_detalhes_fornecedor(
+        self,
+        fornecedor_id: UUID | str,
+        department_id: UUID | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        limit: int = 50,
+    ) -> Dict[str, Any] | None:
+        """Retorna detalhes e notas recentes de um fornecedor."""
+        if isinstance(fornecedor_id, str):
+            try:
+                fornecedor_id = UUID(fornecedor_id)
+            except ValueError:
+                return None
+
+        # 1. Verifica se o fornecedor existe e pega nome
+        stmt_forn = select(Fornecedor.razao_social, Fornecedor.nome_fantasia).where(
+            Fornecedor.id == fornecedor_id
+        )
+        res_forn = await self.db.execute(stmt_forn)
+        fornecedor = res_forn.first()
+
+        if not fornecedor:
+            return None
+
+        nome_exibicao = fornecedor.nome_fantasia or fornecedor.razao_social
+
+        # 2. Resumo (Total, Qtd, Ticket, Primeira, Ultima)
+        stmt_resumo = (
+            select(
+                func.sum(NotaFiscal.valor_total).label("total_gasto"),
+                func.count(NotaFiscal.id).label("quantidade_notas"),
+                func.min(NotaFiscal.data_emissao).label("primeira_compra"),
+                func.max(NotaFiscal.data_emissao).label("ultima_compra"),
+            )
+            .where(NotaFiscal.fornecedor_id == fornecedor_id)
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
+        )
+
+        if department_id:
+            stmt_resumo = stmt_resumo.where(NotaFiscal.department_id == department_id)
+        if start_date:
+            stmt_resumo = stmt_resumo.where(NotaFiscal.data_emissao >= start_date)
+        if end_date:
+            stmt_resumo = stmt_resumo.where(NotaFiscal.data_emissao <= end_date)
+
+        resumo_row = await self.db.execute(stmt_resumo)
+        r = resumo_row.first()
+
+        total_gasto = r.total_gasto or Decimal("0")
+        qtd_notas = r.quantidade_notas or 0
+        ticket_medio = total_gasto / qtd_notas if qtd_notas > 0 else Decimal("0")
+        primeira_compra = r.primeira_compra.isoformat() if r.primeira_compra else None
+        ultima_compra = r.ultima_compra.isoformat() if r.ultima_compra else None
+
+        # 3. Notas
+        stmt_notas = (
+            select(
+                NotaFiscal.data_emissao,
+                NotaFiscal.numero_nota,
+                NotaFiscal.valor_total,
+            )
+            .where(NotaFiscal.fornecedor_id == fornecedor_id)
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
+        )
+
+        if department_id:
+            stmt_notas = stmt_notas.where(NotaFiscal.department_id == department_id)
+        if start_date:
+            stmt_notas = stmt_notas.where(NotaFiscal.data_emissao >= start_date)
+        if end_date:
+            stmt_notas = stmt_notas.where(NotaFiscal.data_emissao <= end_date)
+
+        stmt_notas = stmt_notas.order_by(
+            desc(NotaFiscal.data_emissao), desc(NotaFiscal.id)
+        ).limit(limit)
+        notas_res = await self.db.execute(stmt_notas)
+
+        notas = [
+            {
+                "data_emissao": row.data_emissao.isoformat(),
+                "numero_nota": row.numero_nota,
+                "valor_total": float(row.valor_total),
+            }
+            for row in notas_res.fetchall()
+        ]
+
+        return {
+            "fornecedor_id": str(fornecedor_id),
+            "nome_exibicao": nome_exibicao,
+            "resumo": {
+                "total_gasto": float(total_gasto),
+                "quantidade_notas": qtd_notas,
+                "ticket_medio": float(ticket_medio),
+                "primeira_compra": primeira_compra,
+                "ultima_compra": ultima_compra,
+            },
+            "notas": notas,
+        }
 
     async def obter_historico_preco_produto(
         self, ean: str, department_id: UUID | None = None, limit: int = 50

@@ -30,6 +30,7 @@ class TopProduto(BaseModel):
 
 class TopFornecedor(BaseModel):
     """Top supplier by spend."""
+    fornecedor_id: str
     fornecedor: str
     total: Decimal
 
@@ -58,6 +59,30 @@ class ProductPriceHistoryResponse(BaseModel):
     ean: str
     nome_produto: str
     historico: List[HistoricoPrecoProduto]
+
+
+class ResumoFornecedor(BaseModel):
+    """Summary of supplier metrics."""
+    total_gasto: Decimal
+    quantidade_notas: int
+    ticket_medio: Decimal
+    primeira_compra: Optional[str] = None
+    ultima_compra: Optional[str] = None
+
+
+class NotaFornecedor(BaseModel):
+    """Invoice basic details for supplier drill-down."""
+    data_emissao: str
+    numero_nota: str
+    valor_total: Decimal
+
+
+class SupplierDrilldownResponse(BaseModel):
+    """Detailed drill-down for a supplier."""
+    fornecedor_id: str
+    nome_exibicao: str
+    resumo: ResumoFornecedor
+    notas: List[NotaFornecedor]
 
 
 class DashboardResumoResponse(BaseModel):

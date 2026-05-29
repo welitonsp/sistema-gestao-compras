@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   X,
   History,
+  Building2,
 } from "lucide-react";
 import {
   BarChart,
@@ -32,6 +33,7 @@ import {
   AlertaPreco,
   AlertaRisco,
   ProductPriceHistoryResponse,
+  SupplierDrilldownResponse,
 } from "../types/api";
 import { apiClient } from "../api/client";
 
@@ -54,6 +56,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [loading, setLoading] = useState(false);
   const [period, setPeriod] = useState<PeriodPreset>("all");
   const [selectedEan, setSelectedEan] = useState<string | null>(null);
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(
+    null,
+  );
 
   const isDarkMode =
     window.matchMedia &&
@@ -115,6 +120,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (!data?.top_fornecedores.length) return 0;
     return Math.max(...data.top_fornecedores.map((f) => f.total));
   }, [data]);
+
+  const getDateParams = () => {
+    let start_date: string | undefined;
+    let end_date: string | undefined;
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+    if (period === "30d") {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      start_date = d.toISOString().split("T")[0];
+      end_date = today;
+    } else if (period === "month") {
+      const d = new Date(now.getFullYear(), now.getMonth(), 1);
+      start_date = d.toISOString().split("T")[0];
+      end_date = today;
+    } else if (period === "year") {
+      const d = new Date(now.getFullYear(), 0, 1);
+      start_date = d.toISOString().split("T")[0];
+      end_date = today;
+    }
+    return { start_date, end_date };
+  };
 
   if (!data && !loading) {
     return (
@@ -519,7 +546,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="space-y-6 flex-1">
                   {data &&
                     data.top_fornecedores.slice(0, 5).map((f, i) => (
-                      <div key={i} className="group cursor-default">
+                      <div
+                        key={i}
+                        className="group cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 -mx-2 px-2 py-1 rounded-xl transition-all"
+                        onClick={() => setSelectedSupplierId(f.fornecedor_id)}
+                      >
                         <div className="flex justify-between items-end mb-1.5 px-0.5">
                           <span
                             className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[180px] group-hover:text-emerald-500 transition-colors"
@@ -554,6 +585,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
                 <p className="mt-6 text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed border-t border-slate-100 dark:border-slate-800 pt-3">
                   Identifica onde você concentra a maior parte do seu orçamento.
+                  Clique para detalhes.
                 </p>
               </section>
             </div>
@@ -566,6 +598,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           ean={selectedEan}
           onClose={() => setSelectedEan(null)}
           isDarkMode={isDarkMode}
+        />
+      )}
+
+      {selectedSupplierId && (
+        <SupplierHistoryModal
+          supplierId={selectedSupplierId}
+          onClose={() => setSelectedSupplierId(null)}
+          dateParams={getDateParams()}
         />
       )}
     </div>
@@ -778,6 +818,199 @@ const ProductHistoryModal: React.FC<{
                     )}
                   </tbody>
                 </table>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SupplierHistoryModal: React.FC<{
+  supplierId: string;
+  onClose: () => void;
+  dateParams: { start_date?: string; end_date?: string };
+}> = ({ supplierId, onClose, dateParams }) => {
+  const [data, setData] = useState<SupplierDrilldownResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const query = new URLSearchParams();
+        if (dateParams.start_date)
+          query.append("start_date", dateParams.start_date);
+        if (dateParams.end_date) query.append("end_date", dateParams.end_date);
+        const response = await apiClient.get<SupplierDrilldownResponse>(
+          `/dashboard/fornecedores/${supplierId}/detalhes?${query.toString()}`,
+        );
+        setData(response);
+      } catch (err) {
+        console.error("Erro ao buscar detalhes do fornecedor:", err);
+        setError("Não foi possível carregar os detalhes do fornecedor.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [supplierId, dateParams]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="supplier-modal-title"
+    >
+      <div className="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-xl">
+              <Building2 size={20} />
+            </div>
+            <div>
+              <h3
+                id="supplier-modal-title"
+                className="font-bold text-slate-800 dark:text-white"
+              >
+                Detalhes do Fornecedor
+              </h3>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors text-slate-400"
+            aria-label="Fechar modal"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+          {loading ? (
+            <div className="space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-24 w-full rounded-2xl" />
+                ))}
+              </div>
+              <div className="space-y-4">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Skeleton key={i} className="h-12 w-full rounded-xl" />
+                ))}
+              </div>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center text-rose-500">
+              <AlertTriangle size={48} className="mb-4 opacity-20" />
+              <p className="font-medium">{error}</p>
+              <button
+                onClick={onClose}
+                className="mt-4 px-6 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl text-xs font-bold"
+              >
+                Voltar ao Dashboard
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-1">
+                <h4 className="text-xl font-bold text-slate-800 dark:text-white truncate">
+                  {data?.nome_exibicao}
+                </h4>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {data?.resumo.quantidade_notas} nota(s) no período
+                  selecionado.
+                </p>
+              </div>
+
+              {/* KPIs */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-4 rounded-2xl">
+                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">
+                    Gasto Total
+                  </p>
+                  <p className="text-lg font-bold text-slate-800 dark:text-white">
+                    R${" "}
+                    {Number(data?.resumo.total_gasto || 0).toLocaleString(
+                      "pt-BR",
+                      { minimumFractionDigits: 2 },
+                    )}
+                  </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-4 rounded-2xl">
+                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">
+                    Qtd de Notas
+                  </p>
+                  <p className="text-lg font-bold text-slate-800 dark:text-white">
+                    {data?.resumo.quantidade_notas}
+                  </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-4 rounded-2xl">
+                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">
+                    Ticket Médio
+                  </p>
+                  <p className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
+                    R${" "}
+                    {Number(data?.resumo.ticket_medio || 0).toLocaleString(
+                      "pt-BR",
+                      { minimumFractionDigits: 2 },
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div>
+                <h5 className="text-sm font-bold text-slate-800 dark:text-white mb-4">
+                  Últimas Notas
+                </h5>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-widest border-b border-slate-100 dark:border-slate-800">
+                        <th className="pb-3 px-2">Data Emissão</th>
+                        <th className="pb-3 px-2 text-center">Nº da Nota</th>
+                        <th className="pb-3 px-2 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
+                      {data?.notas.map((n, i) => (
+                        <tr
+                          key={i}
+                          className="text-xs hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
+                        >
+                          <td className="py-4 px-2 font-medium text-slate-600 dark:text-slate-400">
+                            {new Date(n.data_emissao).toLocaleDateString(
+                              "pt-BR",
+                            )}
+                          </td>
+                          <td className="py-4 px-2 text-center text-slate-500">
+                            {n.numero_nota}
+                          </td>
+                          <td className="py-4 px-2 text-right font-bold text-slate-700 dark:text-slate-200">
+                            R${" "}
+                            {n.valor_total.toLocaleString("pt-BR", {
+                              minimumFractionDigits: 2,
+                            })}
+                          </td>
+                        </tr>
+                      ))}
+                      {data?.notas.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={3}
+                            className="py-8 text-center text-slate-400 italic"
+                          >
+                            Nenhuma nota encontrada neste período.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </>
           )}

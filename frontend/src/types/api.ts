@@ -15,6 +15,7 @@ export interface TopProduto {
 }
 
 export interface TopFornecedor {
+  fornecedor_id: string;
   fornecedor: string;
   total: number;
 }
@@ -40,6 +41,27 @@ export interface ProductPriceHistoryResponse {
   ean: string;
   nome_produto: string;
   historico: HistoricoPrecoProduto[];
+}
+
+export interface ResumoFornecedor {
+  total_gasto: number;
+  quantidade_notas: number;
+  ticket_medio: number;
+  primeira_compra?: string | null;
+  ultima_compra?: string | null;
+}
+
+export interface NotaFornecedor {
+  data_emissao: string;
+  numero_nota: string;
+  valor_total: number;
+}
+
+export interface SupplierDrilldownResponse {
+  fornecedor_id: string;
+  nome_exibicao: string;
+  resumo: ResumoFornecedor;
+  notas: NotaFornecedor[];
 }
 
 export interface DashboardResumo {
