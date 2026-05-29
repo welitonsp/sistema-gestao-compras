@@ -15,10 +15,31 @@ class GastoCategoria(BaseModel):
     total: Decimal
 
 
+class EvolucaoMensal(BaseModel):
+    """Monthly spend evolution."""
+    mes: str
+    total: Decimal
+
+
+class TopProduto(BaseModel):
+    """Top product by spend."""
+    produto: str
+    total: Decimal
+
+
+class TopFornecedor(BaseModel):
+    """Top supplier by spend."""
+    fornecedor: str
+    total: Decimal
+
+
 class DashboardResumoResponse(BaseModel):
     """Consolidated summary for the dashboard."""
     total_geral: Decimal
     por_categoria: List[GastoCategoria]
+    evolucao_mensal: List[EvolucaoMensal]
+    top_produtos: List[TopProduto]
+    top_fornecedores: List[TopFornecedor]
 
 
 class AlertaPreco(BaseModel):
