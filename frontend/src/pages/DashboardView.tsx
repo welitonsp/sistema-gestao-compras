@@ -858,6 +858,11 @@ const SupplierHistoryModal: React.FC<{
     fetchData();
   }, [supplierId, dateParams]);
 
+  const maxProductSpend = useMemo(() => {
+    if (!data?.top_produtos.length) return 0;
+    return Math.max(...data.top_produtos.map((p) => p.total_gasto));
+  }, [data]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
@@ -865,7 +870,7 @@ const SupplierHistoryModal: React.FC<{
       aria-modal="true"
       aria-labelledby="supplier-modal-title"
     >
-      <div className="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-slate-900 w-full max-w-5xl max-h-[90vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
         <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-xl">
@@ -897,10 +902,17 @@ const SupplierHistoryModal: React.FC<{
                   <Skeleton key={i} className="h-24 w-full rounded-2xl" />
                 ))}
               </div>
-              <div className="space-y-4">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <Skeleton key={i} className="h-12 w-full rounded-xl" />
-                ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Skeleton key={i} className="h-12 w-full rounded-xl" />
+                  ))}
+                </div>
+                <div className="space-y-4">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Skeleton key={i} className="h-12 w-full rounded-xl" />
+                  ))}
+                </div>
               </div>
             </div>
           ) : error ? (
@@ -962,54 +974,106 @@ const SupplierHistoryModal: React.FC<{
                 </div>
               </div>
 
-              {/* Table */}
-              <div>
-                <h5 className="text-sm font-bold text-slate-800 dark:text-white mb-4">
-                  Últimas Notas
-                </h5>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-widest border-b border-slate-100 dark:border-slate-800">
-                        <th className="pb-3 px-2">Data Emissão</th>
-                        <th className="pb-3 px-2 text-center">Nº da Nota</th>
-                        <th className="pb-3 px-2 text-right">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
-                      {data?.notas.map((n, i) => (
-                        <tr
-                          key={i}
-                          className="text-xs hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
-                        >
-                          <td className="py-4 px-2 font-medium text-slate-600 dark:text-slate-400">
-                            {new Date(n.data_emissao).toLocaleDateString(
-                              "pt-BR",
-                            )}
-                          </td>
-                          <td className="py-4 px-2 text-center text-slate-500">
-                            {n.numero_nota}
-                          </td>
-                          <td className="py-4 px-2 text-right font-bold text-slate-700 dark:text-slate-200">
-                            R${" "}
-                            {n.valor_total.toLocaleString("pt-BR", {
-                              minimumFractionDigits: 2,
-                            })}
-                          </td>
-                        </tr>
-                      ))}
-                      {data?.notas.length === 0 && (
-                        <tr>
-                          <td
-                            colSpan={3}
-                            className="py-8 text-center text-slate-400 italic"
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Top Products in Supplier */}
+                <section className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+                  <h4 className="font-bold text-slate-800 dark:text-white text-sm mb-6 flex items-center justify-between">
+                    Top Produtos Comprados Aqui
+                    <Package size={14} className="text-slate-400" />
+                  </h4>
+                  <div className="space-y-6 flex-1">
+                    {data?.top_produtos.map((p, i) => (
+                      <div key={i} className="group cursor-default">
+                        <div className="flex justify-between items-end mb-1.5 px-0.5">
+                          <span
+                            className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[200px]"
+                            title={p.nome_produto}
                           >
-                            Nenhuma nota encontrada neste período.
-                          </td>
+                            {p.nome_produto}
+                          </span>
+                          <div className="text-right">
+                            <span className="font-bold text-slate-800 dark:text-white text-[11px] block">
+                              R${" "}
+                              {p.total_gasto.toLocaleString("pt-BR", {
+                                minimumFractionDigits: 2,
+                              })}
+                            </span>
+                            <span className="text-[9px] text-slate-400 block">
+                              {p.quantidade_total} un · R${" "}
+                              {p.preco_medio.toLocaleString("pt-BR", {
+                                minimumFractionDigits: 2,
+                              })}
+                              /un
+                            </span>
+                          </div>
+                        </div>
+                        <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out"
+                            style={{
+                              width: `${(p.total_gasto / maxProductSpend) * 100}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {data?.top_produtos.length === 0 && (
+                      <div className="h-full flex items-center justify-center text-slate-400 italic">
+                        <p className="text-xs">Nenhum produto encontrado.</p>
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                {/* Table */}
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <h5 className="text-sm font-bold text-slate-800 dark:text-white mb-6">
+                    Últimas Notas
+                  </h5>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-widest border-b border-slate-100 dark:border-slate-800">
+                          <th className="pb-3 px-2">Data</th>
+                          <th className="pb-3 px-2 text-center">Nº Nota</th>
+                          <th className="pb-3 px-2 text-right">Total</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
+                        {data?.notas.map((n, i) => (
+                          <tr
+                            key={i}
+                            className="text-xs hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
+                          >
+                            <td className="py-4 px-2 font-medium text-slate-600 dark:text-slate-400">
+                              {new Date(n.data_emissao).toLocaleDateString(
+                                "pt-BR",
+                              )}
+                            </td>
+                            <td className="py-4 px-2 text-center text-slate-500">
+                              {n.numero_nota}
+                            </td>
+                            <td className="py-4 px-2 text-right font-bold text-slate-700 dark:text-slate-200">
+                              R${" "}
+                              {n.valor_total.toLocaleString("pt-BR", {
+                                minimumFractionDigits: 2,
+                              })}
+                            </td>
+                          </tr>
+                        ))}
+                        {data?.notas.length === 0 && (
+                          <tr>
+                            <td
+                              colSpan={3}
+                              className="py-8 text-center text-slate-400 italic"
+                            >
+                              Nenhuma nota encontrada.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </>

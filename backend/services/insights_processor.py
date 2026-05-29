@@ -777,6 +777,55 @@ class PriceInsightsService:
             for row in notas_res.fetchall()
         ]
 
+        # 4. Top Produtos
+        stmt_top_prod = (
+            select(
+                Produto.ean,
+                Produto.nome_limpo,
+                func.sum(ItemNotaFiscal.quantidade).label("quantidade_total"),
+                func.sum(ItemNotaFiscal.valor_total).label("total_gasto"),
+                (
+                    func.sum(ItemNotaFiscal.valor_total)
+                    / func.nullif(func.sum(ItemNotaFiscal.quantidade), 0)
+                ).label("preco_medio"),
+                func.count(func.distinct(ItemNotaFiscal.nota_fiscal_id)).label(
+                    "quantidade_notas"
+                ),
+            )
+            .join(ItemNotaFiscal, Produto.ean == ItemNotaFiscal.ean)
+            .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+            .where(NotaFiscal.fornecedor_id == fornecedor_id)
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
+        )
+
+        if department_id:
+            stmt_top_prod = stmt_top_prod.where(
+                NotaFiscal.department_id == department_id
+            )
+        if start_date:
+            stmt_top_prod = stmt_top_prod.where(NotaFiscal.data_emissao >= start_date)
+        if end_date:
+            stmt_top_prod = stmt_top_prod.where(NotaFiscal.data_emissao <= end_date)
+
+        stmt_top_prod = (
+            stmt_top_prod.group_by(Produto.ean, Produto.nome_limpo)
+            .order_by(desc("total_gasto"))
+            .limit(5)
+        )
+        top_prod_res = await self.db.execute(stmt_top_prod)
+
+        top_produtos = [
+            {
+                "ean": row.ean,
+                "nome_produto": row.nome_limpo,
+                "quantidade_total": float(row.quantidade_total),
+                "total_gasto": float(row.total_gasto),
+                "preco_medio": float(row.preco_medio or 0),
+                "quantidade_notas": row.quantidade_notas,
+            }
+            for row in top_prod_res.fetchall()
+        ]
+
         return {
             "fornecedor_id": str(fornecedor_id),
             "nome_exibicao": nome_exibicao,
@@ -788,6 +837,7 @@ class PriceInsightsService:
                 "ultima_compra": ultima_compra,
             },
             "notas": notas,
+            "top_produtos": top_produtos,
         }
 
     async def obter_historico_preco_produto(

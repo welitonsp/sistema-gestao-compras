@@ -77,12 +77,23 @@ class NotaFornecedor(BaseModel):
     valor_total: Decimal
 
 
+class TopProdutoFornecedor(BaseModel):
+    """Top product in a specific supplier's drill-down."""
+    ean: str
+    nome_produto: str
+    quantidade_total: Decimal
+    total_gasto: Decimal
+    preco_medio: Decimal
+    quantidade_notas: int
+
+
 class SupplierDrilldownResponse(BaseModel):
     """Detailed drill-down for a supplier."""
     fornecedor_id: str
     nome_exibicao: str
     resumo: ResumoFornecedor
     notas: List[NotaFornecedor]
+    top_produtos: List[TopProdutoFornecedor] = []
 
 
 class DashboardResumoResponse(BaseModel):

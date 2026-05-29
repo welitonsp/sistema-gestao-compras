@@ -57,11 +57,21 @@ export interface NotaFornecedor {
   valor_total: number;
 }
 
+export interface TopProdutoFornecedor {
+  ean: string;
+  nome_produto: string;
+  quantidade_total: number;
+  total_gasto: number;
+  preco_medio: number;
+  quantidade_notas: number;
+}
+
 export interface SupplierDrilldownResponse {
   fornecedor_id: string;
   nome_exibicao: string;
   resumo: ResumoFornecedor;
   notas: NotaFornecedor[];
+  top_produtos: TopProdutoFornecedor[];
 }
 
 export interface DashboardResumo {
