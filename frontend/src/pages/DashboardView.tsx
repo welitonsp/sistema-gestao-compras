@@ -659,7 +659,7 @@ const ProductHistoryModal: React.FC<{
         <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-xl">
-              <History size={20} />
+              <History size={20} aria-hidden="true" />
             </div>
             <div>
               <h3
@@ -874,7 +874,7 @@ const SupplierHistoryModal: React.FC<{
         <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-xl">
-              <Building2 size={20} />
+              <Building2 size={20} aria-hidden="true" />
             </div>
             <div>
               <h3
@@ -887,7 +887,7 @@ const SupplierHistoryModal: React.FC<{
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors text-slate-400"
+            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             aria-label="Fechar modal"
           >
             <X size={20} />
@@ -917,7 +917,7 @@ const SupplierHistoryModal: React.FC<{
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-12 text-center text-rose-500">
-              <AlertTriangle size={48} className="mb-4 opacity-20" />
+              <AlertTriangle size={48} className="mb-4 opacity-20" aria-hidden="true" />
               <p className="font-medium">{error}</p>
               <button
                 onClick={onClose}
@@ -929,7 +929,10 @@ const SupplierHistoryModal: React.FC<{
           ) : (
             <>
               <div className="flex flex-col gap-1">
-                <h4 className="text-xl font-bold text-slate-800 dark:text-white truncate">
+                <h4
+                  className="text-xl font-bold text-slate-800 dark:text-white truncate"
+                  title={data?.nome_exibicao}
+                >
                   {data?.nome_exibicao}
                 </h4>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -987,6 +990,7 @@ const SupplierHistoryModal: React.FC<{
                 >
                   <ShieldAlert
                     size={18}
+                    aria-hidden="true"
                     className={`mt-0.5 shrink-0 ${
                       data.concentracao.nivel === "danger"
                         ? "text-rose-500"
@@ -1031,14 +1035,14 @@ const SupplierHistoryModal: React.FC<{
                 <section className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
                   <h4 className="font-bold text-slate-800 dark:text-white text-sm mb-6 flex items-center justify-between">
                     Top Produtos Comprados Aqui
-                    <Package size={14} className="text-slate-400" />
+                    <Package size={14} className="text-slate-400" aria-hidden="true" />
                   </h4>
                   <div className="space-y-6 flex-1">
                     {data?.top_produtos.map((p, i) => (
                       <div key={i} className="group cursor-default">
                         <div className="flex justify-between items-end mb-1.5 px-0.5">
                           <span
-                            className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[200px]"
+                            className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[150px] md:max-w-[250px]"
                             title={p.nome_produto}
                           >
                             {p.nome_produto}
@@ -1193,12 +1197,12 @@ const AlertsSection: React.FC<{ alerts: AlertaPreco[] }> = ({ alerts }) => (
     className="bg-slate-900 dark:bg-slate-950 rounded-3xl p-6 md:p-8 shadow-xl shadow-slate-200 dark:shadow-none border dark:border-slate-800 transition-colors"
     aria-labelledby="alerts-title"
   >
-    <div className="flex items-center gap-2 mb-6">
-      <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-      <h3 id="alerts-title" className="text-white font-bold">
-        Alertas de Preço
-      </h3>
-    </div>
+      <div className="flex items-center gap-2 mb-6">
+        <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" aria-hidden="true" />
+        <h3 id="alerts-title" className="text-white font-bold">
+          Alertas de Preço
+        </h3>
+      </div>
     <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
       {alerts.length === 0 ? (
         <div className="bg-slate-800/50 border border-slate-800 p-6 rounded-2xl text-center">
