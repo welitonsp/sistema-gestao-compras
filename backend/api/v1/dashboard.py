@@ -120,14 +120,34 @@ async def obter_resumo_dashboard(
         
     total_geral = await db.scalar(stmt_total) or 0
     
-    # Por Categoria (O service precisa ser atualizado para aceitar o dept_id)
+    # Por Categoria
     resumo_categorias = await service.obter_resumo_gastos_por_categoria(
+        department_id=user.department_id if user.role != UserRole.ADMIN else None
+    )
+
+    # Evolução Mensal
+    evolucao_mensal = await service.obter_evolucao_gastos_mensal(
+        department_id=user.department_id if user.role != UserRole.ADMIN else None
+    )
+
+    # Top Produtos
+    top_produtos = await service.obter_top_produtos_gasto(
+        limit=10,
+        department_id=user.department_id if user.role != UserRole.ADMIN else None
+    )
+
+    # Top Fornecedores
+    top_fornecedores = await service.obter_top_fornecedores_gasto(
+        limit=10,
         department_id=user.department_id if user.role != UserRole.ADMIN else None
     )
     
     return DashboardResumoResponse(
         total_geral=total_geral,
-        por_categoria=resumo_categorias
+        por_categoria=resumo_categorias,
+        evolucao_mensal=evolucao_mensal,
+        top_produtos=top_produtos,
+        top_fornecedores=top_fornecedores
     )
 
 @router.get(

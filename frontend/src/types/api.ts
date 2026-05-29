@@ -3,9 +3,27 @@ export interface GastoCategoria {
   total: number;
 }
 
+export interface EvolucaoMensal {
+  mes: string;
+  total: number;
+}
+
+export interface TopProduto {
+  produto: string;
+  total: number;
+}
+
+export interface TopFornecedor {
+  fornecedor: string;
+  total: number;
+}
+
 export interface DashboardResumo {
   total_geral: number;
   por_categoria: GastoCategoria[];
+  evolucao_mensal: EvolucaoMensal[];
+  top_produtos: TopProduto[];
+  top_fornecedores: TopFornecedor[];
 }
 
 export interface AlertaPreco {
