@@ -106,6 +106,8 @@ async def test_supplier_drilldown_endpoint():
         assert resumo["quantidade_notas"] == 2
         assert resumo["total_gasto"] == 66.0
         assert resumo["ticket_medio"] == 33.0
+        assert resumo["primeira_compra"] == yesterday.isoformat()
+        assert resumo["ultima_compra"] == today.isoformat()
 
         # Verificar Top Produtos
         top_produtos = res["top_produtos"]
@@ -127,8 +129,14 @@ async def test_supplier_drilldown_endpoint():
 
         notas = res["notas"]
         assert len(notas) == 2
+        # Order should be descending by date
+        assert notas[0]["data_emissao"] == today.isoformat()
         assert notas[0]["numero_nota"] == "102"
+        assert notas[0]["valor_total"] == 46.0
+
+        assert notas[1]["data_emissao"] == yesterday.isoformat()
         assert notas[1]["numero_nota"] == "101"
+        assert notas[1]["valor_total"] == 20.0
 
 
 @pytest.mark.asyncio
@@ -145,6 +153,7 @@ async def test_supplier_drilldown_not_found():
 async def test_supplier_drilldown_filters():
     async with SessionLocal() as db_session:
         # Cleanup
+        await db_session.execute(delete(HistoricoPreco))
         await db_session.execute(delete(ItemNotaFiscal))
         await db_session.execute(delete(NotaFiscal))
         await db_session.execute(delete(Fornecedor))
