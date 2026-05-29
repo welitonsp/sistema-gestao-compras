@@ -160,12 +160,18 @@ async def obter_resumo_dashboard(
         limit=10, department_id=dept_id, start_date=start_date, end_date=end_date
     )
 
+    # Alertas de Risco
+    alertas_risco = await service.obter_alertas_risco_basicos(
+        department_id=dept_id, start_date=start_date, end_date=end_date
+    )
+
     return DashboardResumoResponse(
         total_geral=total_geral,
         por_categoria=resumo_categorias,
         evolucao_mensal=evolucao_mensal,
         top_produtos=top_produtos,
         top_fornecedores=top_fornecedores,
+        alertas_risco=alertas_risco,
     )
 
 

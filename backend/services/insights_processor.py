@@ -572,3 +572,112 @@ class PriceInsightsService:
             {"fornecedor": row.razao_social, "total": float(row.total)}
             for row in result.fetchall()
         ]
+
+    async def obter_alertas_risco_basicos(
+        self,
+        department_id: UUID | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> List[Dict[str, Any]]:
+        """Retorna alertas de risco básicos (Concentração, Saúde do Catálogo, Mismatch)."""
+        alertas = []
+
+        # 1. Concentração de fornecedor
+        stmt_total = select(func.sum(NotaFiscal.valor_total)).where(
+            NotaFiscal.status == ACTIVE_INVOICE_STATUS
+        )
+        if department_id:
+            stmt_total = stmt_total.where(NotaFiscal.department_id == department_id)
+        if start_date:
+            stmt_total = stmt_total.where(NotaFiscal.data_emissao >= start_date)
+        if end_date:
+            stmt_total = stmt_total.where(NotaFiscal.data_emissao <= end_date)
+
+        total_gasto = await self.db.scalar(stmt_total) or Decimal("0")
+
+        if total_gasto > 0:
+            top_forn = await self.obter_top_fornecedores_gasto(
+                limit=1,
+                department_id=department_id,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            if top_forn:
+                maior_forn = top_forn[0]
+                percentual = (Decimal(str(maior_forn["total"])) / total_gasto) * 100
+                if percentual >= 70:
+                    alertas.append(
+                        {
+                            "tipo": "concentration",
+                            "severidade": "warning",
+                            "titulo": "Alta Concentração",
+                            "mensagem": f"Atenção: {percentual:.1f}% dos seus gastos estão concentrados em {maior_forn['fornecedor']}. Considere comparar preços em outros locais.",
+                            "valor": float(percentual),
+                        }
+                    )
+
+        # 2. Saúde do catálogo: produtos sem categoria
+        # Nota: Filtro de período não se aplica facilmente a 'produtos' sem join com notas,
+        # mas faremos global ou baseado nos produtos comprados no período para ser mais preciso.
+        stmt_sem_cat = select(func.count(Produto.ean)).where(
+            or_(
+                Produto.categoria == None,
+                Produto.categoria == "",
+                Produto.categoria == "Outros",
+            )
+        )
+        # Opcional: filtrar apenas produtos que aparecem em notas do período
+        if start_date or end_date or department_id:
+            subq_prods = (
+                select(ItemNotaFiscal.ean)
+                .join(NotaFiscal)
+                .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
+            )
+            if department_id:
+                subq_prods = subq_prods.where(NotaFiscal.department_id == department_id)
+            if start_date:
+                subq_prods = subq_prods.where(NotaFiscal.data_emissao >= start_date)
+            if end_date:
+                subq_prods = subq_prods.where(NotaFiscal.data_emissao <= end_date)
+            stmt_sem_cat = stmt_sem_cat.where(Produto.ean.in_(subq_prods))
+
+        count_sem_cat = await self.db.scalar(stmt_sem_cat) or 0
+        if count_sem_cat > 0:
+            alertas.append(
+                {
+                    "tipo": "catalog_health",
+                    "severidade": "info",
+                    "titulo": "Saúde do Catálogo",
+                    "mensagem": f"Você possui {count_sem_cat} produtos sem categoria. Classifique-os para melhorar seus gráficos.",
+                    "valor": float(count_sem_cat),
+                }
+            )
+
+        # 3. Notas com divergência de total
+        stmt_mismatch = (
+            select(func.count(NotaFiscal.id))
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
+            .where(NotaFiscal.extraction_total_mismatch == True)
+        )
+        if department_id:
+            stmt_mismatch = stmt_mismatch.where(
+                NotaFiscal.department_id == department_id
+            )
+        if start_date:
+            stmt_mismatch = stmt_mismatch.where(NotaFiscal.data_emissao >= start_date)
+        if end_date:
+            stmt_mismatch = stmt_mismatch.where(NotaFiscal.data_emissao <= end_date)
+
+        count_mismatch = await self.db.scalar(stmt_mismatch) or 0
+        if count_mismatch > 0:
+            alertas.append(
+                {
+                    "tipo": "mismatch",
+                    "severidade": "danger",
+                    "titulo": "Divergência de Dados",
+                    "mensagem": f"Há {count_mismatch} nota(s) com divergência de total. Revise antes de confiar nos totais.",
+                    "valor": float(count_mismatch),
+                }
+            )
+
+        return alertas[:3]  # Limita a 3 alertas
