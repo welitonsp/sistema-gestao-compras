@@ -9,6 +9,7 @@ export interface EvolucaoMensal {
 }
 
 export interface TopProduto {
+  ean: string;
   produto: string;
   total: number;
 }
@@ -24,6 +25,21 @@ export interface AlertaRisco {
   titulo: string;
   mensagem: string;
   valor?: number;
+}
+
+export interface HistoricoPrecoProduto {
+  data_compra: string;
+  fornecedor: string;
+  preco_unitario: number;
+  quantidade: number;
+  valor_total: number;
+  numero_nota?: string;
+}
+
+export interface ProductPriceHistoryResponse {
+  ean: string;
+  nome_produto: string;
+  historico: HistoricoPrecoProduto[];
 }
 
 export interface DashboardResumo {
@@ -62,8 +78,8 @@ export interface NotaFiscalImportada {
   numero_nota: string;
   data_emissao: string;
   valor_total: number;
-  extraction_quality_status?: 'ok' | 'warning' | 'failed' | string | null;
-  extraction_parser_source?: 'deterministic' | 'ai_fallback' | string | null;
+  extraction_quality_status?: "ok" | "warning" | "failed" | string | null;
+  extraction_parser_source?: "deterministic" | "ai_fallback" | string | null;
   extraction_item_count?: number | null;
   extraction_missing_ean_count?: number | null;
   extraction_empty_description_count?: number | null;
@@ -100,7 +116,7 @@ export interface ImportacaoLoteChavesRequest {
   chaves_acesso: string[];
 }
 
-export type ImportacaoLoteChaveStatus = 'success' | 'duplicate' | 'failed';
+export type ImportacaoLoteChaveStatus = "success" | "duplicate" | "failed";
 
 export interface ImportacaoLoteChaveResultado {
   chave_acesso: string;
@@ -138,7 +154,7 @@ export interface DeleteImportacaoRequest {
 export interface DeleteImportacaoResponse {
   id: string;
   numero_nota: string;
-  status: 'deleted';
+  status: "deleted";
   itens_deletados: number;
   historico_precos_deletados: number;
   produtos_orfaos_deletados: number;
@@ -153,11 +169,11 @@ export interface ImportacaoHistoricoItem {
   fornecedor: string;
   data_emissao: string;
   valor_total: number | string;
-  status: 'active' | 'archived' | string;
+  status: "active" | "archived" | string;
   created_at: string;
   imported_at: string;
-  extraction_quality_status?: 'ok' | 'warning' | 'failed' | string | null;
-  extraction_parser_source?: 'deterministic' | 'ai_fallback' | string | null;
+  extraction_quality_status?: "ok" | "warning" | "failed" | string | null;
+  extraction_parser_source?: "deterministic" | "ai_fallback" | string | null;
   extraction_item_count?: number | null;
   extraction_missing_ean_count?: number | null;
   extraction_total_mismatch?: boolean | null;

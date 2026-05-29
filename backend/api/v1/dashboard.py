@@ -9,7 +9,11 @@ from fastapi.responses import StreamingResponse
 import io
 import pandas as pd
 from backend.api.dependencies import DbSession, CurrentUser
-from backend.schemas.dashboard import DashboardResumoResponse, AlertasPrecoResponse
+from backend.schemas.dashboard import (
+    DashboardResumoResponse,
+    AlertasPrecoResponse,
+    ProductPriceHistoryResponse,
+)
 from backend.services.insights_processor import PriceInsightsService
 from sqlalchemy import select, func, desc
 from backend.api.dependencies import DbSession, CurrentUser, RoleChecker
@@ -173,6 +177,23 @@ async def obter_resumo_dashboard(
         top_fornecedores=top_fornecedores,
         alertas_risco=alertas_risco,
     )
+
+
+@router.get(
+    "/produtos/{ean}/historico",
+    response_model=ProductPriceHistoryResponse,
+    summary="Obter histórico de preço de um produto",
+)
+async def obter_historico_produto(
+    ean: str,
+    db: DbSession,
+    user: CurrentUser,
+) -> ProductPriceHistoryResponse:
+    """Retorna a série histórica de compras de um produto (EAN)."""
+    service = PriceInsightsService(db)
+    dept_id = user.department_id if user.role != UserRole.ADMIN else None
+    res = await service.obter_historico_preco_produto(ean, department_id=dept_id)
+    return ProductPriceHistoryResponse(**res)
 
 
 @router.get(
