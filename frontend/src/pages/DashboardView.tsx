@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   BarChart3,
   TrendingUp,
@@ -8,6 +8,8 @@ import {
   Activity,
   Calendar,
   Info,
+  Filter,
+  ChevronDown,
 } from "lucide-react";
 import {
   BarChart,
@@ -22,6 +24,7 @@ import {
   Line,
 } from "recharts";
 import { DashboardResumo, AlertaPreco } from "../types/api";
+import { apiClient } from "../api/client";
 
 import { Skeleton } from "../components/Skeleton";
 
@@ -31,14 +34,67 @@ interface DashboardViewProps {
   produtosCount: number;
 }
 
+type PeriodPreset = "30d" | "month" | "year" | "all";
+
 export const DashboardView: React.FC<DashboardViewProps> = ({
-  data,
+  data: initialData,
   alerts,
   produtosCount,
 }) => {
+  const [data, setData] = useState<DashboardResumo | null>(initialData);
+  const [loading, setLoading] = useState(false);
+  const [period, setPeriod] = useState<PeriodPreset>("all");
+
   const isDarkMode =
     window.matchMedia &&
     window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+  const fetchFilteredData = async (preset: PeriodPreset) => {
+    setLoading(true);
+    try {
+      let start_date: string | undefined;
+      let end_date: string | undefined;
+
+      const now = new Date();
+      const today = now.toISOString().split("T")[0];
+
+      if (preset === "30d") {
+        const d = new Date();
+        d.setDate(d.getDate() - 30);
+        start_date = d.toISOString().split("T")[0];
+        end_date = today;
+      } else if (preset === "month") {
+        const d = new Date(now.getFullYear(), now.getMonth(), 1);
+        start_date = d.toISOString().split("T")[0];
+        end_date = today;
+      } else if (preset === "year") {
+        const d = new Date(now.getFullYear(), 0, 1);
+        start_date = d.toISOString().split("T")[0];
+        end_date = today;
+      }
+
+      const query = new URLSearchParams();
+      if (start_date) query.append("start_date", start_date);
+      if (end_date) query.append("end_date", end_date);
+
+      const response = await apiClient.get<DashboardResumo>(
+        `/dashboard/resumo?${query.toString()}`,
+      );
+      setData(response);
+    } catch (error) {
+      console.error("Erro ao carregar dados filtrados:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (period !== "all") {
+      fetchFilteredData(period);
+    } else {
+      setData(initialData);
+    }
+  }, [period, initialData]);
 
   const maxProductSpend = useMemo(() => {
     if (!data?.top_produtos.length) return 0;
@@ -50,22 +106,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return Math.max(...data.top_fornecedores.map((f) => f.total));
   }, [data]);
 
-  if (!data) {
+  if (!data && !loading) {
     return (
-      <div className="space-y-8">
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-8 w-64" />
-          <Skeleton className="h-4 w-96" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-32 rounded-2xl" />
-          ))}
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <Skeleton className="lg:col-span-2 h-[450px] rounded-3xl" />
-          <Skeleton className="h-[450px] rounded-3xl" />
-        </div>
+      <div className="flex flex-col items-center justify-center h-64 text-slate-500">
+        <Info size={48} className="mb-4 opacity-20" />
+        <p>Nenhum dado disponível.</p>
       </div>
     );
   }
@@ -73,14 +118,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const stats = [
     {
       label: "Gasto Total",
-      value: `R$ ${Number(data.total_geral || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+      value: `R$ ${Number(data?.total_geral || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
       icon: BarChart3,
       color: "blue",
       trend: "Total acumulado",
     },
     {
       label: "Categorias",
-      value: data.por_categoria?.length || 0,
+      value: data?.por_categoria?.length || 0,
       icon: Calendar,
       color: "indigo",
       trend: "Agrupamento",
@@ -101,327 +146,402 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     },
   ];
 
+  const presets = [
+    { id: "all", label: "Tudo" },
+    { id: "year", label: "Ano Atual" },
+    { id: "month", label: "Mês Atual" },
+    { id: "30d", label: "Últimos 30 dias" },
+  ];
+
   return (
     <div className="space-y-8 pb-12">
-      {/* Welcome Section */}
-      <div className="flex flex-col gap-1">
-        <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">
-          Seu Painel de Compras
-        </h2>
-        <p className="text-slate-500 dark:text-slate-400 text-sm">
-          Acompanhe seus hábitos de consumo e economias em tempo real.
-        </p>
+      {/* Welcome & Filter Section */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">
+            Seu Painel de Compras
+          </h2>
+          <p className="text-slate-500 dark:text-slate-400 text-sm">
+            Acompanhe seus hábitos de consumo e economias em tempo real.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="px-3 text-slate-400 dark:text-slate-500">
+            <Filter size={16} />
+          </div>
+          {presets.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setPeriod(p.id as PeriodPreset)}
+              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                period === p.id
+                  ? "bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
+                  : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, i) => (
-          <div
-            key={i}
-            className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all"
-          >
-            <div className="flex justify-between items-start mb-4">
+      {loading ? (
+        <div className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-32 rounded-2xl" />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <Skeleton className="lg:col-span-2 h-[450px] rounded-3xl" />
+            <Skeleton className="h-[450px] rounded-3xl" />
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {stats.map((stat, i) => (
               <div
-                className={`p-3 rounded-xl bg-${stat.color}-50 dark:bg-${stat.color}-900/20 text-${stat.color}-600 dark:text-${stat.color}-400`}
+                key={i}
+                className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all"
               >
-                <stat.icon size={20} />
+                <div className="flex justify-between items-start mb-4">
+                  <div
+                    className={`p-3 rounded-xl bg-${stat.color}-50 dark:bg-${stat.color}-900/20 text-${stat.color}-600 dark:text-${stat.color}-400`}
+                  >
+                    <stat.icon size={20} />
+                  </div>
+                  <span
+                    className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400`}
+                  >
+                    {stat.trend}
+                  </span>
+                </div>
+                <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">
+                  {stat.label}
+                </p>
+                <h3 className="text-2xl font-bold text-slate-800 dark:text-white">
+                  {stat.value}
+                </h3>
               </div>
-              <span
-                className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400`}
-              >
-                {stat.trend}
-              </span>
-            </div>
-            <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">
-              {stat.label}
-            </p>
-            <h3 className="text-2xl font-bold text-slate-800 dark:text-white">
-              {stat.value}
-            </h3>
+            ))}
           </div>
-        ))}
-      </div>
 
-      {/* Alerts Sidebar - Mobile Only (Top of charts) */}
-      <div className="lg:hidden">
-        <AlertsSection alerts={alerts} />
-      </div>
+          {/* Alerts Sidebar - Mobile Only (Top of charts) */}
+          <div className="lg:hidden">
+            <AlertsSection alerts={alerts} />
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Chart */}
-        <section
-          className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors"
-          aria-labelledby="chart-category-title"
-        >
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h3
-                id="chart-category-title"
-                className="font-bold text-slate-800 dark:text-white text-lg"
-              >
-                Gastos por Categoria
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Onde você mais investiu seu dinheiro
-              </p>
-            </div>
-            <TrendingUp
-              size={20}
-              className="text-slate-400 dark:text-slate-600"
-            />
-          </div>
-          <div
-            className="h-[300px] md:h-[350px] w-full"
-            aria-label="Gráfico de barras mostrando gastos por categoria"
-          >
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.por_categoria}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                  stroke={isDarkMode ? "#1e293b" : "#f1f5f9"}
-                />
-                <XAxis
-                  dataKey="categoria"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{
-                    fill: isDarkMode ? "#64748b" : "#94a3b8",
-                    fontSize: 10,
-                    fontWeight: 600,
-                  }}
-                  dy={10}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{
-                    fill: isDarkMode ? "#64748b" : "#94a3b8",
-                    fontSize: 10,
-                  }}
-                />
-                <Tooltip
-                  cursor={{ fill: isDarkMode ? "#1e293b" : "#f8fafc" }}
-                  contentStyle={{
-                    backgroundColor: isDarkMode ? "#0f172a" : "#ffffff",
-                    borderRadius: "12px",
-                    border: "none",
-                    boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
-                  }}
-                  itemStyle={{ color: isDarkMode ? "#f8fafc" : "#0f172a" }}
-                />
-                <Bar dataKey="total" radius={[6, 6, 0, 0]} barSize={40}>
-                  {data.por_categoria.map((_, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={
-                        ["#7c3aed", "#6366f1", "#8b5cf6", "#a855f7", "#ec4899"][
-                          index % 5
-                        ]
-                      }
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-4 flex items-start gap-2 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
-            <Info size={14} className="mt-0.5 shrink-0 text-indigo-500" />
-            <p>
-              Este gráfico agrupa seus gastos pelas categorias atribuídas aos
-              produtos. Categoria "Outros" inclui itens ainda não classificados.
-            </p>
-          </div>
-        </section>
-
-        {/* Alerts Sidebar - Desktop Only */}
-        <div className="hidden lg:block">
-          <AlertsSection alerts={alerts} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Evolution Chart */}
-        <section
-          className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors"
-          aria-labelledby="chart-evolution-title"
-        >
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h3
-                id="chart-evolution-title"
-                className="font-bold text-slate-800 dark:text-white text-lg"
-              >
-                Evolução Mensal de Gastos
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Total investido mês a mês
-              </p>
-            </div>
-            <Activity
-              size={20}
-              className="text-slate-400 dark:text-slate-600"
-            />
-          </div>
-          <div
-            className="h-[250px] md:h-[300px] w-full"
-            aria-label="Gráfico de linha mostrando a evolução mensal de gastos"
-          >
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data.evolucao_mensal}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                  stroke={isDarkMode ? "#1e293b" : "#f1f5f9"}
-                />
-                <XAxis
-                  dataKey="mes"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{
-                    fill: isDarkMode ? "#64748b" : "#94a3b8",
-                    fontSize: 10,
-                    fontWeight: 600,
-                  }}
-                  dy={10}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{
-                    fill: isDarkMode ? "#64748b" : "#94a3b8",
-                    fontSize: 10,
-                  }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: isDarkMode ? "#0f172a" : "#ffffff",
-                    borderRadius: "12px",
-                    border: "none",
-                    boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
-                  }}
-                  itemStyle={{ color: isDarkMode ? "#f8fafc" : "#0f172a" }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="total"
-                  stroke="#6366f1"
-                  strokeWidth={3}
-                  dot={{
-                    r: 4,
-                    fill: "#6366f1",
-                    strokeWidth: 2,
-                    stroke: isDarkMode ? "#0f172a" : "#fff",
-                  }}
-                  activeDot={{ r: 6, strokeWidth: 0 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-4 flex items-start gap-2 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
-            <Info size={14} className="mt-0.5 shrink-0 text-indigo-500" />
-            <p>
-              Valores baseados na data de emissão das notas fiscais. Ideal para
-              identificar meses com maior concentração de compras.
-            </p>
-          </div>
-        </section>
-
-        {/* Top Lists */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Top Products */}
-          <section className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
-            <h4 className="font-bold text-slate-800 dark:text-white text-sm mb-6 flex items-center justify-between">
-              Top 5 Produtos (Gasto)
-              <Package size={14} className="text-slate-400" />
-            </h4>
-            <div className="space-y-6 flex-1">
-              {data.top_produtos.slice(0, 5).map((p, i) => (
-                <div key={i} className="group cursor-default">
-                  <div className="flex justify-between items-end mb-1.5 px-0.5">
-                    <span
-                      className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[180px] group-hover:text-indigo-500 transition-colors"
-                      title={p.produto}
-                    >
-                      {p.produto}
-                    </span>
-                    <span className="font-bold text-slate-800 dark:text-white text-[11px]">
-                      R${" "}
-                      {p.total.toLocaleString("pt-BR", {
-                        minimumFractionDigits: 2,
-                      })}
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out"
-                      style={{ width: `${(p.total / maxProductSpend) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-              {data.top_produtos.length === 0 && (
-                <div className="h-full flex items-center justify-center">
-                  <p className="text-slate-500 text-[10px] italic">
-                    Sem dados suficientes
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Main Chart */}
+            <section
+              className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors"
+              aria-labelledby="chart-category-title"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h3
+                    id="chart-category-title"
+                    className="font-bold text-slate-800 dark:text-white text-lg"
+                  >
+                    Gastos por Categoria
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Onde você mais investiu seu dinheiro
                   </p>
                 </div>
-              )}
-            </div>
-            <p className="mt-6 text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed border-t border-slate-100 dark:border-slate-800 pt-3">
-              Ranking baseado no valor total acumulado para cada produto,
-              independente do fornecedor.
-            </p>
-          </section>
+                <TrendingUp
+                  size={20}
+                  className="text-slate-400 dark:text-slate-600"
+                />
+              </div>
+              <div
+                className="h-[300px] md:h-[350px] w-full"
+                aria-label="Gráfico de barras mostrando gastos por categoria"
+              >
+                {data && data.por_categoria.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-400 dark:text-slate-600 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl">
+                    <BarChart3 size={32} className="mb-2 opacity-20" />
+                    <p className="text-xs">
+                      Sem dados de categoria para este período
+                    </p>
+                  </div>
+                ) : (
+                  data && (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={data.por_categoria}>
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          vertical={false}
+                          stroke={isDarkMode ? "#1e293b" : "#f1f5f9"}
+                        />
+                        <XAxis
+                          dataKey="categoria"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{
+                            fill: isDarkMode ? "#64748b" : "#94a3b8",
+                            fontSize: 10,
+                            fontWeight: 600,
+                          }}
+                          dy={10}
+                        />
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{
+                            fill: isDarkMode ? "#64748b" : "#94a3b8",
+                            fontSize: 10,
+                          }}
+                        />
+                        <Tooltip
+                          cursor={{ fill: isDarkMode ? "#1e293b" : "#f8fafc" }}
+                          contentStyle={{
+                            backgroundColor: isDarkMode ? "#0f172a" : "#ffffff",
+                            borderRadius: "12px",
+                            border: "none",
+                            boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
+                          }}
+                          itemStyle={{
+                            color: isDarkMode ? "#f8fafc" : "#0f172a",
+                          }}
+                        />
+                        <Bar dataKey="total" radius={[6, 6, 0, 0]} barSize={40}>
+                          {data.por_categoria.map((_, index) => (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={
+                                [
+                                  "#7c3aed",
+                                  "#6366f1",
+                                  "#8b5cf6",
+                                  "#a855f7",
+                                  "#ec4899",
+                                ][index % 5]
+                              }
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )
+                )}
+              </div>
+              <div className="mt-4 flex items-start gap-2 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                <Info size={14} className="mt-0.5 shrink-0 text-indigo-500" />
+                <p>
+                  Este gráfico agrupa seus gastos pelas categorias atribuídas
+                  aos produtos. Categoria "Outros" inclui itens ainda não
+                  classificados.
+                </p>
+              </div>
+            </section>
 
-          {/* Top Suppliers */}
-          <section className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
-            <h4 className="font-bold text-slate-800 dark:text-white text-sm mb-6 flex items-center justify-between">
-              Top 5 Fornecedores
-              <Calendar size={14} className="text-slate-400" />
-            </h4>
-            <div className="space-y-6 flex-1">
-              {data.top_fornecedores.slice(0, 5).map((f, i) => (
-                <div key={i} className="group cursor-default">
-                  <div className="flex justify-between items-end mb-1.5 px-0.5">
-                    <span
-                      className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[180px] group-hover:text-emerald-500 transition-colors"
-                      title={f.fornecedor}
-                    >
-                      {f.fornecedor}
-                    </span>
-                    <span className="font-bold text-slate-800 dark:text-white text-[11px]">
-                      R${" "}
-                      {f.total.toLocaleString("pt-BR", {
-                        minimumFractionDigits: 2,
-                      })}
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-500 rounded-full transition-all duration-1000 ease-out"
-                      style={{
-                        width: `${(f.total / maxSupplierSpend) * 100}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-              {data.top_fornecedores.length === 0 && (
-                <div className="h-full flex items-center justify-center">
-                  <p className="text-slate-500 text-[10px] italic">
-                    Sem dados suficientes
+            {/* Alerts Sidebar - Desktop Only */}
+            <div className="hidden lg:block">
+              <AlertsSection alerts={alerts} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Evolution Chart */}
+            <section
+              className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors"
+              aria-labelledby="chart-evolution-title"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h3
+                    id="chart-evolution-title"
+                    className="font-bold text-slate-800 dark:text-white text-lg"
+                  >
+                    Evolução Mensal de Gastos
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Total investido mês a mês
                   </p>
                 </div>
-              )}
+                <Activity
+                  size={20}
+                  className="text-slate-400 dark:text-slate-600"
+                />
+              </div>
+              <div
+                className="h-[250px] md:h-[300px] w-full"
+                aria-label="Gráfico de linha mostrando a evolução mensal de gastos"
+              >
+                {data && data.evolucao_mensal.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-400 dark:text-slate-600 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl">
+                    <Activity size={32} className="mb-2 opacity-20" />
+                    <p className="text-xs">Sem histórico para este período</p>
+                  </div>
+                ) : (
+                  data && (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={data.evolucao_mensal}>
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          vertical={false}
+                          stroke={isDarkMode ? "#1e293b" : "#f1f5f9"}
+                        />
+                        <XAxis
+                          dataKey="mes"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{
+                            fill: isDarkMode ? "#64748b" : "#94a3b8",
+                            fontSize: 10,
+                            fontWeight: 600,
+                          }}
+                          dy={10}
+                        />
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{
+                            fill: isDarkMode ? "#64748b" : "#94a3b8",
+                            fontSize: 10,
+                          }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: isDarkMode ? "#0f172a" : "#ffffff",
+                            borderRadius: "12px",
+                            border: "none",
+                            boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
+                          }}
+                          itemStyle={{
+                            color: isDarkMode ? "#f8fafc" : "#0f172a",
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="total"
+                          stroke="#6366f1"
+                          strokeWidth={3}
+                          dot={{
+                            r: 4,
+                            fill: "#6366f1",
+                            strokeWidth: 2,
+                            stroke: isDarkMode ? "#0f172a" : "#fff",
+                          }}
+                          activeDot={{ r: 6, strokeWidth: 0 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )
+                )}
+              </div>
+              <div className="mt-4 flex items-start gap-2 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                <Info size={14} className="mt-0.5 shrink-0 text-indigo-500" />
+                <p>
+                  Valores baseados na data de emissão das notas fiscais. Ideal
+                  para identificar meses com maior concentração de compras.
+                </p>
+              </div>
+            </section>
+
+            {/* Top Lists */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Top Products */}
+              <section className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+                <h4 className="font-bold text-slate-800 dark:text-white text-sm mb-6 flex items-center justify-between">
+                  Top 5 Produtos (Gasto)
+                  <Package size={14} className="text-slate-400" />
+                </h4>
+                <div className="space-y-6 flex-1">
+                  {data &&
+                    data.top_produtos.slice(0, 5).map((p, i) => (
+                      <div key={i} className="group cursor-default">
+                        <div className="flex justify-between items-end mb-1.5 px-0.5">
+                          <span
+                            className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[180px] group-hover:text-indigo-500 transition-colors"
+                            title={p.produto}
+                          >
+                            {p.produto}
+                          </span>
+                          <span className="font-bold text-slate-800 dark:text-white text-[11px]">
+                            R${" "}
+                            {p.total.toLocaleString("pt-BR", {
+                              minimumFractionDigits: 2,
+                            })}
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out"
+                            style={{
+                              width: `${(p.total / maxProductSpend) * 100}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  {data && data.top_produtos.length === 0 && (
+                    <div className="h-full flex items-center justify-center text-slate-400 dark:text-slate-600">
+                      <p className="text-[10px] italic">
+                        Sem dados para este período
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <p className="mt-6 text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed border-t border-slate-100 dark:border-slate-800 pt-3">
+                  Ranking baseado no valor total acumulado para cada produto.
+                </p>
+              </section>
+
+              {/* Top Suppliers */}
+              <section className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+                <h4 className="font-bold text-slate-800 dark:text-white text-sm mb-6 flex items-center justify-between">
+                  Top 5 Fornecedores
+                  <ChevronDown size={14} className="text-slate-400" />
+                </h4>
+                <div className="space-y-6 flex-1">
+                  {data &&
+                    data.top_fornecedores.slice(0, 5).map((f, i) => (
+                      <div key={i} className="group cursor-default">
+                        <div className="flex justify-between items-end mb-1.5 px-0.5">
+                          <span
+                            className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 truncate max-w-[180px] group-hover:text-emerald-500 transition-colors"
+                            title={f.fornecedor}
+                          >
+                            {f.fornecedor}
+                          </span>
+                          <span className="font-bold text-slate-800 dark:text-white text-[11px]">
+                            R${" "}
+                            {f.total.toLocaleString("pt-BR", {
+                              minimumFractionDigits: 2,
+                            })}
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 rounded-full transition-all duration-1000 ease-out"
+                            style={{
+                              width: `${(f.total / maxSupplierSpend) * 100}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  {data && data.top_fornecedores.length === 0 && (
+                    <div className="h-full flex items-center justify-center text-slate-400 dark:text-slate-600">
+                      <p className="text-[10px] italic">
+                        Sem dados para este período
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <p className="mt-6 text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed border-t border-slate-100 dark:border-slate-800 pt-3">
+                  Identifica onde você concentra a maior parte do seu orçamento.
+                </p>
+              </section>
             </div>
-            <p className="mt-6 text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed border-t border-slate-100 dark:border-slate-800 pt-3">
-              Identifica onde você concentra a maior parte do seu orçamento de
-              compras.
-            </p>
-          </section>
-        </div>
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
