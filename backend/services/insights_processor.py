@@ -957,3 +957,63 @@ class PriceInsightsService:
             "nome_produto": nome_produto,
             "historico": historico,
         }
+
+    async def obter_produtos_fornecedor_export(
+        self,
+        fornecedor_id: UUID | str,
+        department_id: UUID | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        limit: int = 1000,
+    ) -> List[Dict[str, Any]]:
+        """Retorna produtos agregados de um fornecedor para exportação CSV."""
+        if isinstance(fornecedor_id, str):
+            try:
+                fornecedor_id = UUID(fornecedor_id)
+            except ValueError:
+                return []
+
+        stmt = (
+            select(
+                Produto.nome_limpo,
+                Produto.ean,
+                func.sum(ItemNotaFiscal.quantidade).label("quantidade_total"),
+                (
+                    func.sum(ItemNotaFiscal.valor_total)
+                    / func.nullif(func.sum(ItemNotaFiscal.quantidade), 0)
+                ).label("preco_medio"),
+                func.sum(ItemNotaFiscal.valor_total).label("total_gasto"),
+                func.count(func.distinct(NotaFiscal.id)).label("frequencia_notas"),
+            )
+            .join(ItemNotaFiscal, Produto.ean == ItemNotaFiscal.ean)
+            .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+            .where(NotaFiscal.fornecedor_id == fornecedor_id)
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
+        )
+
+        if department_id:
+            stmt = stmt.where(NotaFiscal.department_id == department_id)
+
+        if start_date:
+            stmt = stmt.where(NotaFiscal.data_emissao >= start_date)
+        if end_date:
+            stmt = stmt.where(NotaFiscal.data_emissao <= end_date)
+
+        stmt = (
+            stmt.group_by(Produto.ean, Produto.nome_limpo)
+            .order_by(desc("total_gasto"))
+            .limit(limit)
+        )
+
+        result = await self.db.execute(stmt)
+        return [
+            {
+                "produto": row.nome_limpo,
+                "ean": row.ean,
+                "quantidade_total": float(row.quantidade_total or 0),
+                "preco_medio": float(row.preco_medio or 0),
+                "total_gasto": float(row.total_gasto or 0),
+                "frequencia_notas": row.frequencia_notas,
+            }
+            for row in result.fetchall()
+        ]

@@ -357,6 +357,80 @@ async def obter_detalhes_fornecedor(
 
 
 @router.get(
+    "/fornecedores/{fornecedor_id}/export",
+    summary="Exportar produtos de um fornecedor (CSV)",
+)
+async def export_fornecedor_produtos_csv(
+    fornecedor_id: str,
+    db: DbSession,
+    user: CurrentUser,
+    start_date: date | None = Query(None, description="Data inicial"),
+    end_date: date | None = Query(None, description="Data final"),
+) -> StreamingResponse:
+    """
+    Exporta a lista de produtos comprados de um fornecedor específico em formato CSV.
+    Respeita isolamento de departamento e aplica sanitização anti-injection.
+    """
+    service = PriceInsightsService(db)
+    dept_id = user.department_id if user.role != UserRole.ADMIN else None
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Sanitiza filename para evitar problemas com IDs estranhos
+    safe_id = "".join(c for c in fornecedor_id if c.isalnum() or c in "-_")
+    filename = f"fornecedor_{safe_id}_produtos_{timestamp}.csv"
+
+    async def generate_csv():
+        # UTF-8 com BOM para Excel reconhecer acentos em PT-BR imediatamente
+        yield "\ufeff"
+
+        output = io.StringIO()
+        writer = csv.writer(output, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+
+        def yield_row(row_data: list[Any]):
+            sanitized = [sanitize_csv_cell(cell) for cell in row_data]
+            output.seek(0)
+            output.truncate(0)
+            writer.writerow(sanitized)
+            return output.getvalue()
+
+        yield yield_row(
+            [
+                "Produto",
+                "EAN",
+                "Quantidade Total",
+                "Preço Médio",
+                "Total Gasto",
+                "Frequência Notas",
+            ]
+        )
+
+        items = await service.obter_produtos_fornecedor_export(
+            fornecedor_id=fornecedor_id,
+            department_id=dept_id,
+            start_date=start_date,
+            end_date=end_date,
+            limit=1000,
+        )
+
+        for item in items:
+            yield yield_row(
+                [
+                    item["produto"],
+                    item["ean"],
+                    item["quantidade_total"],
+                    item["preco_medio"],
+                    item["total_gasto"],
+                    item["frequencia_notas"],
+                ]
+            )
+
+    return StreamingResponse(
+        generate_csv(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get(
     "/alertas",
     response_model=AlertasPrecoResponse,
     summary="Obter alertas de variação de preço",

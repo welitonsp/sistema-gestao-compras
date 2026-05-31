@@ -223,3 +223,76 @@ async def test_export_date_filters(client):
 async def test_export_invalid_dataset(client):
     response = await client.get("/api/v1/dashboard/export?dataset=invalid_name")
     assert response.status_code == 422 # Pydantic Enum validation
+
+@pytest.mark.asyncio
+async def test_export_fornecedor_produtos_csv(client):
+    forn_id = uuid4()
+    async with SessionLocal() as db:
+        forn = Fornecedor(id=forn_id, razao_social="Forn Drill", cnpj="unique-drill-999")
+        db.add(forn)
+        prod = Produto(ean="888", nome_limpo="-SECURE PROD", categoria="Cat")
+        db.add(prod)
+        await db.flush()
+        
+        nota = NotaFiscal(
+            fornecedor_id=forn.id,
+            numero_nota="808",
+            chave_acesso="s"*44,
+            data_emissao=date.today(),
+            valor_total=Decimal("200.00"),
+            status="active",
+            department_id=TEST_DEPT_ID
+        )
+        db.add(nota)
+        await db.flush()
+        
+        item = ItemNotaFiscal(
+            nota_fiscal_id=nota.id,
+            ean="888",
+            descricao_original="PROD SECURE",
+            quantidade=Decimal("4"),
+            valor_unitario=Decimal("50.00"),
+            valor_total=Decimal("200.00")
+        )
+        db.add(item)
+        await db.commit()
+
+    response = await client.get(f"/api/v1/dashboard/fornecedores/{forn_id}/export")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "text/csv; charset=utf-8"
+    assert f"attachment; filename=fornecedor_{forn_id}_produtos_" in response.headers["content-disposition"]
+    
+    content = response.text
+    assert content.startswith("\ufeff")
+    assert "Produto;EAN;Quantidade Total;Preço Médio;Total Gasto;Frequência Notas" in content
+    assert "'-SECURE PROD" in content
+    assert "888" in content
+    assert "200.0" in content
+    assert "1" in content # frequencia
+
+@pytest.mark.asyncio
+async def test_export_fornecedor_department_isolation(client):
+    other_dept_id = uuid4()
+    forn_id = uuid4()
+    async with SessionLocal() as db:
+        forn = Fornecedor(id=forn_id, razao_social="Secret Forn", cnpj="unique-secret-000")
+        db.add(forn)
+        await db.flush()
+        
+        nota = NotaFiscal(
+            fornecedor_id=forn.id,
+            numero_nota="000",
+            chave_acesso="other-dept-key-drill-" + "0" * 28,
+            data_emissao=date.today(),
+            valor_total=Decimal("1000.00"),
+            status="active",
+            department_id=other_dept_id
+        )
+
+        db.add(nota)
+        await db.commit()
+
+    response = await client.get(f"/api/v1/dashboard/fornecedores/{forn_id}/export")
+    assert response.status_code == 200
+    # Header only, no data
+    assert "Secret Forn" not in response.text
