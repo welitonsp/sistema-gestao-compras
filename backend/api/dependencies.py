@@ -45,25 +45,29 @@ async def get_redis_pool(request: Request) -> ArqRedis:
 
 async def get_current_user(
     request: Request,
+    token: Annotated[str | None, Depends(oauth2_scheme)],
     settings: Annotated[Settings, Depends(get_settings)],
     db: Annotated[AsyncSession, Depends(get_db)]
 ) -> User:
-    """Valida o token JWT proveniente de COOKIE (HttpOnly) ou Header."""
-    token = request.cookies.get("access_token")
+    """Valida o token JWT proveniente de COOKIE (HttpOnly) ou Header (Bearer)."""
     
-    # Robustez: Se request.cookies falhar (comum em alguns transports de teste), tenta o header bruto
-    if not token:
+    jwt_token = token
+    # logger.debug(f"DEBUG AUTH: token from Depends={token}")
+    if not jwt_token:
+        jwt_token = request.cookies.get(settings.auth_cookie_name)
+    
+    # Fallback para Header Cookie bruto (casos de debug ou transports de teste)
+    if not jwt_token:
         cookie_header = request.headers.get("cookie")
+        # logger.debug(f"DEBUG AUTH: cookie_header={cookie_header}")
         if cookie_header:
             for part in cookie_header.split(";"):
-                if "access_token=" in part:
-                    token = part.split("access_token=")[1].strip()
+                if f"{settings.auth_cookie_name}=" in part:
+                    jwt_token = part.split(f"{settings.auth_cookie_name}=")[1].strip()
 
-    # Fallback para Header Authorization (útil para APIs de integração)
-    if not token:
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
+    if not jwt_token:
+        # logger.warning(f"DEBUG AUTH: No token found. Headers: {request.headers}")
+        pass
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -71,22 +75,19 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
-    if not token:
+    if not jwt_token:
         raise credentials_exception
 
     try:
-        payload = jwt.decode(
-            token, 
-            settings.secret_key.get_secret_value(), 
-            algorithms=[settings.algorithm]
-        )
+        from backend.core.security import decode_access_token
+        payload = decode_access_token(jwt_token)
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-    except JWTError:
+    except Exception:
         raise credentials_exception
         
-    # Busca usuário no banco
+    # Busca usuário no banco (com isolamento de tenant via RLS implícito se necessário no futuro)
     stmt = select(User).where(User.username == username, User.is_active == True)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()

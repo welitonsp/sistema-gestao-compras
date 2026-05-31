@@ -14,9 +14,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend.services.nfce_pdf_import import (  # noqa: E402
     ImportacaoSemProdutosError,
     NfcePdfImportError,
-    extract_text_from_pdf_bytes,
-    parse_nfce_detalhada_text,
 )
+from backend.services.parsers.pdf_parser import PDFTextExtractor
+from backend.services.parsers.nfce_pdf_extractor import NfcePdfParser
 
 
 DEFAULT_PDF_DIR = Path("NOVAS_NOTAS")
@@ -72,7 +72,7 @@ def classify_parse_error(exc: Exception) -> str:
 
 def audit_pdf(path: Path, seen_keys: set[str]) -> dict[str, str]:
     try:
-        text = extract_text_from_pdf_bytes(path.read_bytes())
+        text = PDFTextExtractor.extract_text(path.read_bytes())
     except Exception as exc:
         return empty_row(path, error=f"{type(exc).__name__}: {exc}")
 
@@ -80,8 +80,9 @@ def audit_pdf(path: Path, seen_keys: set[str]) -> dict[str, str]:
         return empty_row(path, status="SEM_TEXTO", error="PDF sem texto extraivel.")
 
     try:
-        parsed = parse_nfce_detalhada_text(text)
-    except (NfcePdfImportError, ImportacaoSemProdutosError) as exc:
+        parser = NfcePdfParser()
+        parsed = parser.parse(text)
+    except (NfcePdfImportError, ImportacaoSemProdutosError, ValueError) as exc:
         return empty_row(path, status=classify_parse_error(exc), error=str(exc))
     except Exception as exc:
         return empty_row(path, error=f"{type(exc).__name__}: {exc}")

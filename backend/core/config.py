@@ -131,6 +131,12 @@ class Settings(BaseSettings):
         description="Allowed CORS origins. Can be set as JSON array or comma-separated values.",
     )
 
+    auth_cookie_name: str = Field(
+        default="access_token",
+        alias="AUTH_COOKIE_NAME",
+        description="Name of the HttpOnly cookie used for authentication.",
+    )
+
     # Cloud Storage Settings
     storage_type: Literal["local", "s3"] = Field(
         default="local",

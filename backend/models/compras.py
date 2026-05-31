@@ -42,6 +42,10 @@ class Department(TimestampMixin, Base):
 class User(TimestampMixin, Base):
     """Foundation for Role-Based Access Control (RBAC)."""
     __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("username", "department_id", name="uq_users_username_dept"),
+        UniqueConstraint("email", "department_id", name="uq_users_email_dept"),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True),
@@ -54,8 +58,8 @@ class User(TimestampMixin, Base):
         nullable=True,
         index=True,
     )
-    username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
-    email: Mapped[str | None] = mapped_column(String(100), unique=True, index=True, nullable=True)
+    username: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
+    email: Mapped[str | None] = mapped_column(String(100), index=True, nullable=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(20), default=UserRole.OPERATOR, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -90,6 +94,9 @@ class Fornecedor(TimestampMixin, Base):
     """Represents a supplier that issues invoices to the institution."""
 
     __tablename__ = "fornecedores"
+    __table_args__ = (
+        UniqueConstraint("cnpj", "department_id", name="uq_fornecedores_cnpj_dept"),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True),
@@ -97,9 +104,14 @@ class Fornecedor(TimestampMixin, Base):
         default=uuid4,
         nullable=False,
     )
+    department_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("departments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     cnpj: Mapped[str] = mapped_column(
         String(14),
-        unique=True,
         index=True,
         nullable=False,
     )
@@ -112,6 +124,7 @@ class Fornecedor(TimestampMixin, Base):
         nullable=True,
     )
 
+    department: Mapped[Department | None] = relationship()
     notas_fiscais: Mapped[list[NotaFiscal]] = relationship(
         back_populates="fornecedor",
         cascade="all, delete-orphan",
@@ -156,7 +169,7 @@ class NotaFiscal(TimestampMixin, Base):
 
     __tablename__ = "notas_fiscais"
     __table_args__ = (
-        UniqueConstraint("chave_acesso", name="uq_notas_fiscais_chave_acesso"),
+        UniqueConstraint("chave_acesso", "department_id", name="uq_notas_fiscais_chave_acesso_dept"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -184,7 +197,6 @@ class NotaFiscal(TimestampMixin, Base):
     )
     chave_acesso: Mapped[str] = mapped_column(
         String(44),
-        unique=True,
         index=True,
         nullable=False,
     )

@@ -203,9 +203,8 @@ async def test_pagina_parametros_invalidos_nao_chama_fallback_ia():
         async def obter_categorias_unicas(self):
             return []
 
-        async def nota_existe(self, chave_acesso: str):
+        async def nota_existe(self, chave_acesso: str, **kwargs):
             return False
-
     class AiStub:
         async def extrair_nota(self, *args, **kwargs):
             raise AssertionError("fallback IA nao deveria ser chamado")

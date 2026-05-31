@@ -33,28 +33,30 @@ from backend.schemas.importacao import (
 from backend.services.import_archive_service import (
     ImportacaoJaArquivadaError,
     ImportacaoNaoEncontradaError,
-    ImportArchiveError,
     archive_importacao_por_chave,
 )
 from backend.services.import_delete_service import (
-    ImportDeleteError,
     ImportDeleteNotFoundError,
     delete_importacao_por_id,
 )
-from backend.services.nfce_pdf_import import NfcePdfImportError, NfcePdfImportService
+from backend.services.nfce_pdf_import import NfcePdfImportService, NfcePdfImportError
 from backend.services.repository import ProcurementRepository
 from backend.services.importador_sefaz import (
-    ExtracaoDadosNotaError,
-    ImportacaoSemProdutosError,
     ImportadorSefazService,
     NotaJaCadastradaError,
+    SefazGoParser,
     SefazConsultaInvalidaError,
     SefazComunicacaoError,
     SefazTransportError,
+    ImportacaoSemProdutosError,
+    ExtracaoDadosNotaError,
 )
+from backend.services.ai_processor import AIStructuredExtractor
 
 from arq.jobs import Job
+from core.logger import get_logger
 
+logger = get_logger("api.v1.notas")
 router = APIRouter(prefix="/notas", tags=["Notas Fiscais"])
 
 DUPLICATE_NOTA_DETAIL = "Nota fiscal ja cadastrada."
@@ -242,10 +244,13 @@ async def importar_nota_por_chave(
 
     try:
         payload = ImportacaoChaveRequest.model_validate(payload_bruto)
-        validation_status, _validation_error = _validar_identificador_importacao(payload.chave_acesso)
+        validation_status, validation_error = _validar_identificador_importacao(payload.chave_acesso)
         if validation_status != "ok":
+            # Se for erro de formato/estrutura identificado pela regex, 400. 
+            # Caso contrário (ex: chave pura para GO que exige HTML), 422.
+            status_code = status.HTTP_400_BAD_REQUEST if validation_error in ("invalid_identifier", "missing_access_key", "empty_identifier", "qrcode_url_missing_payload", "unsupported_identifier") else status.HTTP_422_UNPROCESSABLE_ENTITY
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status_code,
                 detail="Identificador invalido para importacao por chave.",
             )
     except ValidationError as exc:
@@ -257,8 +262,8 @@ async def importar_nota_por_chave(
             },
         ) from exc
 
+    servico = ImportadorSefazService(db=db, http_client=client)
     try:
-        servico = ImportadorSefazService(db=db, http_client=client)
         resultado = await servico.importar_por_chave(
             identificador=payload.chave_acesso,
             usuario=user.username,
@@ -267,53 +272,22 @@ async def importar_nota_por_chave(
         )
         await db.commit()
         return resultado
-    except NotaJaCadastradaError as exc:
+    except (NotaJaCadastradaError, SefazConsultaInvalidaError, SefazComunicacaoError, 
+            SefazTransportError, ImportacaoSemProdutosError):
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=DUPLICATE_NOTA_DETAIL,
-        ) from exc
+        raise # Handled by global handlers
     except IntegrityError as exc:
         await db.rollback()
         if _is_chave_acesso_integrity_error(exc):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=DUPLICATE_NOTA_DETAIL,
-            ) from exc
+            raise NotaJaCadastradaError(DUPLICATE_NOTA_DETAIL)
         raise
-    except SefazTransportError as exc:
+    except Exception as exc:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(exc),
-        ) from exc
-    except SefazComunicacaoError as exc:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from exc
-    except SefazConsultaInvalidaError as exc:
-        await db.rollback()
-        raise HTTPException(
-            status_code=422,
-            detail=str(exc),
-        ) from exc
-    except ImportacaoSemProdutosError as exc:
-        await db.rollback()
-        raise HTTPException(
-            status_code=422,
-            detail=str(exc),
-        ) from exc
-    except ExtracaoDadosNotaError as exc:
-        await db.rollback()
+        logger.error(f"Erro inesperado ao importar nota: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
+            detail=f"Erro interno ao processar importacao: {str(exc)}",
         ) from exc
-    except Exception:
-        await db.rollback()
-        raise
 
 
 @router.post(
@@ -321,10 +295,6 @@ async def importar_nota_por_chave(
     response_model=ImportacaoNotaResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Importar NFC-e detalhada por PDF",
-    description=(
-        "Extrai dados de uma NFC-e detalhada baixada em PDF pelo usuario, "
-        "sem consultar SEFAZ, OCR externo ou IA."
-    ),
 )
 async def importar_nfce_pdf(
     request: Request,
@@ -341,14 +311,15 @@ async def importar_nfce_pdf(
             detail="Arquivo PDF invalido para importacao NFC-e.",
         )
 
+    conteudo = await arquivo.read()
+    if not conteudo:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Arquivo PDF vazio.",
+        )
+    
+    servico = NfcePdfImportService(ProcurementRepository(db))
     try:
-        conteudo = await arquivo.read()
-        if not conteudo:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Arquivo PDF vazio.",
-            )
-        servico = NfcePdfImportService(ProcurementRepository(db))
         resultado = await servico.importar_pdf_bytes(
             conteudo,
             filename=filename,
@@ -358,25 +329,13 @@ async def importar_nfce_pdf(
         )
         await db.commit()
         return resultado
-    except NotaJaCadastradaError as exc:
+    except (NotaJaCadastradaError, ImportacaoSemProdutosError, NfcePdfImportError):
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=DUPLICATE_NOTA_DETAIL,
-        ) from exc
-    except ImportacaoSemProdutosError as exc:
-        await db.rollback()
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except NfcePdfImportError as exc:
-        await db.rollback()
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise
     except IntegrityError as exc:
         await db.rollback()
         if _is_chave_acesso_integrity_error(exc):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=DUPLICATE_NOTA_DETAIL,
-            ) from exc
+            raise NotaJaCadastradaError(DUPLICATE_NOTA_DETAIL)
         raise
     except Exception:
         await db.rollback()
@@ -388,10 +347,6 @@ async def importar_nfce_pdf(
     response_model=ImportacaoLoteChavesResponse,
     status_code=status.HTTP_200_OK,
     summary="Importar lote pequeno de notas fiscais por chave de acesso",
-    description=(
-        "Processa sequencialmente ate 5 chaves de acesso, com transacao "
-        "isolada por chave e resultado operacional individual."
-    ),
 )
 async def importar_lote_chaves(
     request: Request,
@@ -550,10 +505,6 @@ async def importar_lote_chaves(
     response_model=DeleteImportacaoResponse,
     status_code=status.HTTP_200_OK,
     summary="Excluir importacao por id",
-    description=(
-        "Exclui uma nota fiscal importada, seus itens e historico de precos "
-        "vinculado usando o UUID publico da nota."
-    ),
 )
 async def excluir_importacao_por_id(
     nota_id: UUID,
@@ -582,24 +533,12 @@ async def excluir_importacao_por_id(
             fornecedores_orfaos_deletados=resultado.fornecedores_orfaos_deletados,
             mensagem=resultado.mensagem,
         )
-    except ImportDeleteNotFoundError as exc:
+    except ImportDeleteNotFoundError:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Importacao nao encontrada.",
-        ) from exc
-    except ImportDeleteError as exc:
+        raise
+    except Exception:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-    except Exception as exc:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Falha ao excluir importacao.",
-        ) from exc
+        raise
 
 
 @router.post(
@@ -607,10 +546,6 @@ async def excluir_importacao_por_id(
     response_model=ArchiveImportacaoResponse,
     status_code=status.HTTP_200_OK,
     summary="Arquivar importacao por chave de acesso",
-    description=(
-        "Arquiva uma importacao sem excluir dados fiscais, catalogo, historico "
-        "ou trilha de auditoria."
-    ),
 )
 async def arquivar_importacao_por_chave(
     chave_acesso: ChaveAcesso44,
@@ -642,24 +577,9 @@ async def arquivar_importacao_por_chave(
             archived_by=user.username,
             archive_reason=payload.motivo,
         )
-    except ImportacaoNaoEncontradaError as exc:
+    except (ImportacaoJaArquivadaError, ImportacaoNaoEncontradaError):
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Importacao nao encontrada.",
-        ) from exc
-    except ImportacaoJaArquivadaError as exc:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Importacao ja arquivada.",
-        ) from exc
-    except ImportArchiveError as exc:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
+        raise
     except Exception as exc:
         await db.rollback()
         raise HTTPException(

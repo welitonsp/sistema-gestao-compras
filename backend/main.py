@@ -24,6 +24,7 @@ from backend.api.v1.users import router as users_router
 from backend.api.v1.webhooks import router as webhooks_router
 from backend.api.v1.chat import router as chat_router
 from backend.api.v1.integrations import router as integrations_router
+from backend.api.errors import register_error_handlers
 from backend.core.config import settings
 from core.logger import get_logger
 
@@ -187,6 +188,9 @@ def create_application() -> FastAPI:
 
     application.include_router(api_v1_router)
     application.include_router(auth_router, prefix=settings.api_v1_prefix)
+
+    # Registro de Handlers Globais de Erro
+    register_error_handlers(application)
 
     # Suporte a arquivos estáticos do Frontend (React)
     # Em produção, o frontend compilado ficará em /app/static

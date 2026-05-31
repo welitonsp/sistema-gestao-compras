@@ -803,9 +803,8 @@ async def test_importacao_lote_chave_pura_go_failed_orientativo_sem_sefaz_ou_gro
         AuditLog: await _count(AuditLog),
     }
 
-    async def fake_nota_existe(self, chave_acesso: str) -> bool:
+    async def fake_nota_existe(self, chave_acesso: str, **kwargs) -> bool:
         return False
-
     async def fail_fetch_url(self, url: str) -> str:
         raise AssertionError("Lote com chave pura GO nao deve consultar SEFAZ")
 
@@ -1852,9 +1851,8 @@ async def test_importacao_por_chave_erro_transporte_retorna_503_sem_chave_comple
     async def fail_fetch_url(self, url: str) -> str:
         raise SefazTransportError("Falha de transporte ao consultar SEFAZ.")
 
-    async def fake_nota_existe(self, chave_acesso: str) -> bool:
+    async def fake_nota_existe(self, chave_acesso: str, **kwargs) -> bool:
         return False
-
     async def fail_extrair_nota(self, *args, **kwargs):
         raise AssertionError("Groq nao deveria ser chamado sem HTML valido")
 
@@ -1895,9 +1893,8 @@ async def test_importacao_por_chave_pura_sem_fluxo_go_retorna_422_controlado(mon
         AuditLog: await _count(AuditLog),
     }
 
-    async def fake_nota_existe(self, chave_acesso: str) -> bool:
+    async def fake_nota_existe(self, chave_acesso: str, **kwargs) -> bool:
         return False
-
     async def fail_fetch_url(self, url: str) -> str:
         raise AssertionError("Chave pura nao deve chamar endpoint SEFAZ GO sem fluxo suportado")
 

@@ -222,7 +222,7 @@ class ImportadorSefazService:
         # 2. Fetch/Preparação e Validação de Idempotência
         if chave_acesso:
             self._log = ContextAdapter(logger, {"chave_acesso": _mascarar_chave(chave_acesso)})
-            if await self.repo.nota_existe(chave_acesso):
+            if await self.repo.nota_existe(chave_acesso, department_id=department_id):
                 raise NotaJaCadastradaError("Nota fiscal ja cadastrada.")
             if strategy_error_code:
                 raise SefazConsultaInvalidaError(
@@ -315,7 +315,7 @@ class ImportadorSefazService:
         # ou usamos a sessão injetada.
         
         # Re-valida existência
-        if await self.repo.nota_existe(chave_final):
+        if await self.repo.nota_existe(chave_final, department_id=department_id):
             raise NotaJaCadastradaError("Nota fiscal ja cadastrada.")
         
         nota_db = await self.repo.salvar_nota_completa(

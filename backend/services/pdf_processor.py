@@ -44,8 +44,8 @@ class PDFProcessorService:
 
             # 2. Persistência
             async with self.repo.db.begin():
-                if await self.repo.nota_existe(nota_dto.chave_acesso):
-                    self._log.warning(f"Nota {nota_dto.chave_acesso} já processada.")
+                if await self.repo.nota_existe(nota_dto.chave_acesso, department_id=department_id):
+                    self._log.warning(f"Nota {nota_dto.chave_acesso} já processada para este departamento.")
                     return True
                 
                 await self.repo.salvar_nota_completa(nota_dto.chave_acesso, nota_dto, department_id=department_id)

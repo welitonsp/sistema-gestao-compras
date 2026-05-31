@@ -52,3 +52,12 @@ def get_password_hash(password: str) -> str:
     salt = bcrypt.gensalt()
     hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
     return hashed.decode('utf-8')
+
+
+def decode_access_token(token: str) -> dict[str, Any]:
+    """Decode and validate a JWT access token."""
+    return jwt.decode(
+        token, 
+        settings.secret_key.get_secret_value(), 
+        algorithms=[settings.algorithm]
+    )

@@ -40,8 +40,10 @@ class ProcurementRepository:
         self.db.add(log)
         # Não damos flush aqui para permitir que o log suba na mesma transação da operação
 
-    async def nota_existe(self, chave_acesso: str) -> bool:
+    async def nota_existe(self, chave_acesso: str, department_id: str | UUID | None = None) -> bool:
         stmt = select(NotaFiscal.id).where(NotaFiscal.chave_acesso == chave_acesso)
+        if department_id:
+            stmt = stmt.where(NotaFiscal.department_id == department_id)
         result = await self.db.execute(stmt)
         return result.fetchone() is not None
 
@@ -55,11 +57,11 @@ class ProcurementRepository:
         self,
         chave_acesso: str,
         dto: NotaFiscalDTO,
-        department_id: str | None = None,
+        department_id: str | UUID | None = None,
         extraction_quality: ExtractionQuality | None = None,
     ) -> NotaFiscal:
         # 1. Obter Fornecedor (usa cache local de sessão se necessário)
-        fornecedor = await self._obter_ou_criar_fornecedor(dto.fornecedor)
+        fornecedor = await self._obter_ou_criar_fornecedor(dto.fornecedor, department_id)
         
         # 2. Bulk Lookup de Produtos Existentes para evitar N+1
         eans_na_nota = list({item.codigo_produto for item in dto.itens})
@@ -139,20 +141,27 @@ class ProcurementRepository:
         await self.db.flush()
         return nota
 
-    async def _obter_ou_criar_fornecedor(self, dto) -> Fornecedor:
-        if dto.cnpj in self._cache_fornecedores:
-            return self._cache_fornecedores[dto.cnpj]
+    async def _obter_ou_criar_fornecedor(self, dto, department_id: str | UUID | None = None) -> Fornecedor:
+        cache_key = (dto.cnpj, str(department_id))
+        if cache_key in self._cache_fornecedores:
+            return self._cache_fornecedores[cache_key]
             
         stmt = select(Fornecedor).where(Fornecedor.cnpj == dto.cnpj)
+        if department_id:
+            stmt = stmt.where(Fornecedor.department_id == department_id)
+        else:
+             stmt = stmt.where(Fornecedor.department_id == None)
+
         fornecedor = await self.db.scalar(stmt)
         if not fornecedor:
             fornecedor = Fornecedor(
                 cnpj=dto.cnpj,
                 razao_social=dto.razao_social,
-                nome_fantasia=dto.nome_fantasia
+                nome_fantasia=dto.nome_fantasia,
+                department_id=department_id
             )
             self.db.add(fornecedor)
             await self.db.flush()
         
-        self._cache_fornecedores[dto.cnpj] = fornecedor
+        self._cache_fornecedores[cache_key] = fornecedor
         return fornecedor
