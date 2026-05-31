@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import {
   BarChart3,
   TrendingUp,
@@ -61,6 +61,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     null,
   );
   const [exporting, setExporting] = useState<string | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        exportMenuRef.current &&
+        !exportMenuRef.current.contains(event.target as Node)
+      ) {
+        setExportMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setExportMenuOpen(false);
+      }
+    };
+
+    if (exportMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleEscape);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [exportMenuOpen]);
 
   const handleExport = async (dataset: string) => {
     setExporting(dataset);
@@ -247,10 +276,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         <div className="flex flex-wrap items-center gap-3">
           {/* Export Menu */}
-          <div className="relative group">
+          <div className="relative" ref={exportMenuRef}>
             <button
+              onClick={() => setExportMenuOpen(!exportMenuOpen)}
               disabled={!!exporting}
               aria-label="Exportar dados do dashboard"
+              aria-haspopup="menu"
+              aria-expanded={exportMenuOpen}
               className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-all disabled:opacity-50"
             >
               {exporting ? (
@@ -259,27 +291,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <Download size={14} className="text-indigo-500" />
               )}
               <span>Exportar</span>
-              <ChevronDown size={12} className="text-slate-400" />
+              <ChevronDown
+                size={12}
+                className={`text-slate-400 transition-transform ${exportMenuOpen ? "rotate-180" : ""}`}
+              />
             </button>
 
-            <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
-              <div className="py-1">
-                {[
-                  { id: "top_produtos", label: "Top Produtos" },
-                  { id: "top_fornecedores", label: "Top Fornecedores" },
-                  { id: "evolucao_mensal", label: "Evolução Mensal" },
-                  { id: "alertas", label: "Alertas de Risco" },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => handleExport(item.id)}
-                    className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                  >
-                    {item.label}
-                  </button>
-                ))}
+            {exportMenuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100"
+              >
+                <div className="py-1">
+                  {[
+                    { id: "top_produtos", label: "Top Produtos" },
+                    { id: "top_fornecedores", label: "Top Fornecedores" },
+                    { id: "evolucao_mensal", label: "Evolução Mensal" },
+                    { id: "alertas", label: "Alertas de Risco" },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      role="menuitem"
+                      onClick={() => {
+                        setExportMenuOpen(false);
+                        handleExport(item.id);
+                      }}
+                      className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
