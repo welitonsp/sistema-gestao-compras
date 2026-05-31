@@ -117,6 +117,9 @@ class DataHealthMetrics(BaseModel):
     total_itens: int
     itens_sem_ean: int
     total_mismatches: int
+    descricoes_vazias: int
+    quantidades_invalidas: int
+    valores_invalidos: int
 
 
 class DashboardResumoResponse(BaseModel):

@@ -120,6 +120,22 @@ const DataHealthCard: React.FC<{ metrics: DataHealthMetrics }> = ({
             {metrics.notas_failed}
           </div>
         </div>
+        <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+          <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">
+            Dados Inválidos
+          </div>
+          <div className="text-lg font-bold text-slate-700 dark:text-slate-200">
+            {metrics.quantidades_invalidas + metrics.valores_invalidos}
+          </div>
+        </div>
+        <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+          <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">
+            Desc. Vazias
+          </div>
+          <div className="text-lg font-bold text-slate-700 dark:text-slate-200">
+            {metrics.descricoes_vazias}
+          </div>
+        </div>
       </div>
 
       <p className="mt-6 text-[10px] text-slate-400 leading-relaxed italic">
@@ -509,7 +525,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <span>{data.saude_dados.notas_failed} importação(ões) falharam criticamente na extração de dados estruturados.</span>
                     </div>
                   )}
-                  {data.saude_dados.total_mismatches === 0 && data.saude_dados.itens_sem_ean === 0 && data.saude_dados.notas_failed === 0 && (
+                  {(data.saude_dados.quantidades_invalidas > 0 || data.saude_dados.valores_invalidos > 0) && (
+                    <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400 font-medium">
+                      <AlertTriangle size={14} />
+                      <span>Detectados {data.saude_dados.quantidades_invalidas + data.saude_dados.valores_invalidos} campo(s) numérico(s) inválidos nos itens das notas.</span>
+                    </div>
+                  )}
+                  {data.saude_dados.descricoes_vazias > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                      <Info size={14} />
+                      <span>{data.saude_dados.descricoes_vazias} item(ns) possuem descrição vazia ou ilegível.</span>
+                    </div>
+                  )}
+                  {data.saude_dados.total_mismatches === 0 && data.saude_dados.itens_sem_ean === 0 && data.saude_dados.notas_failed === 0 && data.saude_dados.descricoes_vazias === 0 && (
                     <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
                       <CheckCircle2 size={14} />
                       <span>Todos os dados importados no período possuem alta integridade técnica.</span>

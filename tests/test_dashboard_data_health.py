@@ -154,6 +154,59 @@ async def test_dashboard_data_health_aggregation(client):
     assert health["nivel"] == "danger"
 
 @pytest.mark.asyncio
+async def test_dashboard_data_health_extended_metrics(client):
+    async with SessionLocal() as db:
+        await db.execute(delete(NotaFiscal))
+        forn = Fornecedor(id=uuid4(), razao_social="Forn Ext", cnpj="health-ext")
+        db.add(forn)
+        await db.flush()
+        
+        db.add(NotaFiscal(
+            fornecedor_id=forn.id, numero_nota="E1", chave_acesso="e" * 44,
+            data_emissao=date.today(), valor_total=Decimal("100"),
+            status="active", department_id=TEST_DEPT_ID,
+            extraction_empty_description_count=5,
+            extraction_invalid_quantity_count=2,
+            extraction_invalid_value_count=1
+        ))
+        await db.commit()
+
+    response = await client.get("/api/v1/dashboard/resumo")
+    health = response.json()["saude_dados"]
+    assert health["descricoes_vazias"] == 5
+    assert health["quantidades_invalidas"] == 2
+    assert health["valores_invalidos"] == 1
+
+@pytest.mark.asyncio
+async def test_dashboard_data_health_security_leak(client):
+    async with SessionLocal() as db:
+        await db.execute(delete(NotaFiscal))
+        forn = Fornecedor(id=uuid4(), razao_social="Forn Sec", cnpj="health-sec")
+        db.add(forn)
+        await db.flush()
+        
+        db.add(NotaFiscal(
+            fornecedor_id=forn.id, numero_nota="S1", chave_acesso="secret" + "0" * 38,
+            data_emissao=date.today(), valor_total=Decimal("10"),
+            status="active", department_id=TEST_DEPT_ID,
+            extraction_quality_details='{"internal": "leak"}'
+        ))
+        await db.commit()
+
+    response = await client.get("/api/v1/dashboard/resumo")
+    text = response.text
+    
+    # Check that sensitive fields are NOT in the response text
+    assert "secret" not in text
+    assert "leak" not in text
+    assert "chave_acesso" not in text
+    assert "cnpj" not in text
+    assert "cpf" not in text
+    assert "xml" not in text
+    assert "json" not in text
+    assert "extraction_quality_details" not in text
+
+@pytest.mark.asyncio
 async def test_dashboard_data_health_empty(client):
     async with SessionLocal() as db:
         await db.execute(delete(NotaFiscal))
@@ -191,6 +244,35 @@ async def test_dashboard_data_health_date_filter(client):
     # Filtro hoje
     today = date.today().isoformat()
     response = await client.get(f"/api/v1/dashboard/resumo?start_date={today}")
+    health = response.json()["saude_dados"]
+    assert health["total_notas"] == 1
+    assert health["notas_ok"] == 1
+    assert health["percentual_saude"] == 100.0
+
+@pytest.mark.asyncio
+async def test_dashboard_data_health_end_date_filter(client):
+    async with SessionLocal() as db:
+        await db.execute(delete(NotaFiscal))
+        forn = Fornecedor(id=uuid4(), razao_social="Forn End Date", cnpj="health-end-date")
+        db.add(forn)
+        await db.flush()
+
+        # Nota Passada
+        db.add(NotaFiscal(
+            fornecedor_id=forn.id, numero_nota="P1", chave_acesso="p" * 44,
+            data_emissao=date(2020, 1, 1), valor_total=Decimal("10"),
+            status="active", department_id=TEST_DEPT_ID, extraction_quality_status="ok"
+        ))
+        # Nota Futura (Hoje)
+        db.add(NotaFiscal(
+            fornecedor_id=forn.id, numero_nota="F1", chave_acesso="f" * 44,
+            data_emissao=date.today(), valor_total=Decimal("10"),
+            status="active", department_id=TEST_DEPT_ID, extraction_quality_status="failed"
+        ))
+        await db.commit()
+
+    # Filtro até 2021
+    response = await client.get(f"/api/v1/dashboard/resumo?end_date=2021-12-31")
     health = response.json()["saude_dados"]
     assert health["total_notas"] == 1
     assert health["notas_ok"] == 1

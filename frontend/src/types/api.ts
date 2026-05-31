@@ -91,6 +91,9 @@ export interface DataHealthMetrics {
   total_itens: number;
   itens_sem_ean: number;
   total_mismatches: number;
+  descricoes_vazias: number;
+  quantidades_invalidas: number;
+  valores_invalidos: number;
 }
 
 export interface DashboardResumo {

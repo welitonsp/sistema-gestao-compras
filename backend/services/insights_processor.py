@@ -1034,6 +1034,9 @@ class PriceInsightsService:
                 func.sum(NotaFiscal.extraction_item_count).label("total_itens"),
                 func.sum(NotaFiscal.extraction_missing_ean_count).label("itens_sem_ean"),
                 func.sum(case((NotaFiscal.extraction_total_mismatch == True, 1), else_=0)).label("total_mismatches"),
+                func.sum(NotaFiscal.extraction_empty_description_count).label("descricoes_vazias"),
+                func.sum(NotaFiscal.extraction_invalid_quantity_count).label("quantidades_invalidas"),
+                func.sum(NotaFiscal.extraction_invalid_value_count).label("valores_invalidos"),
             )
             .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
         )
@@ -1059,6 +1062,9 @@ class PriceInsightsService:
                 "total_itens": 0,
                 "itens_sem_ean": 0,
                 "total_mismatches": 0,
+                "descricoes_vazias": 0,
+                "quantidades_invalidas": 0,
+                "valores_invalidos": 0,
             }
 
         total_notas = row.total_notas
@@ -1068,6 +1074,9 @@ class PriceInsightsService:
         total_itens = int(row.total_itens or 0)
         itens_sem_ean = int(row.itens_sem_ean or 0)
         total_mismatches = int(row.total_mismatches or 0)
+        descricoes_vazias = int(row.descricoes_vazias or 0)
+        quantidades_invalidas = int(row.quantidades_invalidas or 0)
+        valores_invalidos = int(row.valores_invalidos or 0)
 
         # Cálculo de saúde: Peso maior para notas failed
         # saúde = (ok * 1.0 + warning * 0.5 + failed * 0.0) / total
@@ -1089,4 +1098,7 @@ class PriceInsightsService:
             "total_itens": total_itens,
             "itens_sem_ean": itens_sem_ean,
             "total_mismatches": total_mismatches,
+            "descricoes_vazias": descricoes_vazias,
+            "quantidades_invalidas": quantidades_invalidas,
+            "valores_invalidos": valores_invalidos,
         }
