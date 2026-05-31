@@ -959,6 +959,51 @@ const SupplierHistoryModal: React.FC<{
   const [data, setData] = useState<SupplierDrilldownResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportProducts = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const query = new URLSearchParams();
+      if (dateParams.start_date)
+        query.append("start_date", dateParams.start_date);
+      if (dateParams.end_date) query.append("end_date", dateParams.end_date);
+
+      const response = await fetch(
+        `/api/v1/dashboard/fornecedores/${supplierId}/export?${query.toString()}`,
+        {
+          credentials: "include",
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Falha ao exportar");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+
+      const disposition = response.headers.get("Content-Disposition");
+      let filename = `fornecedor_produtos.csv`;
+      if (disposition && disposition.includes("filename=")) {
+        filename = disposition.split("filename=")[1].replace(/"/g, "");
+      }
+
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error("Erro ao exportar CSV do fornecedor:", error);
+      alert("Não foi possível exportar os produtos do fornecedor. Tente novamente.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -1158,8 +1203,22 @@ const SupplierHistoryModal: React.FC<{
                 {/* Top Products in Supplier */}
                 <section className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
                   <h4 className="font-bold text-slate-800 dark:text-white text-sm mb-6 flex items-center justify-between">
-                    Top Produtos Comprados Aqui
-                    <Package size={14} className="text-slate-400" aria-hidden="true" />
+                    <div className="flex items-center gap-2">
+                      <span>Top Produtos Comprados Aqui</span>
+                      <Package size={14} className="text-slate-400" aria-hidden="true" />
+                    </div>
+                    <button
+                      onClick={handleExportProducts}
+                      disabled={exporting || loading}
+                      className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-all disabled:opacity-50"
+                    >
+                      {exporting ? (
+                        <div className="animate-spin h-3 w-3 border-2 border-indigo-500 border-t-transparent rounded-full" />
+                      ) : (
+                        <Download size={12} className="text-indigo-500" />
+                      )}
+                      <span>Exportar produtos</span>
+                    </button>
                   </h4>
                   <div className="space-y-6 flex-1">
                     {data?.top_produtos.map((p, i) => (
