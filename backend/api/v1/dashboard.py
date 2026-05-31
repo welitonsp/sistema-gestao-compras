@@ -291,8 +291,13 @@ async def obter_resumo_dashboard(
         limit=10, department_id=dept_id, start_date=start_date, end_date=end_date
     )
 
-    # Alertas de Risco
+    # Alertas de Risco (Geral)
     alertas_risco = await service.obter_alertas_risco_basicos(
+        department_id=dept_id, start_date=start_date, end_date=end_date
+    )
+
+    # Saúde dos Dados
+    saude_dados = await service.obter_saude_dados(
         department_id=dept_id, start_date=start_date, end_date=end_date
     )
 
@@ -303,7 +308,9 @@ async def obter_resumo_dashboard(
         top_produtos=top_produtos,
         top_fornecedores=top_fornecedores,
         alertas_risco=alertas_risco,
+        saude_dados=saude_dados,
     )
+
 
 
 @router.get(

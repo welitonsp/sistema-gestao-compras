@@ -6,7 +6,7 @@ from datetime import date
 from decimal import Decimal
 from typing import List, Dict, Any
 from uuid import UUID
-from sqlalchemy import select, func, desc, or_
+from sqlalchemy import select, func, desc, or_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.compras import (
@@ -1017,3 +1017,76 @@ class PriceInsightsService:
             }
             for row in result.fetchall()
         ]
+
+    async def obter_saude_dados(
+        self,
+        department_id: UUID | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> Dict[str, Any]:
+        """Agrega métricas de saúde cadastral e qualidade de extração."""
+        stmt = (
+            select(
+                func.count(NotaFiscal.id).label("total_notas"),
+                func.sum(case((NotaFiscal.extraction_quality_status == "ok", 1), else_=0)).label("notas_ok"),
+                func.sum(case((NotaFiscal.extraction_quality_status == "warning", 1), else_=0)).label("notas_warning"),
+                func.sum(case((NotaFiscal.extraction_quality_status == "failed", 1), else_=0)).label("notas_failed"),
+                func.sum(NotaFiscal.extraction_item_count).label("total_itens"),
+                func.sum(NotaFiscal.extraction_missing_ean_count).label("itens_sem_ean"),
+                func.sum(case((NotaFiscal.extraction_total_mismatch == True, 1), else_=0)).label("total_mismatches"),
+            )
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
+        )
+
+        if department_id:
+            stmt = stmt.where(NotaFiscal.department_id == department_id)
+        if start_date:
+            stmt = stmt.where(NotaFiscal.data_emissao >= start_date)
+        if end_date:
+            stmt = stmt.where(NotaFiscal.data_emissao <= end_date)
+
+        result = await self.db.execute(stmt)
+        row = result.fetchone()
+
+        if not row or not row.total_notas:
+            return {
+                "total_notas": 0,
+                "notas_ok": 0,
+                "notas_warning": 0,
+                "notas_failed": 0,
+                "percentual_saude": 100.0,
+                "nivel": "ok",
+                "total_itens": 0,
+                "itens_sem_ean": 0,
+                "total_mismatches": 0,
+            }
+
+        total_notas = row.total_notas
+        notas_ok = row.notas_ok or 0
+        notas_warning = row.notas_warning or 0
+        notas_failed = row.notas_failed or 0
+        total_itens = int(row.total_itens or 0)
+        itens_sem_ean = int(row.itens_sem_ean or 0)
+        total_mismatches = int(row.total_mismatches or 0)
+
+        # Cálculo de saúde: Peso maior para notas failed
+        # saúde = (ok * 1.0 + warning * 0.5 + failed * 0.0) / total
+        percentual_saude = ((notas_ok + (notas_warning * 0.5)) / total_notas) * 100
+
+        nivel = "ok"
+        if percentual_saude < 70:
+            nivel = "danger"
+        elif percentual_saude < 90:
+            nivel = "warning"
+
+        return {
+            "total_notas": total_notas,
+            "notas_ok": notas_ok,
+            "notas_warning": notas_warning,
+            "notas_failed": notas_failed,
+            "percentual_saude": round(percentual_saude, 1),
+            "nivel": nivel,
+            "total_itens": total_itens,
+            "itens_sem_ean": itens_sem_ean,
+            "total_mismatches": total_mismatches,
+        }

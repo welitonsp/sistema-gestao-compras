@@ -81,6 +81,18 @@ export interface SupplierDrilldownResponse {
   top_produtos: TopProdutoFornecedor[];
 }
 
+export interface DataHealthMetrics {
+  total_notas: number;
+  notas_ok: number;
+  notas_warning: number;
+  notas_failed: number;
+  percentual_saude: number;
+  nivel: "ok" | "warning" | "danger" | string;
+  total_itens: number;
+  itens_sem_ean: number;
+  total_mismatches: number;
+}
+
 export interface DashboardResumo {
   total_geral: number;
   por_categoria: GastoCategoria[];
@@ -88,6 +100,7 @@ export interface DashboardResumo {
   top_produtos: TopProduto[];
   top_fornecedores: TopFornecedor[];
   alertas_risco: AlertaRisco[];
+  saude_dados?: DataHealthMetrics | null;
 }
 
 export interface AlertaPreco {
