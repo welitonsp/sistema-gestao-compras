@@ -7,6 +7,7 @@ import {
   ArrowUpRight,
   Activity,
   Calendar,
+  Download,
   Info,
   Filter,
   ChevronDown,
@@ -59,6 +60,47 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(
     null,
   );
+  const [exporting, setExporting] = useState<string | null>(null);
+
+  const handleExport = async (dataset: string) => {
+    setExporting(dataset);
+    try {
+      const { start_date, end_date } = getDateParams();
+      const query = new URLSearchParams({ dataset });
+      if (start_date) query.append("start_date", start_date);
+      if (end_date) query.append("end_date", end_date);
+
+      const response = await fetch(`/api/v1/dashboard/export?${query.toString()}`, {
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Falha ao exportar");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+
+      const disposition = response.headers.get("Content-Disposition");
+      let filename = `dashboard_${dataset}.csv`;
+      if (disposition && disposition.includes("filename=")) {
+        filename = disposition.split("filename=")[1].replace(/"/g, "");
+      }
+
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error("Erro ao exportar CSV:", error);
+      alert("Não foi possível exportar o arquivo. Tente novamente.");
+    } finally {
+      setExporting(null);
+    }
+  };
 
   const isDarkMode =
     window.matchMedia &&
@@ -203,23 +245,61 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="px-3 text-slate-400 dark:text-slate-500">
-            <Filter size={16} />
-          </div>
-          {presets.map((p) => (
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Export Menu */}
+          <div className="relative group">
             <button
-              key={p.id}
-              onClick={() => setPeriod(p.id as PeriodPreset)}
-              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                period === p.id
-                  ? "bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
-                  : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
+              disabled={!!exporting}
+              aria-label="Exportar dados do dashboard"
+              className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-all disabled:opacity-50"
             >
-              {p.label}
+              {exporting ? (
+                <div className="animate-spin h-3 w-3 border-2 border-indigo-500 border-t-transparent rounded-full" />
+              ) : (
+                <Download size={14} className="text-indigo-500" />
+              )}
+              <span>Exportar</span>
+              <ChevronDown size={12} className="text-slate-400" />
             </button>
-          ))}
+
+            <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
+              <div className="py-1">
+                {[
+                  { id: "top_produtos", label: "Top Produtos" },
+                  { id: "top_fornecedores", label: "Top Fornecedores" },
+                  { id: "evolucao_mensal", label: "Evolução Mensal" },
+                  { id: "alertas", label: "Alertas de Risco" },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleExport(item.id)}
+                    className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div className="px-3 text-slate-400 dark:text-slate-500">
+              <Filter size={16} />
+            </div>
+            {presets.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setPeriod(p.id as PeriodPreset)}
+                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  period === p.id
+                    ? "bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
+                    : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
