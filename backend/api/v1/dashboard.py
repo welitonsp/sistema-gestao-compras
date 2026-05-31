@@ -1,13 +1,12 @@
 """Routes for dashboard and price insights."""
 
-from __future__ import annotations
-
-from datetime import date
+from enum import Enum
+from datetime import date, datetime
 from typing import Any, Annotated
 from fastapi import APIRouter, Query, status, Depends
 from fastapi.responses import StreamingResponse
 import io
-import pandas as pd
+import csv
 from backend.api.dependencies import DbSession, CurrentUser
 from backend.schemas.dashboard import (
     DashboardResumoResponse,
@@ -33,6 +32,133 @@ from fastapi.responses import StreamingResponse
 router = APIRouter(prefix="/dashboard", tags=["Dashboard & Insights"])
 
 ACTIVE_INVOICE_STATUS = "active"
+
+
+class ExportDataset(str, Enum):
+    top_produtos = "top_produtos"
+    top_fornecedores = "top_fornecedores"
+    evolucao_mensal = "evolucao_mensal"
+    alertas = "alertas"
+
+
+def sanitize_csv_cell(value: Any) -> str:
+    """Sanitiza uma célula CSV para prevenir Injection e normalizar quebras de linha."""
+    if value is None:
+        return ""
+
+    # Converte números para string de forma estável
+    str_val = str(value)
+
+    # Normaliza quebras de linha e tabs
+    str_val = str_val.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+
+    # Prevenção de CSV Injection (=, +, -, @)
+    # Se começar com um desses caracteres, prefixa com aspa simples
+    stripped = str_val.strip()
+    if stripped and stripped[0] in ("=", "+", "-", "@"):
+        str_val = f"'{str_val}"
+
+    return str_val
+
+
+@router.get(
+    "/export",
+    summary="Exportar dados do dashboard (CSV - Seguro)",
+)
+async def export_dashboard_csv(
+    db: DbSession,
+    user: CurrentUser,
+    dataset: ExportDataset = Query(..., description="Dataset para exportação"),
+    start_date: date | None = Query(None, description="Data inicial"),
+    end_date: date | None = Query(None, description="Data final"),
+) -> StreamingResponse:
+    """
+    Exporta visões agregadas do dashboard para CSV de forma segura.
+    Aplica sanitização anti-injection e respeita isolamento de departamento.
+    """
+    service = PriceInsightsService(db)
+    dept_id = user.department_id if user.role != UserRole.ADMIN else None
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"dashboard_{dataset.value}_{timestamp}.csv"
+
+    async def generate_csv():
+        # UTF-8 com BOM para Excel reconhecer acentos em PT-BR imediatamente
+        yield "\ufeff"
+
+        output = io.StringIO()
+        writer = csv.writer(output, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+
+        def yield_row(row_data: list[Any]):
+            sanitized = [sanitize_csv_cell(cell) for cell in row_data]
+            output.seek(0)
+            output.truncate(0)
+            writer.writerow(sanitized)
+            return output.getvalue()
+
+        if dataset == ExportDataset.top_produtos:
+            yield yield_row(
+                ["Produto", "EAN", "Quantidade Total", "Preço Médio", "Total Gasto"]
+            )
+            items = await service.obter_top_produtos_gasto(
+                limit=1000,
+                department_id=dept_id,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            for item in items:
+                yield yield_row(
+                    [
+                        item["produto"],
+                        item["ean"],
+                        item["quantidade_total"],
+                        item["preco_medio"],
+                        item["total"],
+                    ]
+                )
+
+        elif dataset == ExportDataset.top_fornecedores:
+            yield yield_row(
+                ["Fornecedor", "Quantidade de Notas", "Ticket Médio", "Total Gasto"]
+            )
+            items = await service.obter_top_fornecedores_gasto(
+                limit=1000,
+                department_id=dept_id,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            for item in items:
+                yield yield_row(
+                    [
+                        item["fornecedor"],
+                        item["quantidade_notas"],
+                        item["ticket_medio"],
+                        item["total"],
+                    ]
+                )
+
+        elif dataset == ExportDataset.evolucao_mensal:
+            yield yield_row(["Mês", "Total Gasto", "Quantidade de Notas"])
+            items = await service.obter_evolucao_gastos_mensal(
+                department_id=dept_id, start_date=start_date, end_date=end_date
+            )
+            for item in items:
+                yield yield_row(
+                    [item["mes"], item["total"], item["quantidade_notas"]]
+                )
+
+        elif dataset == ExportDataset.alertas:
+            yield yield_row(["Tipo", "Nível", "Mensagem"])
+            alertas = await service.obter_alertas_risco_basicos(
+                department_id=dept_id, start_date=start_date, end_date=end_date
+            )
+            for a in alertas:
+                yield yield_row([a["tipo"], a["severidade"], a["mensagem"]])
+
+    return StreamingResponse(
+        generate_csv(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @router.get("/notifications", summary="Stream de notificações em tempo real (SSE)")

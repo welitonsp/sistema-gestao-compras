@@ -480,7 +480,9 @@ class PriceInsightsService:
 
         stmt = (
             select(
-                month_func.label("mes"), func.sum(NotaFiscal.valor_total).label("total")
+                month_func.label("mes"),
+                func.sum(NotaFiscal.valor_total).label("total"),
+                func.count(NotaFiscal.id).label("quantidade_notas"),
             )
             .where(NotaFiscal.data_emissao >= start_date)
             .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
@@ -500,7 +502,11 @@ class PriceInsightsService:
             return m.strftime("%b/%y")
 
         return [
-            {"mes": format_mes(row.mes), "total": float(row.total)}
+            {
+                "mes": format_mes(row.mes),
+                "total": float(row.total),
+                "quantidade_notas": row.quantidade_notas,
+            }
             for row in result.fetchall()
         ]
 
@@ -517,6 +523,11 @@ class PriceInsightsService:
                 Produto.ean,
                 Produto.nome_limpo,
                 func.sum(ItemNotaFiscal.valor_total).label("total"),
+                func.sum(ItemNotaFiscal.quantidade).label("quantidade_total"),
+                (
+                    func.sum(ItemNotaFiscal.valor_total)
+                    / func.nullif(func.sum(ItemNotaFiscal.quantidade), 0)
+                ).label("preco_medio"),
             )
             .join(ItemNotaFiscal, Produto.ean == ItemNotaFiscal.ean)
             .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
@@ -537,7 +548,13 @@ class PriceInsightsService:
         )
         result = await self.db.execute(stmt)
         return [
-            {"ean": row.ean, "produto": row.nome_limpo, "total": float(row.total)}
+            {
+                "ean": row.ean,
+                "produto": row.nome_limpo,
+                "total": float(row.total),
+                "quantidade_total": float(row.quantidade_total or 0),
+                "preco_medio": float(row.preco_medio or 0),
+            }
             for row in result.fetchall()
         ]
 
@@ -554,6 +571,10 @@ class PriceInsightsService:
                 Fornecedor.id,
                 Fornecedor.razao_social,
                 func.sum(NotaFiscal.valor_total).label("total"),
+                func.count(NotaFiscal.id).label("quantidade_notas"),
+                (func.sum(NotaFiscal.valor_total) / func.count(NotaFiscal.id)).label(
+                    "ticket_medio"
+                ),
             )
             .join(NotaFiscal, Fornecedor.id == NotaFiscal.fornecedor_id)
             .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
@@ -577,6 +598,8 @@ class PriceInsightsService:
                 "fornecedor_id": str(row.id),
                 "fornecedor": row.razao_social,
                 "total": float(row.total),
+                "quantidade_notas": row.quantidade_notas,
+                "ticket_medio": float(row.ticket_medio or 0),
             }
             for row in result.fetchall()
         ]
