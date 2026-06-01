@@ -537,7 +537,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <span>{data.saude_dados.descricoes_vazias} item(ns) possuem descrição vazia ou ilegível.</span>
                     </div>
                   )}
-                  {data.saude_dados.total_mismatches === 0 && data.saude_dados.itens_sem_ean === 0 && data.saude_dados.notas_failed === 0 && data.saude_dados.descricoes_vazias === 0 && (
+                  {data.saude_dados.total_mismatches === 0 && data.saude_dados.itens_sem_ean === 0 && data.saude_dados.notas_failed === 0 && data.saude_dados.descricoes_vazias === 0 && data.saude_dados.quantidades_invalidas === 0 && data.saude_dados.valores_invalidos === 0 && (
                     <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
                       <CheckCircle2 size={14} />
                       <span>Todos os dados importados no período possuem alta integridade técnica.</span>
