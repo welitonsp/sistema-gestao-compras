@@ -9,86 +9,81 @@ from pathlib import Path
 
 from backend.core.config import settings
 from backend.core.database import SessionLocal
+from backend.core.storage import get_storage_provider
 from backend.services.repository import ProcurementRepository
-from backend.services.pdf_processor import PDFProcessorService
-from backend.services.xml_processor import XMLProcessorService
-from backend.services.ocr_processor import GeminiOCRService
+from backend.services.xml_processor import XmlProcessorService
+from backend.services.pdf_processor import PdfProcessorService
+from backend.services.notifications import dispatcher as sse_dispatcher
+from backend.core.events import dispatcher, EVENT_NOTA_IMPORTADA
 from core.logger import get_logger
 
-logger = get_logger("worker")
+logger = get_logger("backend.worker")
 
-from backend.services.notifications import dispatcher
+async def startup(ctx: dict[str, Any]) -> None:
+    """Initialize worker resources."""
+    logger.info("ARQ Worker iniciando...")
+    
+    # Registra listeners internos
+    from backend.services.insights_processor import PriceInsightsService
+    
+    async def processar_insights_pos_importacao(nota_id, department_id):
+        async with SessionLocal() as db:
+            insights = PriceInsightsService(db)
+            logger.info(f"Processando insights pos-importacao para nota {nota_id}...")
+            await insights.detectar_notas_duplicadas_suspeitas(department_id=department_id)
+            await insights.detectar_anomalias_estatisticas(department_id=department_id)
 
-from backend.core.storage import get_storage_provider
+    dispatcher.subscribe(EVENT_NOTA_IMPORTADA, processar_insights_pos_importacao)
 
-async def processar_arquivo_background(ctx: dict[Any, Any], caminho_str: str, department_id: str | None = None) -> bool:
-    """Task to process a file (PDF, XML or Image) in the background via Storage Abstraction."""
+async def shutdown(ctx: dict[str, Any]) -> None:
+    """Cleanup worker resources."""
+    logger.info("ARQ Worker desligando...")
+
+async def processar_arquivo_background(ctx: dict[str, Any], caminho_str: str, department_id: str | None = None) -> dict[str, Any]:
+    """Processa um arquivo (PDF/XML) em background com suporte a Multi-tenancy."""
     caminho = Path(caminho_str)
     job_id = ctx.get("job_id")
-    storage = get_storage_provider()
     
     logger.info(f"Iniciando processamento em background: {caminho.name} (Job: {job_id}, Dept: {department_id})")
     
-    await dispatcher.broadcast("JOB_STARTED", {"job_id": job_id, "file": caminho.name})
-    
     async with SessionLocal() as db:
+        repo = ProcurementRepository(db)
+        
         try:
-            repo = ProcurementRepository(db)
+            # 1. Identifica o processador adequado
+            ext = caminho.suffix.lower()
+            success = False
+            nota_id = None
             
-            # No futuro, o worker baixaria o arquivo do StorageProvider se não fosse local
-            # Por enquanto, como é local, o StorageProvider apenas confirma o path
-            # path_real = await storage.get_file_path(caminho.name, folder="NOVAS_NOTAS")
-            
-            if caminho.suffix.lower() in [".pdf", ".jpg", ".jpeg", ".png"]:
-                if not settings.enable_gemini:
-                    logger.warning(f"Processamento de imagem/PDF ignorado: ENABLE_GEMINI está falso. Arquivo: {caminho.name}")
-                    await dispatcher.broadcast("JOB_FAILED", {"job_id": job_id, "error": "OCR desativado (Custo Gemini)"})
-                    return False
-                ocr = GeminiOCRService()
-                service = PDFProcessorService(repo, ocr)
-            elif caminho.suffix.lower() == ".xml":
-                service = XMLProcessorService(repo)
+            if ext == ".xml":
+                processor = XmlProcessorService(repo)
+                success = await processor.processar_arquivo(caminho, department_id=department_id)
+            elif ext == ".pdf":
+                processor = PdfProcessorService(repo)
+                success = await processor.processar_arquivo(caminho, department_id=department_id)
             else:
-                logger.error(f"Formato de arquivo não suportado: {caminho.suffix}")
-                await dispatcher.broadcast("JOB_FAILED", {"job_id": job_id, "error": "Formato não suportado"})
-                return False
-                
-            success = await service.processar_arquivo(caminho, department_id=department_id)
-            
+                logger.error(f"Formato de arquivo não suportado: {ext}")
+                return {"status": "error", "message": f"Formato {ext} não suportado"}
+
             if success:
-                await dispatcher.broadcast("JOB_COMPLETED", {"job_id": job_id, "status": "success", "file": caminho.name})
+                # 2. Busca o ID da nota recém importada (heurística simples ou retorno do processador)
+                # No fluxo atual, o processador salva a nota.
+                # 3. Notifica via SSE
+                await sse_dispatcher.broadcast("JOB_COMPLETED", {"job_id": job_id, "filename": caminho.name})
                 
-                # Proatividade: Após ingestão, verifica anomalias e duplicidades imediatamente
-                from backend.services.insights_processor import PriceInsightsService
-                insights = PriceInsightsService(db)
+                # 4. Dispara evento para processamento posterior (anomalias, insights, etc)
+                # nota_id aqui é opcional se o listener processar o departamento inteiro
+                await dispatcher.publish(EVENT_NOTA_IMPORTADA, nota_id=None, department_id=department_id)
                 
-                # 1. Checa duplicidades (Isso já dispara webhooks internamente)
-                await insights.detectar_notas_duplicadas_suspeitas(department_id=department_id)
-                
-                # 2. Checa anomalias críticas (Z-Score > 3.0)
-                anomalias = await insights.detectar_anomalias_estatisticas(z_threshold=3.0, department_id=department_id)
-                if anomalias:
-                    from backend.services.webhook_service import webhook_service
-                    for anom in anomalias:
-                        await webhook_service.trigger_event("alert.anomaly_detected", department_id, anom)
-                        await dispatcher.broadcast("ANOMALY_DETECTED", anom)
-
+                return {"status": "success"}
             else:
-                await dispatcher.broadcast("JOB_FAILED", {"job_id": job_id, "error": "Processamento falhou"})
+                await sse_dispatcher.broadcast("JOB_FAILED", {"job_id": job_id, "error": "Processamento falhou"})
+                return {"status": "error", "message": "Processamento falhou"}
                 
-            return success
         except Exception as e:
-            logger.error(f"Erro no worker ao processar {caminho.name}: {e}")
-            await dispatcher.broadcast("JOB_FAILED", {"job_id": job_id, "error": str(e)})
-            return False
-
-async def startup(ctx: dict[Any, Any]) -> None:
-    """Worker startup hook."""
-    logger.info("Worker iniciado e pronto para tarefas.")
-
-async def shutdown(ctx: dict[Any, Any]) -> None:
-    """Worker shutdown hook."""
-    logger.info("Worker encerrando...")
+            logger.error(f"Erro no worker ao processar {caminho.name}: {e}", exc_info=True)
+            await sse_dispatcher.broadcast("JOB_FAILED", {"job_id": job_id, "error": str(e)})
+            return {"status": "error", "message": str(e)}
 
 class WorkerSettings:
     """ARQ Worker configuration."""
@@ -96,5 +91,4 @@ class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
     on_startup = startup
     on_shutdown = shutdown
-    # Control concurrency
     max_jobs = 5

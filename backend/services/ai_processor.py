@@ -19,8 +19,10 @@ from backend.services.text_sanitizer import sanitize_prompt_categories
 
 logger = get_logger("services.ai")
 
+from backend.core.config import settings
+
 # Semáforo global para limitar a concorrência nas APIs de IA
-_ai_semaphore = asyncio.Semaphore(3)
+_ai_semaphore = asyncio.Semaphore(settings.ai_max_concurrency)
 
 class AIStructuredExtractor:
     def __init__(self, model: str = "llama-3.3-70b-versatile"):

@@ -137,6 +137,12 @@ class Settings(BaseSettings):
         description="Name of the HttpOnly cookie used for authentication.",
     )
 
+    ai_max_concurrency: int = Field(
+        default=3,
+        alias="AI_MAX_CONCURRENCY",
+        description="Maximum concurrent requests to AI APIs.",
+    )
+
     # Cloud Storage Settings
     storage_type: Literal["local", "s3"] = Field(
         default="local",
