@@ -106,6 +106,22 @@ class SupplierDrilldownResponse(BaseModel):
     top_produtos: List[TopProdutoFornecedor] = []
 
 
+class DataHealthMetrics(BaseModel):
+    """Metrics regarding data quality and extraction integrity."""
+    total_notas: int
+    notas_ok: int
+    notas_warning: int
+    notas_failed: int
+    percentual_saude: float
+    nivel: str  # ok, warning, danger
+    total_itens: int
+    itens_sem_ean: int
+    total_mismatches: int
+    descricoes_vazias: int
+    quantidades_invalidas: int
+    valores_invalidos: int
+
+
 class DashboardResumoResponse(BaseModel):
     """Consolidated summary for the dashboard."""
     total_geral: Decimal
@@ -114,6 +130,7 @@ class DashboardResumoResponse(BaseModel):
     top_produtos: List[TopProduto]
     top_fornecedores: List[TopFornecedor]
     alertas_risco: List[AlertaRisco] = []
+    saude_dados: Optional[DataHealthMetrics] = None
 
 
 class AlertaPreco(BaseModel):
