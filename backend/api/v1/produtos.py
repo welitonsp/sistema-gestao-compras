@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 import json
 from typing import Any, Annotated
 from fastapi import APIRouter, HTTPException, status, Query, Depends
@@ -12,9 +13,14 @@ import pandas as pd
 from sqlalchemy import select, or_
 from backend.api.dependencies import DbSession, CurrentUser, RoleChecker
 from backend.models.compras import AuditLog, Produto, ClassificacaoCache, UserRole, User, ItemNotaFiscal, NotaFiscal
-from backend.schemas.produtos import ProdutoResponse, ProdutoUpdate
+from backend.schemas.produtos import (
+    CategorySuggestionCandidatesResponse,
+    ProdutoResponse,
+    ProdutoUpdate,
+)
 
 from backend.services.catalog_healer import CatalogHealerService
+from backend.services.product_categorization import get_category_suggestion_candidates
 
 router = APIRouter(prefix="/produtos", tags=["Produtos"])
 
@@ -118,6 +124,32 @@ async def listar_produtos(
     stmt = stmt.order_by(Produto.nome_limpo).limit(limit).offset(offset)
     result = await db.execute(stmt)
     return result.scalars().all()
+
+
+@router.get(
+    "/categorization/candidates",
+    response_model=CategorySuggestionCandidatesResponse,
+    summary="Listar candidatos para categorização assistida",
+)
+async def listar_candidatos_categorizacao(
+    db: DbSession,
+    user: CurrentUser,
+    limit: int = Query(25, ge=1, le=100),
+    min_confidence: Decimal = Query(Decimal("0"), ge=0, le=1),
+    category_filter: str | None = Query(None),
+    include_low_confidence: bool = Query(True),
+) -> CategorySuggestionCandidatesResponse:
+    """Retorna candidatos read-only para revisão humana de categoria."""
+    department_id = user.department_id if user.role != UserRole.ADMIN else None
+    return await get_category_suggestion_candidates(
+        db=db,
+        department_id=department_id,
+        limit=limit,
+        min_confidence=min_confidence,
+        category_filter=category_filter,
+        include_low_confidence=include_low_confidence,
+    )
+
 
 @router.patch(
     "/{ean}",
