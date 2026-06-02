@@ -12,7 +12,7 @@ router = APIRouter(prefix="/chat", tags=["Audit Chat (IA)"])
 async def audit_chat(
     db: DbSession,
     user: CurrentUser,
-    payload: Dict[str, str] = Body(..., example={"message": "Qual o total gasto em laticínios no mês passado?"})
+    payload: Dict[str, str] = Body(..., examples=[{"message": "Qual o total gasto em laticínios no mês passado?"}])
 ) -> Dict[str, Any]:
     """
     Interface de chat em linguagem natural.
