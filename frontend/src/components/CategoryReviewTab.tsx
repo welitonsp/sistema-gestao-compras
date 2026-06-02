@@ -201,7 +201,7 @@ export const CategoryReviewTab: React.FC = () => {
                 Revisar Categorias
               </h3>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Sugestões read-only para apoiar a revisão humana do catálogo.
+                Analise e confirme sugestões inteligentes para sanear o catálogo de produtos.
               </p>
             </div>
           </div>
