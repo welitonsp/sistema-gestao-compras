@@ -3,7 +3,7 @@
 from enum import Enum
 from datetime import date, datetime
 from typing import Any, Annotated
-from fastapi import APIRouter, Query, status, Depends
+from fastapi import APIRouter, HTTPException, Query, status, Depends
 from fastapi.responses import StreamingResponse
 import io
 import csv
@@ -12,6 +12,7 @@ from backend.schemas.dashboard import (
     DashboardResumoResponse,
     AlertasPrecoResponse,
     ProductPriceHistoryResponse,
+    SavingOpportunitiesSummary,
     SupplierDrilldownResponse,
 )
 from backend.services.insights_processor import PriceInsightsService
@@ -310,6 +311,44 @@ async def obter_resumo_dashboard(
         alertas_risco=alertas_risco,
         saude_dados=saude_dados,
     )
+
+
+@router.get(
+    "/oportunidades/economia",
+    response_model=SavingOpportunitiesSummary,
+    summary="Obter oportunidades de economia",
+)
+async def obter_oportunidades_economia(
+    db: DbSession,
+    user: CurrentUser,
+    start_date: date | None = Query(None, description="Data inicial do filtro"),
+    end_date: date | None = Query(None, description="Data final do filtro"),
+    limit: int = Query(
+        10, ge=1, le=50, description="Quantidade máxima de oportunidades"
+    ),
+) -> SavingOpportunitiesSummary:
+    """Retorna oportunidades determinísticas de economia com isolamento de departamento."""
+    if start_date and end_date and end_date < start_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="end_date must be greater than or equal to start_date",
+        )
+
+    service = PriceInsightsService(db)
+    dept_id = user.department_id if user.role != UserRole.ADMIN else None
+
+    try:
+        return await service.get_saving_opportunities(
+            department_id=dept_id,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
 
 
