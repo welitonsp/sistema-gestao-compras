@@ -138,6 +138,8 @@ async def listar_candidatos_categorizacao(
     min_confidence: Decimal = Query(Decimal("0"), ge=0, le=1),
     category_filter: str | None = Query(None),
     include_low_confidence: bool = Query(True),
+    enable_ai: bool = Query(False),
+    ai_limit: int = Query(3, ge=0, le=5),
 ) -> CategorySuggestionCandidatesResponse:
     """Retorna candidatos read-only para revisão humana de categoria."""
     department_id = user.department_id if user.role != UserRole.ADMIN else None
@@ -148,6 +150,8 @@ async def listar_candidatos_categorizacao(
         min_confidence=min_confidence,
         category_filter=category_filter,
         include_low_confidence=include_low_confidence,
+        enable_ai=enable_ai,
+        ai_limit=ai_limit,
     )
 
 

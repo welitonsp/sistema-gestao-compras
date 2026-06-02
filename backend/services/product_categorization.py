@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Iterable
@@ -279,6 +280,65 @@ def parse_ai_category_response(
     }
 
 
+async def get_ai_category_suggestion_preview(payload: dict) -> dict | None:
+    """Placeholder provider for opt-in preview tests; real integration is out of scope."""
+
+    return None
+
+
+AiCategorySuggestionProvider = Callable[[dict], dict | None | Awaitable[dict | None]]
+
+
+async def _call_ai_category_suggestion_provider(
+    provider: AiCategorySuggestionProvider,
+    payload: dict,
+) -> dict | None:
+    result = provider(payload)
+    if hasattr(result, "__await__"):
+        return await result
+    return result
+
+
+async def _apply_ai_fallback_preview(
+    candidates: list[CategorySuggestionCandidate],
+    ai_limit: int,
+    provider: AiCategorySuggestionProvider,
+) -> None:
+    remaining = max(0, min(5, ai_limit))
+    if remaining == 0:
+        return
+
+    for candidate in candidates:
+        if remaining <= 0:
+            break
+        if candidate.source != "none":
+            continue
+
+        payload = build_ai_category_prompt_payload(candidate.product_name)
+        if payload is None:
+            continue
+
+        try:
+            raw_response = await _call_ai_category_suggestion_provider(
+                provider, payload
+            )
+        except Exception:
+            remaining -= 1
+            continue
+
+        remaining -= 1
+        parsed = parse_ai_category_response(raw_response or {})
+        if parsed["suggested_category"] is None or parsed["confidence"] <= 0:
+            continue
+
+        candidate.suggested_category = parsed["suggested_category"]
+        candidate.confidence = parsed["confidence"]
+        candidate.confidence_level = parsed["confidence_level"]
+        candidate.source = "ai_fallback"
+        candidate.reason = parsed["reason"]
+        candidate.can_confirm = True
+
+
 def _cache_keys_for_product(product_name: str, descriptions: Iterable[str]) -> set[str]:
     keys = {
         normalizar_descricao_produto(product_name),
@@ -328,6 +388,9 @@ async def get_category_suggestion_candidates(
     min_confidence: float | Decimal | None = 0,
     category_filter: str | None = None,
     include_low_confidence: bool = True,
+    enable_ai: bool = False,
+    ai_limit: int = 3,
+    ai_provider: AiCategorySuggestionProvider | None = None,
 ) -> CategorySuggestionCandidatesResponse:
     """Return read-only category review candidates from active fiscal items."""
 
@@ -478,6 +541,13 @@ async def get_category_suggestion_candidates(
         ),
         reverse=True,
     )
+
+    if enable_ai:
+        await _apply_ai_fallback_preview(
+            candidates=candidates,
+            ai_limit=ai_limit,
+            provider=ai_provider or get_ai_category_suggestion_preview,
+        )
 
     return CategorySuggestionCandidatesResponse(
         total_candidates=len(candidates),
