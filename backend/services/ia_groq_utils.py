@@ -4,13 +4,10 @@
 # ==========================================================
 
 import json
-import os
-import asyncio
 from datetime import datetime
 
-from dotenv import load_dotenv
 from groq import Groq, AsyncGroq
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from backend.core.database import SessionLocal
 from backend.models.compras import Produto, HistoricoPreco, ClassificacaoCache
@@ -20,14 +17,49 @@ from backend.core.config import settings
 
 logger = get_logger(__name__)
 
-GROQ_API_KEY = settings.groq_api_key
 GROQ_MODEL = "llama-3.1-8b-instant"
 
-if not GROQ_API_KEY:
-    raise RuntimeError("GROQ_API_KEY não encontrada nas configurações")
 
-groq_client = Groq(api_key=GROQ_API_KEY)
-async_groq_client = AsyncGroq(api_key=GROQ_API_KEY)
+class GroqNotConfiguredError(RuntimeError):
+    """Raised when a Groq call is attempted without runtime credentials."""
+
+
+_groq_client: Groq | None = None
+_async_groq_client: AsyncGroq | None = None
+_groq_client_api_key: str | None = None
+_async_groq_client_api_key: str | None = None
+
+
+def _get_groq_api_key() -> str:
+    api_key = settings.groq_api_key
+    if hasattr(api_key, "get_secret_value"):
+        api_key = api_key.get_secret_value()
+    api_key = str(api_key).strip() if api_key else ""
+    if not api_key:
+        raise GroqNotConfiguredError("GROQ_API_KEY not configured")
+    return api_key
+
+
+def get_groq_client() -> Groq:
+    """Return a lazily initialized Groq client."""
+
+    global _groq_client, _groq_client_api_key
+    api_key = _get_groq_api_key()
+    if _groq_client is None or _groq_client_api_key != api_key:
+        _groq_client = Groq(api_key=api_key)
+        _groq_client_api_key = api_key
+    return _groq_client
+
+
+def get_async_groq_client() -> AsyncGroq:
+    """Return a lazily initialized async Groq client."""
+
+    global _async_groq_client, _async_groq_client_api_key
+    api_key = _get_groq_api_key()
+    if _async_groq_client is None or _async_groq_client_api_key != api_key:
+        _async_groq_client = AsyncGroq(api_key=api_key)
+        _async_groq_client_api_key = api_key
+    return _async_groq_client
 
 # ==========================================
 # 2. BANCO DE DADOS (UNIFICADO COM ORM)
@@ -141,6 +173,7 @@ async def consultar_ia_async(nome_sujo: str) -> dict:
         "Retorne APENAS um JSON válido."
     )
     try:
+        async_groq_client = get_async_groq_client()
         resposta = await async_groq_client.chat.completions.create(
             messages=[
                 {"role": "system", "content": "Responda apenas JSON válido."},
@@ -168,8 +201,10 @@ async def consultar_ia_async(nome_sujo: str) -> dict:
         await salvar_no_cache(nome_sujo, resultado)
         
         return resultado
+    except GroqNotConfiguredError:
+        raise
     except Exception as e:
-        logger.error(f"Erro na IA (async): {e}")
+        logger.error(f"Erro na IA (async): {type(e).__name__}")
         return {"produto": nome_sujo, "marca": "", "categoria": "Outros", "unidade": "un"}
 
 async def extrair_json_com_groq_async(
@@ -177,6 +212,7 @@ async def extrair_json_com_groq_async(
     max_tokens: int = 6000, temperature: float = 0.1,
 ) -> dict:
     try:
+        async_groq_client = get_async_groq_client()
         resposta = await async_groq_client.chat.completions.create(
             messages=[
                 {"role": "system", "content": prompt_sistema},
@@ -188,8 +224,10 @@ async def extrair_json_com_groq_async(
             response_format={"type": "json_object"},
         )
         return json.loads(resposta.choices[0].message.content)
+    except GroqNotConfiguredError:
+        raise
     except Exception as e:
-        logger.error(f"Erro ao extrair JSON assincronamente com Groq: {e}")
+        logger.error(f"Erro ao extrair JSON assincronamente com Groq: {type(e).__name__}")
         raise
 
 # ==========================================
