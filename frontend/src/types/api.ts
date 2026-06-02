@@ -120,6 +120,46 @@ export interface AlertasPrecoResponse {
   alertas: AlertaPreco[];
 }
 
+export interface OpportunityScoreBreakdown {
+  financial_impact_score: number;
+  confidence_score: number;
+  recurrence_score: number;
+  total_score: number;
+}
+
+export interface SavingOpportunity {
+  id: string;
+  type: "price_gap" | "supplier_switch" | "recurrence_buy" | "data_quality" | string;
+  title: string;
+  description: string;
+  product_name: string | null;
+  ean: string | null;
+  category: string | null;
+  current_supplier: string | null;
+  suggested_supplier: string | null;
+  reference_date: string;
+  current_unit_price: number | null;
+  benchmark_unit_price: number | null;
+  estimated_savings: number;
+  estimated_savings_percent: number | null;
+  confidence: "high" | "medium" | "low" | "insufficient_data";
+  score: OpportunityScoreBreakdown;
+  reasons: string[];
+  warnings: string[];
+}
+
+export interface SavingOpportunitiesSummary {
+  period_start: string;
+  period_end: string;
+  total_estimated_savings: number;
+  opportunity_count: number;
+  high_confidence_count: number;
+  medium_confidence_count: number;
+  low_confidence_count: number;
+  insufficient_data_count: number;
+  opportunities: SavingOpportunity[];
+}
+
 export interface FornecedorImportado {
   id: string;
   cnpj: string;

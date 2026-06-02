@@ -35,6 +35,7 @@ import {
   AlertaPreco,
   AlertaRisco,
   ProductPriceHistoryResponse,
+  SavingOpportunitiesSummary,
   SupplierDrilldownResponse,
 } from "../types/api";
 import { apiClient } from "../api/client";
@@ -48,6 +49,62 @@ interface DashboardViewProps {
 }
 
 type PeriodPreset = "30d" | "month" | "year" | "all";
+type DateParams = { start_date?: string; end_date?: string };
+
+const formatCurrencyBRL = (value: number) =>
+  Number(value || 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+
+const SavingsSummaryCard: React.FC<{
+  summary: SavingOpportunitiesSummary | null;
+  loading: boolean;
+  error: boolean;
+}> = ({ summary, loading, error }) => (
+  <section className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all">
+    <div className="flex justify-between items-start mb-4">
+      <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400">
+        <TrendingUp size={20} aria-hidden="true" />
+      </div>
+      <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300">
+        potencial estimado
+      </span>
+    </div>
+    <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">
+      Potencial de Economia
+    </p>
+    {loading ? (
+      <div className="space-y-3 py-1">
+        <div className="h-8 w-36 rounded-lg bg-slate-200 dark:bg-slate-800 animate-pulse" />
+        <div className="h-3 w-48 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+      </div>
+    ) : error ? (
+      <div className="space-y-2">
+        <h3 className="text-xl font-bold text-slate-800 dark:text-white">
+          {formatCurrencyBRL(0)}
+        </h3>
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          Não foi possível carregar a estimativa agora.
+        </p>
+      </div>
+    ) : (
+      <div className="space-y-2">
+        <h3 className="text-2xl font-bold text-slate-800 dark:text-white">
+          {formatCurrencyBRL(summary?.total_estimated_savings || 0)}
+        </h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Estimativa baseada no histórico disponível
+        </p>
+        <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+          {(summary?.opportunity_count || 0) > 0
+            ? `${summary?.opportunity_count} oportunidade(s)`
+            : "Sem oportunidades detectadas"}
+        </p>
+      </div>
+    )}
+  </section>
+);
 
 const DataHealthCard: React.FC<{ metrics: DataHealthMetrics }> = ({
   metrics,
@@ -152,6 +209,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const [data, setData] = useState<DashboardResumo | null>(initialData);
   const [loading, setLoading] = useState(false);
+  const [savingsSummary, setSavingsSummary] =
+    useState<SavingOpportunitiesSummary | null>(null);
+  const [savingsLoading, setSavingsLoading] = useState(false);
+  const [savingsError, setSavingsError] = useState(false);
   const [period, setPeriod] = useState<PeriodPreset>("all");
   const [selectedEan, setSelectedEan] = useState<string | null>(null);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(
@@ -187,6 +248,56 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       document.removeEventListener("keydown", handleEscape);
     };
   }, [exportMenuOpen]);
+
+  const buildDateParams = (preset: PeriodPreset): DateParams => {
+    let start_date: string | undefined;
+    let end_date: string | undefined;
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+
+    if (preset === "30d") {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      start_date = d.toISOString().split("T")[0];
+      end_date = today;
+    } else if (preset === "month") {
+      const d = new Date(now.getFullYear(), now.getMonth(), 1);
+      start_date = d.toISOString().split("T")[0];
+      end_date = today;
+    } else if (preset === "year") {
+      const d = new Date(now.getFullYear(), 0, 1);
+      start_date = d.toISOString().split("T")[0];
+      end_date = today;
+    }
+
+    return { start_date, end_date };
+  };
+
+  const buildQueryString = ({ start_date, end_date }: DateParams) => {
+    const query = new URLSearchParams();
+    if (start_date) query.append("start_date", start_date);
+    if (end_date) query.append("end_date", end_date);
+    return query.toString();
+  };
+
+  const getDateParams = () => buildDateParams(period);
+
+  const fetchSavingsOpportunities = async (params: DateParams) => {
+    setSavingsLoading(true);
+    setSavingsError(false);
+    try {
+      const queryString = buildQueryString(params);
+      const response = await apiClient.get<SavingOpportunitiesSummary>(
+        `/dashboard/oportunidades/economia${queryString ? `?${queryString}` : ""}`,
+      );
+      setSavingsSummary(response);
+    } catch (error) {
+      setSavingsSummary(null);
+      setSavingsError(true);
+    } finally {
+      setSavingsLoading(false);
+    }
+  };
 
   const handleExport = async (dataset: string) => {
     setExporting(dataset);
@@ -234,40 +345,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const fetchFilteredData = async (preset: PeriodPreset) => {
     setLoading(true);
+    setSavingsLoading(true);
+    setSavingsError(false);
     try {
-      let start_date: string | undefined;
-      let end_date: string | undefined;
+      const queryString = buildQueryString(buildDateParams(preset));
+      const [dashboardResult, savingsResult] = await Promise.allSettled([
+        apiClient.get<DashboardResumo>(`/dashboard/resumo?${queryString}`),
+        apiClient.get<SavingOpportunitiesSummary>(
+          `/dashboard/oportunidades/economia${queryString ? `?${queryString}` : ""}`,
+        ),
+      ]);
 
-      const now = new Date();
-      const today = now.toISOString().split("T")[0];
-
-      if (preset === "30d") {
-        const d = new Date();
-        d.setDate(d.getDate() - 30);
-        start_date = d.toISOString().split("T")[0];
-        end_date = today;
-      } else if (preset === "month") {
-        const d = new Date(now.getFullYear(), now.getMonth(), 1);
-        start_date = d.toISOString().split("T")[0];
-        end_date = today;
-      } else if (preset === "year") {
-        const d = new Date(now.getFullYear(), 0, 1);
-        start_date = d.toISOString().split("T")[0];
-        end_date = today;
+      if (dashboardResult.status === "fulfilled") {
+        setData(dashboardResult.value);
+      } else {
+        throw dashboardResult.reason;
       }
 
-      const query = new URLSearchParams();
-      if (start_date) query.append("start_date", start_date);
-      if (end_date) query.append("end_date", end_date);
-
-      const response = await apiClient.get<DashboardResumo>(
-        `/dashboard/resumo?${query.toString()}`,
-      );
-      setData(response);
+      if (savingsResult.status === "fulfilled") {
+        setSavingsSummary(savingsResult.value);
+      } else {
+        setSavingsSummary(null);
+        setSavingsError(true);
+      }
     } catch (error) {
       console.error("Erro ao carregar dados filtrados:", error);
     } finally {
       setLoading(false);
+      setSavingsLoading(false);
     }
   };
 
@@ -276,6 +381,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       fetchFilteredData(period);
     } else {
       setData(initialData);
+      fetchSavingsOpportunities(buildDateParams(period));
     }
   }, [period, initialData]);
 
@@ -288,28 +394,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (!data?.top_fornecedores.length) return 0;
     return Math.max(...data.top_fornecedores.map((f) => f.total));
   }, [data]);
-
-  const getDateParams = () => {
-    let start_date: string | undefined;
-    let end_date: string | undefined;
-    const now = new Date();
-    const today = now.toISOString().split("T")[0];
-    if (period === "30d") {
-      const d = new Date();
-      d.setDate(d.getDate() - 30);
-      start_date = d.toISOString().split("T")[0];
-      end_date = today;
-    } else if (period === "month") {
-      const d = new Date(now.getFullYear(), now.getMonth(), 1);
-      start_date = d.toISOString().split("T")[0];
-      end_date = today;
-    } else if (period === "year") {
-      const d = new Date(now.getFullYear(), 0, 1);
-      start_date = d.toISOString().split("T")[0];
-      end_date = today;
-    }
-    return { start_date, end_date };
-  };
 
   if (!data && !loading) {
     return (
@@ -447,7 +531,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {loading ? (
         <div className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[1, 2, 3, 4].map((i) => (
+            {[1, 2, 3, 4, 5].map((i) => (
               <Skeleton key={i} className="h-32 rounded-2xl" />
             ))}
           </div>
@@ -485,6 +569,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </h3>
               </div>
             ))}
+            <SavingsSummaryCard
+              summary={savingsSummary}
+              loading={savingsLoading}
+              error={savingsError}
+            />
           </div>
 
           {/* Basic Risk Alerts */}
@@ -1429,7 +1518,7 @@ const SupplierHistoryModal: React.FC<{
                       <thead>
                         <tr className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-widest border-b border-slate-100 dark:border-slate-800">
                           <th className="pb-3 px-2">Data</th>
-                          <th className="pb-3 px-2 text-center">Nº Nota</th>
+                          <th className="pb-3 px-2 text-center">Registro</th>
                           <th className="pb-3 px-2 text-right">Total</th>
                         </tr>
                       </thead>
@@ -1445,7 +1534,7 @@ const SupplierHistoryModal: React.FC<{
                               )}
                             </td>
                             <td className="py-4 px-2 text-center text-slate-500">
-                              {n.numero_nota}
+                              Nota registrada
                             </td>
                             <td className="py-4 px-2 text-right font-bold text-slate-700 dark:text-slate-200">
                               R${" "}
