@@ -45,7 +45,13 @@ class CategorySuggestionCandidate(BaseModel):
     suggested_category: str | None
     confidence: float = Field(ge=0, le=1)
     confidence_level: Literal["high", "medium", "low", "insufficient_data"]
-    source: Literal["item_suggestion", "classification_cache", "rules", "none"]
+    source: Literal[
+        "item_suggestion",
+        "classification_cache",
+        "rules",
+        "none",
+        "ai_fallback",
+    ]
     reason: str
     occurrence_count: int = Field(ge=0)
     last_seen: date | None
