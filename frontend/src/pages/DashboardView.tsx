@@ -39,6 +39,7 @@ import {
   SupplierDrilldownResponse,
 } from "../types/api";
 import { apiClient } from "../api/client";
+import { formatCurrencyBRL } from "../lib/formatters";
 
 import { Skeleton } from "../components/Skeleton";
 
@@ -50,12 +51,6 @@ interface DashboardViewProps {
 
 type PeriodPreset = "30d" | "month" | "year" | "all";
 type DateParams = { start_date?: string; end_date?: string };
-
-const formatCurrencyBRL = (value: number) =>
-  Number(value || 0).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
 
 const SavingsSummaryCard: React.FC<{
   summary: SavingOpportunitiesSummary | null;

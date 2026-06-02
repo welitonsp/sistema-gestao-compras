@@ -5,16 +5,11 @@ import {
 } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { Skeleton } from '../components/Skeleton';
+import { formatCurrencyBRL } from '../lib/formatters';
 import type {
   SavingOpportunitiesSummary,
   SavingOpportunity,
 } from '../types/api';
-
-const formatCurrencyBRL = (value: number) =>
-  Number(value || 0).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
 
 const getConfidenceLabel = (confidence: SavingOpportunity["confidence"]) => {
   switch (confidence) {
@@ -29,6 +24,22 @@ const getConfidenceLabel = (confidence: SavingOpportunity["confidence"]) => {
     default:
       return "Confiança não informada";
   }
+};
+
+const buildSavingsOpportunitiesPath = () => {
+  const sourceParams =
+    typeof window === "undefined"
+      ? new URLSearchParams()
+      : new URLSearchParams(window.location.search);
+  const query = new URLSearchParams();
+  const startDate = sourceParams.get("start_date");
+  const endDate = sourceParams.get("end_date");
+
+  if (startDate) query.append("start_date", startDate);
+  if (endDate) query.append("end_date", endDate);
+
+  const queryString = query.toString();
+  return `/dashboard/oportunidades/economia${queryString ? `?${queryString}` : ""}`;
 };
 
 const SavingsOpportunitiesSection: React.FC<{
@@ -204,7 +215,7 @@ export const InsightsView: React.FC = () => {
           apiClient.get<any[]>('/dashboard/insights/volatilidade'),
         ]),
         apiClient.get<SavingOpportunitiesSummary>(
-          '/dashboard/oportunidades/economia',
+          buildSavingsOpportunitiesPath(),
         ),
       ]);
 
