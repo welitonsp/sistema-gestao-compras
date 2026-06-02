@@ -40,6 +40,19 @@ CATEGORIAS_CANONICAS = (
     "OUTROS",
 )
 
+ALLOWED_AI_CATEGORIES = [
+    "Alimentos",
+    "Bebidas",
+    "Limpeza",
+    "Higiene",
+    "Medicamentos",
+    "Material de Escritório",
+    "Eletrônicos",
+    "Manutenção",
+    "Vestuário",
+    "Outros",
+]
+
 ACTIVE_INVOICE_STATUS = "active"
 UNCATEGORIZED_LABELS = {
     "",
@@ -52,6 +65,26 @@ UNCATEGORIZED_LABELS = {
     "nao categorizado",
     "não categorizado",
 }
+AI_PROMPT_CONTROL_PATTERNS = (
+    r"```",
+    r"\{\{",
+    r"\}\}",
+    r"<script",
+    r"\bsystem\s*:",
+    r"\bassistant\s*:",
+    r"\buser\s*:",
+)
+SENSITIVE_AI_INPUT_PATTERNS = (
+    r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b",
+    r"\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b",
+    r"\b\d{44}\b",
+    r"https?://",
+    r"\bwww\.",
+    r"\bsefaz\b",
+    r"\bqr[\s_-]*code\b",
+    r"\bxml\b",
+    r"\b\d{11,}\b",
+)
 
 
 @dataclass(frozen=True)
@@ -125,6 +158,125 @@ def _confidence_level(confidence: float) -> str:
     if confidence > 0:
         return "low"
     return "insufficient_data"
+
+
+def _contains_sensitive_ai_input(value: str) -> bool:
+    normalized = value.strip()
+    if not normalized:
+        return True
+
+    if (
+        (normalized.startswith("{") and normalized.endswith("}"))
+        or (normalized.startswith("[") and normalized.endswith("]"))
+    ):
+        return True
+
+    return any(
+        re.search(pattern, normalized, flags=re.IGNORECASE)
+        for pattern in SENSITIVE_AI_INPUT_PATTERNS
+    )
+
+
+def _strip_prompt_control_tokens(value: str) -> str:
+    sanitized = value
+    for pattern in AI_PROMPT_CONTROL_PATTERNS:
+        sanitized = re.sub(pattern, " ", sanitized, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", sanitized).strip()
+
+
+def sanitize_ai_category_product_name(product_name: str | None) -> str | None:
+    """Sanitize the canonical product name allowed for a future AI fallback."""
+
+    if product_name is None:
+        return None
+
+    normalized = re.sub(r"\s+", " ", str(product_name)).strip()
+    if not normalized or _contains_sensitive_ai_input(normalized):
+        return None
+
+    sanitized = _strip_prompt_control_tokens(normalized)
+    if not sanitized or _contains_sensitive_ai_input(sanitized):
+        return None
+
+    return sanitized[:80].strip() or None
+
+
+def build_ai_category_prompt_payload(
+    product_name: str | None,
+    allowed_categories: list[str] | None = None,
+) -> dict | None:
+    """Build a minimal structured payload for future category fallback prompts."""
+
+    sanitized_product_name = sanitize_ai_category_product_name(product_name)
+    if sanitized_product_name is None:
+        return None
+
+    safe_allowed_categories = [
+        category
+        for category in (allowed_categories or ALLOWED_AI_CATEGORIES)
+        if category in ALLOWED_AI_CATEGORIES
+    ]
+
+    return {
+        "sanitized_product_name": sanitized_product_name,
+        "allowed_categories": safe_allowed_categories,
+    }
+
+
+def _sanitize_ai_reason(value: object) -> str:
+    if not isinstance(value, str):
+        return "Sem justificativa segura."
+
+    normalized = re.sub(r"\s+", " ", value).strip()
+    if not normalized:
+        return "Sem justificativa segura."
+
+    sanitized = _strip_prompt_control_tokens(normalized)
+    if not sanitized or _contains_sensitive_ai_input(sanitized):
+        return "Justificativa removida por segurança."
+
+    return sanitized[:160].strip() or "Sem justificativa segura."
+
+
+def parse_ai_category_response(
+    response: dict,
+    allowed_categories: list[str] | None = None,
+) -> dict:
+    """Parse a future AI category response with allow-list and safe fallback."""
+
+    safe_allowed_categories = [
+        category
+        for category in (allowed_categories or ALLOWED_AI_CATEGORIES)
+        if category in ALLOWED_AI_CATEGORIES
+    ]
+
+    fallback = {
+        "suggested_category": None,
+        "confidence": 0.0,
+        "confidence_level": "insufficient_data",
+        "reason": "Resposta sem categoria permitida.",
+        "source": "ai_fallback_contract",
+    }
+
+    if not isinstance(response, dict):
+        return fallback
+
+    suggested_category = response.get("suggested_category")
+    if suggested_category not in safe_allowed_categories:
+        return {
+            **fallback,
+            "reason": _sanitize_ai_reason(response.get("reason")),
+        }
+
+    confidence = _clamp_confidence(response.get("confidence"))
+
+    return {
+        "suggested_category": suggested_category,
+        "confidence": confidence,
+        "confidence_level": _confidence_level(confidence),
+        "reason": _sanitize_ai_reason(response.get("reason")),
+        "source": "ai_fallback_contract",
+    }
 
 
 def _cache_keys_for_product(product_name: str, descriptions: Iterable[str]) -> set[str]:
