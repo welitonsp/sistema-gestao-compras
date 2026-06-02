@@ -95,8 +95,10 @@ export const InsightsView: React.FC = () => {
             <div className="space-y-3">
               {data?.duplicatas?.slice(0, 3).map((item: any, i: number) => (
                 <div key={i} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-xs">
-                  <p className="font-bold text-slate-700 dark:text-slate-300">Nota {item.numero_nota}</p>
-                  <p className="text-slate-500 mt-1">Valor: R$ {item.valor_total}</p>
+                  <p className="font-bold text-slate-700 dark:text-slate-300">{item.fornecedor}</p>
+                  <p className="text-slate-500 mt-1">
+                    {item.data} • R$ {Number(item.valor).toFixed(2)} • {item.quantidade_notas} notas
+                  </p>
                 </div>
               ))}
             </div>
@@ -113,7 +115,7 @@ export const InsightsView: React.FC = () => {
             {data?.volatilidade?.slice(0, 5).map((item: any, i: number) => (
               <div key={i} className="flex justify-between items-center text-xs">
                 <span className="text-slate-500 truncate max-w-[150px]">{item.produto}</span>
-                <span className="font-bold text-amber-600">{item.variacao_maxima}%</span>
+                <span className="font-bold text-amber-600">{Number(item.variacao).toFixed(1)}%</span>
               </div>
             ))}
           </div>
@@ -132,7 +134,7 @@ export const InsightsView: React.FC = () => {
             {data?.tendencia?.slice(0, 4).map((item: any, i: number) => (
               <div key={i} className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-200 mb-1">{item.mes}</p>
-                <p className="text-lg font-bold">R$ {Number(item.preco_medio).toFixed(2)}</p>
+                <p className="text-lg font-bold">R$ {Number(item.valor).toFixed(2)}</p>
               </div>
             ))}
           </div>
