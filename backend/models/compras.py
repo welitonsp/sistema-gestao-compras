@@ -191,6 +191,7 @@ class NotaFiscal(TimestampMixin, Base):
     data_emissao: Mapped[date] = mapped_column(
         Date,
         nullable=False,
+        index=True,
     )
     valor_total: Mapped[Decimal] = mapped_column(
         Numeric(precision=14, scale=2),
