@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import {
-  AlertTriangle,
   CalendarDays,
   CheckCircle2,
   Hash,
+  Info,
   Layers,
   RefreshCw,
   Sparkles,
@@ -64,6 +64,11 @@ export const CategoryReviewTab: React.FC = () => {
     useState<CategorySuggestionCandidatesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [confirmingByEan, setConfirmingByEan] = useState<
+    Record<string, boolean>
+  >({});
+  const [errorByEan, setErrorByEan] = useState<Record<string, boolean>>({});
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const fetchCandidates = async () => {
     setLoading(true);
@@ -86,6 +91,48 @@ export const CategoryReviewTab: React.FC = () => {
     fetchCandidates();
   }, []);
 
+  const handleConfirmSuggestion = async (
+    candidate: CategorySuggestionCandidate,
+  ) => {
+    if (
+      !candidate.can_confirm ||
+      !candidate.suggested_category ||
+      confirmingByEan[candidate.ean]
+    ) {
+      return;
+    }
+
+    setConfirmingByEan((current) => ({ ...current, [candidate.ean]: true }));
+    setErrorByEan((current) => ({ ...current, [candidate.ean]: false }));
+    setSuccessMessage(null);
+
+    try {
+      await apiClient.patch(`/produtos/${encodeURIComponent(candidate.ean)}`, {
+        categoria: candidate.suggested_category,
+      });
+
+      setData((current) => {
+        if (!current) return current;
+
+        const nextCandidates = current.candidates.filter(
+          (item) => item.ean !== candidate.ean,
+        );
+
+        return {
+          ...current,
+          total_candidates: Math.max(0, current.total_candidates - 1),
+          returned_count: nextCandidates.length,
+          candidates: nextCandidates,
+        };
+      });
+      setSuccessMessage("Categoria confirmada.");
+    } catch {
+      setErrorByEan((current) => ({ ...current, [candidate.ean]: true }));
+    } finally {
+      setConfirmingByEan((current) => ({ ...current, [candidate.ean]: false }));
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -99,7 +146,7 @@ export const CategoryReviewTab: React.FC = () => {
   if (error) {
     return (
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-8 text-center">
-        <AlertTriangle
+        <Info
           size={40}
           className="mx-auto mb-4 text-amber-500"
           aria-hidden="true"
@@ -163,14 +210,26 @@ export const CategoryReviewTab: React.FC = () => {
             {data?.total_candidates || candidates.length} candidato(s)
           </div>
         </div>
+        {successMessage && (
+          <div className="mt-4 rounded-2xl border border-emerald-100 dark:border-emerald-800/50 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+            {successMessage}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         {candidates.map((candidate) => {
           const lastSeen = formatDate(candidate.last_seen);
-          const actionLabel = candidate.can_confirm
-            ? "Confirmar em fase futura"
-            : "Sem sugestão confirmável";
+          const isConfirming = Boolean(confirmingByEan[candidate.ean]);
+          const canConfirm =
+            candidate.can_confirm &&
+            Boolean(candidate.suggested_category) &&
+            !isConfirming;
+          const actionLabel = !candidate.can_confirm
+            ? "Sem sugestão confirmável"
+            : isConfirming
+              ? "Confirmando..."
+              : "Confirmar sugestão";
 
           return (
             <article
@@ -235,11 +294,22 @@ export const CategoryReviewTab: React.FC = () => {
               </p>
 
               <button
-                disabled
-                className="mt-auto w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                type="button"
+                onClick={() => handleConfirmSuggestion(candidate)}
+                disabled={!canConfirm}
+                className={`mt-auto w-full rounded-xl border px-4 py-2.5 text-xs font-bold uppercase tracking-widest transition-colors ${
+                  canConfirm
+                    ? "border-primary-600 bg-primary-600 text-white hover:bg-primary-700"
+                    : "border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                }`}
               >
                 {actionLabel}
               </button>
+              {errorByEan[candidate.ean] && (
+                <p className="text-xs font-medium text-rose-600 dark:text-rose-400">
+                  Não foi possível confirmar a categoria. Tente novamente.
+                </p>
+              )}
             </article>
           );
         })}
