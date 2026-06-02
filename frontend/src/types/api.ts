@@ -160,6 +160,26 @@ export interface SavingOpportunitiesSummary {
   opportunities: SavingOpportunity[];
 }
 
+export interface CategorySuggestionCandidate {
+  ean: string;
+  product_name: string;
+  current_category: string | null;
+  suggested_category: string | null;
+  confidence: number;
+  confidence_level: "high" | "medium" | "low" | "insufficient_data";
+  source: "item_suggestion" | "classification_cache" | "rules" | "none";
+  reason: string;
+  occurrence_count: number;
+  last_seen: string | null;
+  can_confirm: boolean;
+}
+
+export interface CategorySuggestionCandidatesResponse {
+  total_candidates: number;
+  returned_count: number;
+  candidates: CategorySuggestionCandidate[];
+}
+
 export interface FornecedorImportado {
   id: string;
   cnpj: string;

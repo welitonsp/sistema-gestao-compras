@@ -7,6 +7,7 @@ import {
 import { Produto } from '../types/api';
 import { apiClient } from '../api/client';
 import { Skeleton } from '../components/Skeleton';
+import { CategoryReviewTab } from '../components/CategoryReviewTab';
 
 interface Suggestion {
   type: string;
@@ -21,6 +22,8 @@ interface CatalogoViewProps {
   onExport?: () => void;
 }
 
+type CatalogTab = 'products' | 'category-review';
+
 export const CatalogoView: React.FC<CatalogoViewProps> = ({ produtos, onRefresh, onExport }) => {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -28,6 +31,7 @@ export const CatalogoView: React.FC<CatalogoViewProps> = ({ produtos, onRefresh,
   const [editingEan, setEditingEan] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [filterCategory, setFilterCategory] = useState('Todas');
+  const [activeTab, setActiveTab] = useState<CatalogTab>('products');
 
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -67,6 +71,33 @@ export const CatalogoView: React.FC<CatalogoViewProps> = ({ produtos, onRefresh,
 
   return (
     <div className="space-y-8">
+      <div className="flex flex-wrap gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-1 w-fit shadow-sm">
+        <button
+          onClick={() => setActiveTab('products')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'products'
+              ? 'bg-primary-600 text-white shadow-md shadow-primary-200'
+              : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+          aria-pressed={activeTab === 'products'}
+        >
+          Meus Produtos
+        </button>
+        <button
+          onClick={() => setActiveTab('category-review')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'category-review'
+              ? 'bg-primary-600 text-white shadow-md shadow-primary-200'
+              : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+          aria-pressed={activeTab === 'category-review'}
+        >
+          Revisar Categorias
+        </button>
+      </div>
+
+      {activeTab === 'products' ? (
+        <>
       {/* Suggestions Section */}
       {suggestions.length > 0 && (
         <div className="bg-primary-600 rounded-3xl p-6 shadow-xl shadow-primary-200 overflow-hidden relative transition-all">
@@ -274,6 +305,10 @@ export const CatalogoView: React.FC<CatalogoViewProps> = ({ produtos, onRefresh,
           </table>
         </div>
       </div>
+        </>
+      ) : (
+        <CategoryReviewTab />
+      )}
     </div>
   );
 };
