@@ -281,9 +281,9 @@ def parse_ai_category_response(
 
 
 async def get_ai_category_suggestion_preview(payload: dict) -> dict | None:
-    """Placeholder provider for opt-in preview tests; real integration is out of scope."""
-
-    return None
+    """Real AI provider integration using Groq/Llama."""
+    from backend.services.ai_processor import ai_category_fallback_provider
+    return await ai_category_fallback_provider(payload)
 
 
 AiCategorySuggestionProvider = Callable[[dict], dict | None | Awaitable[dict | None]]
