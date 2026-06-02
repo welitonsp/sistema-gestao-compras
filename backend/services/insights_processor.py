@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import List, Dict, Any
 from uuid import UUID
 from sqlalchemy import select, func, desc, or_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.schemas.dashboard import (
+    OpportunityScoreBreakdown,
+    SavingOpportunity,
+    SavingOpportunitiesSummary,
+)
 from backend.models.compras import (
     Produto,
     HistoricoPreco,
@@ -21,6 +26,7 @@ from core.logger import get_logger
 logger = get_logger("services.insights")
 
 ACTIVE_INVOICE_STATUS = "active"
+MIN_SAVINGS_OPPORTUNITY = Decimal("5.00")
 
 
 def _historico_visivel_filter():
@@ -38,9 +44,194 @@ def _historico_department_filter(department_id: UUID | None):
     )
 
 
+def _is_valid_ean(ean: str | None) -> bool:
+    """Accept only numeric GTIN/EAN-like identifiers for financial comparisons."""
+    if not ean:
+        return False
+    normalized = ean.strip()
+    return normalized.isdigit() and len(normalized) in {8, 12, 13, 14}
+
+
+def _decimal(value: Any) -> Decimal:
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
+
+
+def _bounded_score(value: int) -> int:
+    return max(0, min(100, value))
+
+
 class PriceInsightsService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def get_saving_opportunities(
+        self,
+        department_id: UUID | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        limit: int = 10,
+    ) -> SavingOpportunitiesSummary:
+        """Build deterministic price-gap saving opportunities from visible fiscal history."""
+        if end_date is None:
+            end_date = date.today()
+        if start_date is None:
+            start_date = end_date - timedelta(days=90)
+        if end_date < start_date:
+            raise ValueError("end_date must be greater than or equal to start_date")
+
+        limit = max(1, min(50, limit))
+
+        stmt = (
+            select(
+                HistoricoPreco.ean,
+                HistoricoPreco.id,
+                HistoricoPreco.preco_pago,
+                HistoricoPreco.quantidade,
+                HistoricoPreco.data_compra,
+                Produto.nome_limpo,
+                Produto.categoria,
+            )
+            .join(NotaFiscal, NotaFiscal.id == HistoricoPreco.nota_fiscal_id)
+            .join(Produto, Produto.ean == HistoricoPreco.ean)
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
+            .where(NotaFiscal.data_emissao >= start_date)
+            .where(NotaFiscal.data_emissao <= end_date)
+        )
+
+        if department_id:
+            stmt = stmt.where(NotaFiscal.department_id == department_id)
+
+        stmt = stmt.order_by(
+            HistoricoPreco.ean,
+            HistoricoPreco.data_compra,
+            HistoricoPreco.id,
+        )
+        result = await self.db.execute(stmt)
+
+        observations_by_ean: dict[str, list[Any]] = {}
+        for row in result.fetchall():
+            price = _decimal(row.preco_pago)
+            quantity = _decimal(row.quantidade)
+            if not _is_valid_ean(row.ean) or price <= 0 or quantity <= 0:
+                continue
+            observations_by_ean.setdefault(row.ean, []).append(row)
+
+        opportunities: list[SavingOpportunity] = []
+        for ean, observations in observations_by_ean.items():
+            if len(observations) < 2:
+                continue
+
+            current = max(
+                observations,
+                key=lambda row: (row.data_compra, row.id),
+            )
+            benchmark = min(_decimal(row.preco_pago) for row in observations)
+            current_price = _decimal(current.preco_pago)
+            quantity = _decimal(current.quantidade)
+            estimated_savings = (current_price - benchmark) * quantity
+
+            if estimated_savings < MIN_SAVINGS_OPPORTUNITY:
+                continue
+
+            financial_impact_score = _bounded_score(
+                int((estimated_savings / Decimal("500.00")) * Decimal("100"))
+            )
+            observation_count = len(observations)
+            if observation_count >= 5:
+                confidence_score = 90
+                confidence = (
+                    "high" if estimated_savings >= Decimal("50.00") else "medium"
+                )
+            elif observation_count >= 3:
+                confidence_score = 65
+                confidence = "medium"
+            else:
+                confidence_score = 35
+                confidence = "low"
+
+            recurrence_score = _bounded_score(observation_count * 20)
+            total_score = _bounded_score(
+                int(
+                    (
+                        financial_impact_score * 50
+                        + confidence_score * 30
+                        + recurrence_score * 20
+                    )
+                    / 100
+                )
+            )
+            savings_percent = None
+            if current_price > 0:
+                savings_percent = (
+                    (current_price - benchmark) / current_price
+                ) * Decimal("100")
+
+            opportunities.append(
+                SavingOpportunity(
+                    id=f"price_gap:{ean}:{current.data_compra.isoformat()}",
+                    type="price_gap",
+                    title="Potencial estimado de economia por diferença de preço",
+                    description=(
+                        "O preço unitário mais recente está acima do menor preço "
+                        "observado no histórico disponível para o mesmo EAN."
+                    ),
+                    product_name=current.nome_limpo,
+                    ean=ean,
+                    category=current.categoria,
+                    current_supplier=None,
+                    suggested_supplier=None,
+                    reference_date=current.data_compra,
+                    current_unit_price=current_price,
+                    benchmark_unit_price=benchmark,
+                    estimated_savings=estimated_savings,
+                    estimated_savings_percent=savings_percent,
+                    confidence=confidence,
+                    score=OpportunityScoreBreakdown(
+                        financial_impact_score=financial_impact_score,
+                        confidence_score=confidence_score,
+                        recurrence_score=recurrence_score,
+                        total_score=total_score,
+                    ),
+                    reasons=[
+                        "Comparação feita apenas entre observações do mesmo EAN.",
+                        "Benchmark calculado pelo menor preço observado no histórico disponível.",
+                        f"Amostra com {observation_count} observações comparáveis.",
+                    ],
+                    warnings=[
+                        "Potencial estimado, não recomendação financeira definitiva.",
+                    ],
+                )
+            )
+
+        opportunities.sort(
+            key=lambda item: (item.score.total_score, item.estimated_savings),
+            reverse=True,
+        )
+        opportunities = opportunities[:limit]
+
+        return SavingOpportunitiesSummary(
+            period_start=start_date,
+            period_end=end_date,
+            total_estimated_savings=sum(
+                (item.estimated_savings for item in opportunities), Decimal("0")
+            ),
+            opportunity_count=len(opportunities),
+            high_confidence_count=sum(
+                1 for item in opportunities if item.confidence == "high"
+            ),
+            medium_confidence_count=sum(
+                1 for item in opportunities if item.confidence == "medium"
+            ),
+            low_confidence_count=sum(
+                1 for item in opportunities if item.confidence == "low"
+            ),
+            insufficient_data_count=sum(
+                1 for item in opportunities if item.confidence == "insufficient_data"
+            ),
+            opportunities=opportunities,
+        )
 
     async def detectar_variacoes_anomalas(
         self, threshold_percent: float = 15.0, department_id: UUID | None = None
