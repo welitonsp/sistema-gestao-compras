@@ -353,6 +353,7 @@ class PriceInsightsService:
                 NotaFiscal.fornecedor_id,
                 NotaFiscal.data_emissao,
                 NotaFiscal.valor_total,
+                func.count(NotaFiscal.id).label("quantidade_notas"),
             )
             .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
             .group_by(
@@ -368,43 +369,29 @@ class PriceInsightsService:
 
         subq = subq.subquery("dups")
 
-        # Query principal juntando com a subquery para pegar os detalhes
+        # Query principal retorna apenas dados seguros para exibição e webhooks.
         stmt = (
             select(
-                NotaFiscal.chave_acesso,
-                NotaFiscal.data_emissao,
-                NotaFiscal.valor_total,
+                subq.c.data_emissao,
+                subq.c.valor_total,
+                subq.c.quantidade_notas,
                 Fornecedor.razao_social,
             )
-            .join(Fornecedor, Fornecedor.id == NotaFiscal.fornecedor_id)
-            .join(
-                subq,
-                (NotaFiscal.fornecedor_id == subq.c.fornecedor_id)
-                & (NotaFiscal.data_emissao == subq.c.data_emissao)
-                & (NotaFiscal.valor_total == subq.c.valor_total),
-            )
-            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
+            .select_from(subq)
+            .join(Fornecedor, Fornecedor.id == subq.c.fornecedor_id)
         )
-
-        if department_id:
-            stmt = stmt.where(NotaFiscal.department_id == department_id)
 
         result = await self.db.execute(stmt)
 
-        # Agrupa os resultados em memória
-        grupos_dict = {}
-        for row in result.fetchall():
-            key = (row.razao_social, row.data_emissao, row.valor_total)
-            if key not in grupos_dict:
-                grupos_dict[key] = {
-                    "fornecedor": row.razao_social,
-                    "data": row.data_emissao.isoformat(),
-                    "valor": float(row.valor_total),
-                    "chaves": [],
-                }
-            grupos_dict[key]["chaves"].append(row.chave_acesso)
-
-        alertas = list(grupos_dict.values())
+        alertas = [
+            {
+                "fornecedor": row.razao_social,
+                "data": row.data_emissao.isoformat(),
+                "valor": float(row.valor_total),
+                "quantidade_notas": row.quantidade_notas,
+            }
+            for row in result.fetchall()
+        ]
 
         # Dispara Webhooks (Idealmente faríamos batching, mas webhooks são poucos)
         for alerta in alertas:
