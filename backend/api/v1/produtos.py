@@ -13,6 +13,12 @@ import pandas as pd
 from sqlalchemy import select, or_
 from backend.api.dependencies import DbSession, CurrentUser, RoleChecker
 from backend.models.compras import AuditLog, Produto, ClassificacaoCache, UserRole, User, ItemNotaFiscal, NotaFiscal
+from backend.schemas.canonization import (
+    CanonizationCandidateGroup,
+    CanonizationCandidatesResponse,
+    CanonizationMatch,
+    CanonizationProduct,
+)
 from backend.schemas.produtos import (
     CategorySuggestionCandidatesResponse,
     ProdutoResponse,
@@ -20,6 +26,13 @@ from backend.schemas.produtos import (
 )
 
 from backend.services.catalog_healer import CatalogHealerService
+from backend.services.product_matching import (
+    DEFAULT_CANONIZATION_LIMIT,
+    DEFAULT_CANONIZATION_THRESHOLD,
+    MAX_PRODUCTS_TO_COMPARE,
+    ProductMatchInput,
+    generate_product_match_groups,
+)
 from backend.services.product_categorization import get_category_suggestion_candidates
 
 router = APIRouter(prefix="/produtos", tags=["Produtos"])
@@ -152,6 +165,103 @@ async def listar_candidatos_categorizacao(
         include_low_confidence=include_low_confidence,
         enable_ai=enable_ai,
         ai_limit=ai_limit,
+    )
+
+
+@router.get(
+    "/canonization/candidates",
+    response_model=CanonizationCandidatesResponse,
+    summary="Listar candidatos read-only para canonizacao de produtos",
+)
+async def listar_candidatos_canonizacao(
+    db: DbSession,
+    user: CurrentUser,
+    limit: int = Query(DEFAULT_CANONIZATION_LIMIT, ge=1, le=100),
+    threshold: float = Query(DEFAULT_CANONIZATION_THRESHOLD, ge=0.8, le=1.0),
+    category: str | None = Query(None),
+    include_reasons: bool = Query(True),
+) -> CanonizationCandidatesResponse:
+    """Retorna grupos de produtos similares sem gravar ou expor dados fiscais."""
+
+    is_admin = user.role == UserRole.ADMIN
+    if not is_admin and user.department_id is None:
+        groups, total_groups, safe_threshold, safe_limit = generate_product_match_groups(
+            products=[],
+            threshold=threshold,
+            limit=limit,
+            include_reasons=include_reasons,
+        )
+        return CanonizationCandidatesResponse(
+            groups=groups,
+            total_groups=total_groups,
+            threshold=safe_threshold,
+            limit=safe_limit,
+        )
+
+    department_id = None if is_admin else user.department_id
+    stmt = (
+        select(
+            Produto.ean,
+            Produto.nome_limpo,
+            Produto.categoria,
+            NotaFiscal.department_id,
+        )
+        .join(ItemNotaFiscal, ItemNotaFiscal.ean == Produto.ean)
+        .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+        .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
+        .distinct()
+        .order_by(Produto.nome_limpo)
+        .limit(MAX_PRODUCTS_TO_COMPARE)
+    )
+
+    if not is_admin:
+        stmt = stmt.where(NotaFiscal.department_id == department_id)
+
+    if category:
+        stmt = stmt.where(Produto.categoria == category)
+
+    result = await db.execute(stmt)
+    products = [
+        ProductMatchInput(
+            ean=row.ean,
+            name=row.nome_limpo,
+            category=row.categoria,
+            department_id=row.department_id,
+        )
+        for row in result.fetchall()
+    ]
+
+    groups, total_groups, safe_threshold, safe_limit = generate_product_match_groups(
+        products=products,
+        threshold=threshold,
+        limit=limit,
+        include_reasons=include_reasons,
+    )
+
+    return CanonizationCandidatesResponse(
+        groups=[
+            CanonizationCandidateGroup(
+                primary=CanonizationProduct(
+                    ean=group.primary.ean,
+                    name=group.primary.name,
+                    category=group.primary.category,
+                ),
+                matches=[
+                    CanonizationMatch(
+                        ean=match.ean,
+                        name=match.name,
+                        category=match.category,
+                        similarity=match.similarity,
+                        reason=match.reason,
+                    )
+                    for match in group.matches
+                ],
+            )
+            for group in groups
+        ],
+        total_groups=total_groups,
+        threshold=safe_threshold,
+        limit=safe_limit,
     )
 
 
