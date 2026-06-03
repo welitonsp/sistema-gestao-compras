@@ -84,9 +84,14 @@ class PriceInsightsService:
 
         limit = max(1, min(50, limit))
 
+        canonical_ean = build_canonical_item_ean_join(
+            HistoricoPreco.ean,
+            department_id,
+        )
         stmt = (
             select(
-                HistoricoPreco.ean,
+                canonical_ean.ean_expr.label("ean"),
+                HistoricoPreco.ean.label("source_ean"),
                 HistoricoPreco.id,
                 HistoricoPreco.preco_pago,
                 HistoricoPreco.quantidade,
@@ -95,7 +100,15 @@ class PriceInsightsService:
                 Produto.categoria,
             )
             .join(NotaFiscal, NotaFiscal.id == HistoricoPreco.nota_fiscal_id)
-            .join(Produto, Produto.ean == HistoricoPreco.ean)
+        )
+        if canonical_ean.mapping_alias is not None:
+            stmt = stmt.outerjoin(
+                canonical_ean.mapping_alias,
+                canonical_ean.join_condition,
+            )
+
+        stmt = (
+            stmt.join(Produto, Produto.ean == canonical_ean.ean_expr)
             .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
             .where(NotaFiscal.data_emissao >= start_date)
             .where(NotaFiscal.data_emissao <= end_date)
@@ -140,6 +153,7 @@ class PriceInsightsService:
                 int((estimated_savings / Decimal("500.00")) * Decimal("100"))
             )
             observation_count = len(observations)
+            uses_canonical_group = any(row.source_ean != ean for row in observations)
             if observation_count >= 5:
                 confidence_score = 90
                 confidence = (
@@ -169,6 +183,18 @@ class PriceInsightsService:
                     (current_price - benchmark) / current_price
                 ) * Decimal("100")
 
+            reasons = [
+                (
+                    "Comparação feita entre observações do mesmo EAN canônico."
+                    if uses_canonical_group
+                    else "Comparação feita apenas entre observações do mesmo EAN."
+                ),
+                "Benchmark calculado pelo menor preço observado no histórico disponível.",
+                f"Amostra com {observation_count} observações comparáveis.",
+            ]
+            if uses_canonical_group:
+                reasons.append("Análise consolidada via visão canônica de produtos.")
+
             opportunities.append(
                 SavingOpportunity(
                     id=f"price_gap:{ean}:{current.data_compra.isoformat()}",
@@ -195,11 +221,7 @@ class PriceInsightsService:
                         recurrence_score=recurrence_score,
                         total_score=total_score,
                     ),
-                    reasons=[
-                        "Comparação feita apenas entre observações do mesmo EAN.",
-                        "Benchmark calculado pelo menor preço observado no histórico disponível.",
-                        f"Amostra com {observation_count} observações comparáveis.",
-                    ],
+                    reasons=reasons,
                     warnings=[
                         "Potencial estimado, não recomendação financeira definitiva.",
                     ],
