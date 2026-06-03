@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), ".."
 from backend.core.config import settings
 from backend.models.base import Base
 # Importa modelos para garantir registro no metadata
-from backend.models.compras import Fornecedor, NotaFiscal, ItemNotaFiscal, Produto, HistoricoPreco, AuditLog, ClassificacaoCache
+from backend.models.compras import Fornecedor, NotaFiscal, ItemNotaFiscal, Produto, HistoricoPreco, AuditLog, ClassificacaoCache, CanonizacaoProduto
 
 config = context.config
 
