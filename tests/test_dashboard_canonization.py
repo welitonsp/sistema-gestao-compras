@@ -12,6 +12,7 @@ from backend.models.compras import (
     CanonizacaoProduto,
     Department,
     Fornecedor,
+    HistoricoPreco,
     ItemNotaFiscal,
     NotaFiscal,
     Produto,
@@ -27,6 +28,7 @@ async def _cleanup() -> None:
     async with SessionLocal() as db:
         await _disable_foreign_keys(db)
         await db.execute(delete(CanonizacaoProduto))
+        await db.execute(delete(HistoricoPreco))
         await db.execute(delete(ItemNotaFiscal))
         await db.execute(delete(NotaFiscal))
         await db.execute(delete(Fornecedor))
@@ -65,12 +67,14 @@ async def _create_purchase(
     suffix: str,
     quantity: Decimal,
     total: Decimal,
+    purchase_date: date = date(2026, 5, 26),
 ) -> None:
     async with SessionLocal() as db:
+        supplier_doc = uuid4().hex[:14]
         supplier = Fornecedor(
             id=uuid4(),
             razao_social=f"Fornecedor {suffix}",
-            **{"c" + "npj": (suffix + "0" * 14)[:14]},
+            **{"c" + "npj": supplier_doc},
         )
         db.add(supplier)
         await db.flush()
@@ -80,7 +84,7 @@ async def _create_purchase(
             department_id=department_id,
             fornecedor_id=supplier.id,
             numero_nota=f"N-{suffix}",
-            data_emissao=date(2026, 5, 26),
+            data_emissao=purchase_date,
             valor_total=total,
             status="active",
             **{"chave" + "_acesso": (suffix + "1" * 44)[:44]},
@@ -88,14 +92,26 @@ async def _create_purchase(
         db.add(invoice)
         await db.flush()
 
+        item = ItemNotaFiscal(
+            nota_fiscal_id=invoice.id,
+            ean=ean,
+            quantidade=quantity,
+            valor_unitario=total / quantity,
+            valor_total=total,
+            **{"descricao" + "_original": f"Rotulo preservado {suffix}"},
+        )
+        db.add(item)
+        await db.flush()
+
         db.add(
-            ItemNotaFiscal(
-                nota_fiscal_id=invoice.id,
+            HistoricoPreco(
                 ean=ean,
+                nota_fiscal_id=invoice.id,
+                item_nota_fiscal_id=item.id,
+                data_compra=purchase_date,
+                local=f"Fornecedor {suffix}",
+                preco_pago=total / quantity,
                 quantidade=quantity,
-                valor_unitario=total / quantity,
-                valor_total=total,
-                **{"descricao" + "_original": f"Rotulo preservado {suffix}"},
             )
         )
         await db.commit()
@@ -134,6 +150,17 @@ async def _category_summary(department_id: UUID | None):
         service = PriceInsightsService(db)
         return await service.obter_resumo_gastos_por_categoria(
             department_id=department_id,
+        )
+
+
+async def _saving_opportunities(department_id: UUID | None):
+    async with SessionLocal() as db:
+        service = PriceInsightsService(db)
+        return await service.get_saving_opportunities(
+            department_id=department_id,
+            start_date=date(2026, 5, 1),
+            end_date=date(2026, 6, 30),
+            limit=10,
         )
 
 
@@ -577,6 +604,295 @@ async def test_resumo_categoria_nao_altera_dados_fiscais_ou_catalogo():
         item = await db.scalar(
             select(ItemNotaFiscal).where(ItemNotaFiscal.ean == "7897000000051")
         )
+        product_after = (
+            product.nome_limpo,
+            product.marca,
+            product.categoria,
+            product.unidade,
+        )
+        item_after = (
+            item.ean,
+            getattr(item, "descricao" + "_original"),
+            item.quantidade,
+            item.valor_unitario,
+            item.valor_total,
+        )
+
+    assert product_after == product_before
+    assert item_after == item_before
+
+
+@pytest.mark.asyncio
+async def test_oportunidades_economia_sem_mapeamento_mantem_comportamento_anterior():
+    await _cleanup()
+    department = await _create_department("Canon Economia Sem Mapa")
+    await _create_products("7898000000001")
+    await _create_purchase(
+        department_id=department.id,
+        ean="7898000000001",
+        suffix="eco-semmapa-low",
+        quantity=Decimal("1"),
+        total=Decimal("10.00"),
+        purchase_date=date(2026, 5, 10),
+    )
+    await _create_purchase(
+        department_id=department.id,
+        ean="7898000000001",
+        suffix="eco-semmapa-high",
+        quantity=Decimal("1"),
+        total=Decimal("20.00"),
+        purchase_date=date(2026, 5, 20),
+    )
+
+    result = await _saving_opportunities(department.id)
+
+    assert result.opportunity_count == 1
+    opportunity = result.opportunities[0]
+    assert opportunity.ean == "7898000000001"
+    assert opportunity.product_name == "Produto 7898000000001"
+    assert opportunity.category == "Categoria 7898000000001"
+    assert opportunity.benchmark_unit_price == Decimal("10.0000")
+    assert opportunity.current_unit_price == Decimal("20.0000")
+
+
+@pytest.mark.asyncio
+async def test_oportunidades_economia_com_mapeamento_usa_grupo_canonico():
+    await _cleanup()
+    department = await _create_department("Canon Economia Mesmo Dept")
+    original = "7898000000011"
+    canonical = "7898000000012"
+    await _create_products(original, canonical)
+    await _create_purchase(
+        department_id=department.id,
+        ean=canonical,
+        suffix="eco-mapa-low",
+        quantity=Decimal("1"),
+        total=Decimal("10.00"),
+        purchase_date=date(2026, 5, 10),
+    )
+    await _create_purchase(
+        department_id=department.id,
+        ean=original,
+        suffix="eco-mapa-high",
+        quantity=Decimal("1"),
+        total=Decimal("20.00"),
+        purchase_date=date(2026, 5, 20),
+    )
+    await _create_mapping(
+        department_id=department.id,
+        original=original,
+        canonical=canonical,
+    )
+
+    result = await _saving_opportunities(department.id)
+
+    assert result.opportunity_count == 1
+    opportunity = result.opportunities[0]
+    assert opportunity.ean == canonical
+    assert opportunity.product_name == f"Produto {canonical}"
+    assert opportunity.category == f"Categoria {canonical}"
+    assert opportunity.benchmark_unit_price == Decimal("10.0000")
+    assert opportunity.current_unit_price == Decimal("20.0000")
+    assert opportunity.estimated_savings == Decimal("10.00000000")
+    assert original not in [item.ean for item in result.opportunities]
+    assert "Análise consolidada via visão canônica de produtos." in opportunity.reasons
+
+
+@pytest.mark.asyncio
+async def test_oportunidades_economia_mapeamento_de_um_tenant_nao_afeta_outro():
+    await _cleanup()
+    department_a = await _create_department("Canon Economia Tenant A")
+    department_b = await _create_department("Canon Economia Tenant B")
+    original = "7898000000021"
+    canonical = "7898000000022"
+    await _create_products(original, canonical)
+    await _create_purchase(
+        department_id=department_b.id,
+        ean=canonical,
+        suffix="eco-tenantb-canon-low",
+        quantity=Decimal("1"),
+        total=Decimal("5.00"),
+        purchase_date=date(2026, 5, 9),
+    )
+    await _create_purchase(
+        department_id=department_b.id,
+        ean=original,
+        suffix="eco-tenantb-raw-low",
+        quantity=Decimal("1"),
+        total=Decimal("15.00"),
+        purchase_date=date(2026, 5, 10),
+    )
+    await _create_purchase(
+        department_id=department_b.id,
+        ean=original,
+        suffix="eco-tenantb-raw-high",
+        quantity=Decimal("1"),
+        total=Decimal("25.00"),
+        purchase_date=date(2026, 5, 20),
+    )
+    await _create_mapping(
+        department_id=department_a.id,
+        original=original,
+        canonical=canonical,
+    )
+
+    result = await _saving_opportunities(department_b.id)
+
+    assert result.opportunity_count == 1
+    opportunity = result.opportunities[0]
+    assert opportunity.ean == original
+    assert opportunity.benchmark_unit_price == Decimal("15.0000")
+    assert opportunity.current_unit_price == Decimal("25.0000")
+    assert opportunity.product_name == f"Produto {original}"
+
+
+@pytest.mark.asyncio
+async def test_oportunidades_economia_global_sem_department_id_nao_aplica_mapeamento():
+    await _cleanup()
+    department = await _create_department("Canon Economia Global")
+    original = "7898000000031"
+    canonical = "7898000000032"
+    await _create_products(original, canonical)
+    await _create_purchase(
+        department_id=department.id,
+        ean=canonical,
+        suffix="eco-global-canon-low",
+        quantity=Decimal("1"),
+        total=Decimal("5.00"),
+        purchase_date=date(2026, 5, 9),
+    )
+    await _create_purchase(
+        department_id=department.id,
+        ean=original,
+        suffix="eco-global-raw-low",
+        quantity=Decimal("1"),
+        total=Decimal("15.00"),
+        purchase_date=date(2026, 5, 10),
+    )
+    await _create_purchase(
+        department_id=department.id,
+        ean=original,
+        suffix="eco-global-raw-high",
+        quantity=Decimal("1"),
+        total=Decimal("25.00"),
+        purchase_date=date(2026, 5, 20),
+    )
+    await _create_mapping(
+        department_id=department.id,
+        original=original,
+        canonical=canonical,
+    )
+
+    result = await _saving_opportunities(None)
+
+    assert result.opportunity_count == 1
+    opportunity = result.opportunities[0]
+    assert opportunity.ean == original
+    assert opportunity.benchmark_unit_price == Decimal("15.0000")
+    assert opportunity.current_unit_price == Decimal("25.0000")
+    assert opportunity.product_name == f"Produto {original}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["inactive", "reverted"])
+async def test_oportunidades_economia_status_nao_active_nao_aplica_mapeamento(status):
+    await _cleanup()
+    department = await _create_department(f"Canon Economia {status}")
+    original = "7898000000041"
+    canonical = "7898000000042"
+    await _create_products(original, canonical)
+    await _create_purchase(
+        department_id=department.id,
+        ean=canonical,
+        suffix=f"eco-{status}-canon-low",
+        quantity=Decimal("1"),
+        total=Decimal("5.00"),
+        purchase_date=date(2026, 5, 9),
+    )
+    await _create_purchase(
+        department_id=department.id,
+        ean=original,
+        suffix=f"eco-{status}-raw-low",
+        quantity=Decimal("1"),
+        total=Decimal("15.00"),
+        purchase_date=date(2026, 5, 10),
+    )
+    await _create_purchase(
+        department_id=department.id,
+        ean=original,
+        suffix=f"eco-{status}-raw-high",
+        quantity=Decimal("1"),
+        total=Decimal("25.00"),
+        purchase_date=date(2026, 5, 20),
+    )
+    await _create_mapping(
+        department_id=department.id,
+        original=original,
+        canonical=canonical,
+        status=status,
+    )
+
+    result = await _saving_opportunities(department.id)
+
+    assert result.opportunity_count == 1
+    opportunity = result.opportunities[0]
+    assert opportunity.ean == original
+    assert opportunity.benchmark_unit_price == Decimal("15.0000")
+    assert opportunity.current_unit_price == Decimal("25.0000")
+    assert opportunity.product_name == f"Produto {original}"
+
+
+@pytest.mark.asyncio
+async def test_oportunidades_economia_nao_altera_dados_fiscais_ou_catalogo():
+    await _cleanup()
+    department = await _create_department("Canon Economia Integridade")
+    original = "7898000000051"
+    canonical = "7898000000052"
+    await _create_products(original, canonical)
+    await _create_purchase(
+        department_id=department.id,
+        ean=canonical,
+        suffix="eco-integridade-low",
+        quantity=Decimal("1"),
+        total=Decimal("10.00"),
+        purchase_date=date(2026, 5, 10),
+    )
+    await _create_purchase(
+        department_id=department.id,
+        ean=original,
+        suffix="eco-integridade-high",
+        quantity=Decimal("1"),
+        total=Decimal("20.00"),
+        purchase_date=date(2026, 5, 20),
+    )
+    await _create_mapping(
+        department_id=department.id,
+        original=original,
+        canonical=canonical,
+    )
+
+    async with SessionLocal() as db:
+        product = await db.get(Produto, original)
+        item = await db.scalar(select(ItemNotaFiscal).where(ItemNotaFiscal.ean == original))
+        product_before = (
+            product.nome_limpo,
+            product.marca,
+            product.categoria,
+            product.unidade,
+        )
+        item_before = (
+            item.ean,
+            getattr(item, "descricao" + "_original"),
+            item.quantidade,
+            item.valor_unitario,
+            item.valor_total,
+        )
+
+    await _saving_opportunities(department.id)
+
+    async with SessionLocal() as db:
+        product = await db.get(Produto, original)
+        item = await db.scalar(select(ItemNotaFiscal).where(ItemNotaFiscal.ean == original))
         product_after = (
             product.nome_limpo,
             product.marca,
