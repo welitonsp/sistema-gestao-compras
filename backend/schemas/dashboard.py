@@ -53,6 +53,7 @@ class HistoricoPrecoProduto(BaseModel):
     quantidade: Decimal
     valor_total: Decimal
     numero_nota: Optional[str] = None
+    ean_original: Optional[str] = None
 
 
 class ProductPriceHistoryResponse(BaseModel):

@@ -1134,17 +1134,49 @@ class PriceInsightsService:
         self, ean: str, department_id: UUID | None = None, limit: int = 50
     ) -> Dict[str, Any]:
         """Retorna o histórico cronológico de compras de um produto específico."""
-        from backend.models.compras import Fornecedor
+        from backend.core.canonization_queries import ACTIVE_CANONIZATION_STATUS
+        from backend.models.compras import CanonizacaoProduto
+
+        target_ean = ean
+        history_eans = [ean]
+
+        if department_id is not None:
+            original_mapping = await self.db.scalar(
+                select(CanonizacaoProduto.ean_canonico).where(
+                    CanonizacaoProduto.department_id == department_id,
+                    CanonizacaoProduto.ean_original == ean,
+                    CanonizacaoProduto.status == ACTIVE_CANONIZATION_STATUS,
+                )
+            )
+            if original_mapping is not None:
+                target_ean = original_mapping
+
+            active_originals = (
+                (
+                    await self.db.execute(
+                        select(CanonizacaoProduto.ean_original).where(
+                            CanonizacaoProduto.department_id == department_id,
+                            CanonizacaoProduto.ean_canonico == target_ean,
+                            CanonizacaoProduto.status == ACTIVE_CANONIZATION_STATUS,
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if active_originals:
+                history_eans = [target_ean, *active_originals]
 
         # Busca o nome do produto
         res_prod = await self.db.execute(
-            select(Produto.nome_limpo).where(Produto.ean == ean)
+            select(Produto.nome_limpo).where(Produto.ean == target_ean)
         )
         nome_produto = res_prod.scalar_one_or_none() or "Produto Desconhecido"
 
         # Busca o histórico de preços
         stmt = (
             select(
+                HistoricoPreco.ean.label("ean_original"),
                 HistoricoPreco.data_compra,
                 HistoricoPreco.local,
                 HistoricoPreco.preco_pago,
@@ -1153,7 +1185,7 @@ class PriceInsightsService:
                 (HistoricoPreco.preco_pago * HistoricoPreco.quantidade).label("total"),
             )
             .outerjoin(NotaFiscal, NotaFiscal.id == HistoricoPreco.nota_fiscal_id)
-            .where(HistoricoPreco.ean == ean)
+            .where(HistoricoPreco.ean.in_(history_eans))
             .where(_historico_visivel_filter())
         )
 
@@ -1176,11 +1208,12 @@ class PriceInsightsService:
                     "quantidade": float(row.quantidade),
                     "valor_total": float(row.total),
                     "numero_nota": row.numero_nota,
+                    "ean_original": row.ean_original,
                 }
             )
 
         return {
-            "ean": ean,
+            "ean": target_ean,
             "nome_produto": nome_produto,
             "historico": historico,
         }
