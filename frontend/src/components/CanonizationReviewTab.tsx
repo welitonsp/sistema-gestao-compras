@@ -41,8 +41,19 @@ const similarityClass = (value: number) => {
 
 const categoryLabel = (category?: string | null) => category || "Sem categoria";
 
-const MatchRow: React.FC<{ match: CanonizationMatch }> = ({ match }) => (
-  <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-4">
+const MatchRow: React.FC<{
+  match: CanonizationMatch;
+  primaryEan: string;
+  selected: boolean;
+  onToggle: (primaryEan: string, matchEan: string) => void;
+}> = ({ match, primaryEan, selected, onToggle }) => (
+  <div
+    className={`rounded-2xl border p-4 transition-colors ${
+      selected
+        ? "border-primary-200 bg-primary-50/70 dark:border-primary-800/60 dark:bg-primary-900/20"
+        : "border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-800/40"
+    }`}
+  >
     <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
       <div className="min-w-0">
         <p className="font-bold text-sm text-slate-800 dark:text-slate-100 break-words">
@@ -73,52 +84,131 @@ const MatchRow: React.FC<{ match: CanonizationMatch }> = ({ match }) => (
         {match.reason}
       </p>
     )}
+
+    <label className="mt-4 inline-flex w-fit cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={() => onToggle(primaryEan, match.ean)}
+        className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+        aria-label={`${selected ? "Remover" : "Selecionar"} ${match.name} da simulação de canonização`}
+      />
+      {selected ? "Selecionado para simulação" : "Selecionar para simulação"}
+    </label>
   </div>
 );
 
-const GroupCard: React.FC<{ group: CanonizationCandidateGroup }> = ({
-  group,
-}) => (
-  <article className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-5">
-    <div className="flex items-start gap-3">
-      <div className="p-2 rounded-xl bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400">
-        <ShieldCheck size={18} aria-hidden="true" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
-          Produto principal
-        </p>
-        <h4 className="mt-1 font-bold text-slate-800 dark:text-white break-words">
-          {group.primary.name}
-        </h4>
-        <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold text-slate-500 dark:text-slate-400">
-          <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-1 font-mono">
-            <Hash size={12} aria-hidden="true" />
-            {group.primary.ean}
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-1">
-            <Layers size={12} aria-hidden="true" />
-            {categoryLabel(group.primary.category)}
-          </span>
+const GroupCard: React.FC<{
+  group: CanonizationCandidateGroup;
+  selectedMatchEans: string[];
+  onToggleMatch: (primaryEan: string, matchEan: string) => void;
+}> = ({ group, selectedMatchEans, onToggleMatch }) => {
+  const selectedMatches = group.matches.filter((match) =>
+    selectedMatchEans.includes(match.ean),
+  );
+
+  return (
+    <article className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-5">
+      <div className="flex items-start gap-3">
+        <div className="p-2 rounded-xl bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400">
+          <ShieldCheck size={18} aria-hidden="true" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+            Produto principal
+          </p>
+          <h4 className="mt-1 font-bold text-slate-800 dark:text-white break-words">
+            {group.primary.name}
+          </h4>
+          <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold text-slate-500 dark:text-slate-400">
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-1 font-mono">
+              <Hash size={12} aria-hidden="true" />
+              {group.primary.ean}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-1">
+              <Layers size={12} aria-hidden="true" />
+              {categoryLabel(group.primary.category)}
+            </span>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div className="space-y-3">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
-        Candidatos similares
-      </p>
-      {group.matches.map((match) => (
-        <MatchRow key={match.ean} match={match} />
-      ))}
-    </div>
-  </article>
-);
+      <div className="space-y-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+          Candidatos similares
+        </p>
+        {group.matches.map((match) => (
+          <MatchRow
+            key={match.ean}
+            match={match}
+            primaryEan={group.primary.ean}
+            selected={selectedMatchEans.includes(match.ean)}
+            onToggle={onToggleMatch}
+          />
+        ))}
+      </div>
+
+      {selectedMatches.length > 0 && (
+        <div className="rounded-2xl border border-primary-100 bg-primary-50/70 p-4 dark:border-primary-800/50 dark:bg-primary-900/20">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 rounded-xl bg-white p-2 text-primary-600 dark:bg-slate-900 dark:text-primary-300">
+              <Eye size={16} aria-hidden="true" />
+            </div>
+            <div className="min-w-0 space-y-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-primary-600 dark:text-primary-300">
+                  Plano de Canonização - Simulação local
+                </p>
+                <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white break-words">
+                  {group.primary.name}
+                </p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {selectedMatches.length} candidato(s) selecionado(s)
+                </p>
+              </div>
+
+              <ul className="space-y-2">
+                {selectedMatches.slice(0, 4).map((match) => (
+                  <li
+                    key={match.ean}
+                    className="rounded-xl bg-white px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                  >
+                    <span className="font-bold">{match.name}</span>
+                    <span className="ml-2 font-mono text-slate-400">
+                      {match.ean}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              {selectedMatches.length > 4 && (
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  +{selectedMatches.length - 4} candidato(s) adicional(is)
+                </p>
+              )}
+
+              <div className="space-y-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                <p>Nenhuma alteração será salva nesta fase.</p>
+                <p>
+                  A efetivação no banco será tratada em fase futura com
+                  auditoria e confirmação explícita.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+};
 
 export const CanonizationReviewTab: React.FC = () => {
   const [data, setData] = useState<CanonizationCandidatesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [selectedMatches, setSelectedMatches] = useState<Record<string, string[]>>(
+    {},
+  );
 
   const fetchCandidates = async () => {
     setLoading(true);
@@ -139,6 +229,30 @@ export const CanonizationReviewTab: React.FC = () => {
   useEffect(() => {
     fetchCandidates();
   }, []);
+
+  const toggleMatchSelection = (primaryEan: string, matchEan: string) => {
+    setSelectedMatches((current) => {
+      const currentGroup = current[primaryEan] || [];
+      let nextGroup: string[];
+
+      if (currentGroup.includes(matchEan)) {
+        nextGroup = currentGroup.filter((ean) => ean !== matchEan);
+      } else {
+        nextGroup = [...currentGroup, matchEan];
+      }
+
+      if (nextGroup.length === 0) {
+        const { [primaryEan]: removed, ...rest } = current;
+        void removed;
+        return rest;
+      }
+
+      return {
+        ...current,
+        [primaryEan]: nextGroup,
+      };
+    });
+  };
 
   if (loading) {
     return (
@@ -247,6 +361,8 @@ export const CanonizationReviewTab: React.FC = () => {
                 .map((match) => match.ean)
                 .join("-")}`}
               group={group}
+              selectedMatchEans={selectedMatches[group.primary.ean] || []}
+              onToggleMatch={toggleMatchSelection}
             />
           ))}
         </div>
