@@ -180,6 +180,29 @@ export interface CategorySuggestionCandidatesResponse {
   candidates: CategorySuggestionCandidate[];
 }
 
+export interface CanonizationProduct {
+  ean: string;
+  name: string;
+  category?: string | null;
+}
+
+export interface CanonizationMatch extends CanonizationProduct {
+  similarity: number;
+  reason: string | null;
+}
+
+export interface CanonizationCandidateGroup {
+  primary: CanonizationProduct;
+  matches: CanonizationMatch[];
+}
+
+export interface CanonizationCandidatesResponse {
+  groups: CanonizationCandidateGroup[];
+  total_groups: number;
+  threshold: number;
+  limit: number;
+}
+
 export interface FornecedorImportado {
   id: string;
   cnpj: string;
