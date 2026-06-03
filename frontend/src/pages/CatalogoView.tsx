@@ -265,7 +265,25 @@ export const CatalogoView: React.FC<CatalogoViewProps> = ({ produtos, onRefresh,
                 filtered.map((p) => (
                   <tr key={p.ean} className="group hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
                     <td className="px-8 py-5">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{p.nome_limpo}</p>
+                      <div className="space-y-2">
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{p.nome_limpo}</p>
+                        {p.canonizacao && (
+                          <div className="flex max-w-xl flex-col gap-1 text-xs">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold uppercase text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300 dark:ring-emerald-800/70">
+                                <Info size={12} />
+                                Mapeado
+                              </span>
+                              <span className="break-all text-slate-500 dark:text-slate-400">
+                                Mapeado para EAN canônico: <span className="font-mono font-semibold text-slate-700 dark:text-slate-200">{p.canonizacao.ean_canonico}</span>
+                              </span>
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                              Produto original mantido no catálogo{p.canonizacao.reason ? ` · ${p.canonizacao.reason}` : ''}
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-8 py-5">
                       <span className="flex items-center gap-1.5 text-xs font-mono text-slate-400 dark:text-slate-500 bg-slate-100/50 dark:bg-slate-800/50 px-2 py-1 rounded-lg w-fit">

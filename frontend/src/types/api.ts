@@ -347,6 +347,13 @@ export interface Produto {
   marca: string | null;
   categoria: string;
   unidade: string;
+  canonizacao?: {
+    status: string;
+    ean_original: string;
+    ean_canonico: string;
+    reason?: string | null;
+    confidence_score?: number | null;
+  } | null;
 }
 
 export interface ProdutoUpdate {
