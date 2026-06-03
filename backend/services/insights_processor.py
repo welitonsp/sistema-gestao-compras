@@ -14,6 +14,7 @@ from backend.schemas.dashboard import (
     SavingOpportunity,
     SavingOpportunitiesSummary,
 )
+from backend.core.canonization_queries import build_canonical_item_ean_join
 from backend.models.compras import (
     Produto,
     HistoricoPreco,
@@ -696,9 +697,13 @@ class PriceInsightsService:
         end_date: date | None = None,
     ) -> List[Dict[str, Any]]:
         """Retorna os top produtos por valor total gasto com filtro de data."""
+        canonical_ean = build_canonical_item_ean_join(
+            ItemNotaFiscal.ean,
+            department_id,
+        )
         stmt = (
             select(
-                Produto.ean,
+                canonical_ean.ean_expr.label("ean"),
                 Produto.nome_limpo,
                 func.sum(ItemNotaFiscal.valor_total).label("total"),
                 func.sum(ItemNotaFiscal.quantidade).label("quantidade_total"),
@@ -707,8 +712,17 @@ class PriceInsightsService:
                     / func.nullif(func.sum(ItemNotaFiscal.quantidade), 0)
                 ).label("preco_medio"),
             )
-            .join(ItemNotaFiscal, Produto.ean == ItemNotaFiscal.ean)
+            .select_from(ItemNotaFiscal)
             .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+        )
+        if canonical_ean.mapping_alias is not None:
+            stmt = stmt.outerjoin(
+                canonical_ean.mapping_alias,
+                canonical_ean.join_condition,
+            )
+
+        stmt = (
+            stmt.join(Produto, Produto.ean == canonical_ean.ean_expr)
             .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
         )
         if department_id:
@@ -720,7 +734,7 @@ class PriceInsightsService:
             stmt = stmt.where(NotaFiscal.data_emissao <= end_date)
 
         stmt = (
-            stmt.group_by(Produto.ean, Produto.nome_limpo)
+            stmt.group_by(canonical_ean.ean_expr, Produto.nome_limpo)
             .order_by(desc("total"))
             .limit(limit)
         )
