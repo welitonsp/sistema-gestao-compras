@@ -394,12 +394,25 @@ class PriceInsightsService:
         end_date: date | None = None,
     ) -> List[Dict[str, Any]]:
         """Retorna o total gasto agrupado por categoria com isolamento e filtro de data."""
+        canonical_ean = build_canonical_item_ean_join(
+            ItemNotaFiscal.ean,
+            department_id,
+        )
         stmt = (
             select(
                 Produto.categoria, func.sum(ItemNotaFiscal.valor_total).label("total")
             )
-            .join(ItemNotaFiscal, Produto.ean == ItemNotaFiscal.ean)
+            .select_from(ItemNotaFiscal)
             .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+        )
+        if canonical_ean.mapping_alias is not None:
+            stmt = stmt.outerjoin(
+                canonical_ean.mapping_alias,
+                canonical_ean.join_condition,
+            )
+
+        stmt = (
+            stmt.join(Produto, Produto.ean == canonical_ean.ean_expr)
             .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
         )
 

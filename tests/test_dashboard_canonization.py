@@ -129,8 +129,20 @@ async def _top_products(department_id: UUID | None):
         )
 
 
+async def _category_summary(department_id: UUID | None):
+    async with SessionLocal() as db:
+        service = PriceInsightsService(db)
+        return await service.obter_resumo_gastos_por_categoria(
+            department_id=department_id,
+        )
+
+
 def _by_ean(items):
     return {item["ean"]: item for item in items}
+
+
+def _by_category(items):
+    return {item["categoria"]: item for item in items}
 
 
 @pytest.mark.asyncio
@@ -335,6 +347,235 @@ async def test_top_produtos_nao_altera_dados_fiscais_ou_catalogo():
         product = await db.get(Produto, "7896000000051")
         item = await db.scalar(
             select(ItemNotaFiscal).where(ItemNotaFiscal.ean == "7896000000051")
+        )
+        product_after = (
+            product.nome_limpo,
+            product.marca,
+            product.categoria,
+            product.unidade,
+        )
+        item_after = (
+            item.ean,
+            getattr(item, "descricao" + "_original"),
+            item.quantidade,
+            item.valor_unitario,
+            item.valor_total,
+        )
+
+    assert product_after == product_before
+    assert item_after == item_before
+
+
+@pytest.mark.asyncio
+async def test_resumo_categoria_sem_mapeamento_mantem_comportamento_anterior():
+    await _cleanup()
+    department = await _create_department("Canon Categoria Sem Mapa")
+    await _create_products("7897000000001", "7897000000002")
+    await _create_purchase(
+        department_id=department.id,
+        ean="7897000000001",
+        suffix="catsemmapa1",
+        quantity=Decimal("1"),
+        total=Decimal("10.00"),
+    )
+    await _create_purchase(
+        department_id=department.id,
+        ean="7897000000002",
+        suffix="catsemmapa2",
+        quantity=Decimal("1"),
+        total=Decimal("20.00"),
+    )
+
+    result = await _category_summary(department.id)
+
+    assert [item["categoria"] for item in result] == [
+        "Categoria 7897000000002",
+        "Categoria 7897000000001",
+    ]
+    assert _by_category(result)["Categoria 7897000000001"]["total"] == 10.0
+    assert _by_category(result)["Categoria 7897000000002"]["total"] == 20.0
+
+
+@pytest.mark.asyncio
+async def test_resumo_categoria_com_mapeamento_soma_no_bucket_canonico():
+    await _cleanup()
+    department = await _create_department("Canon Categoria Mesmo Dept")
+    await _create_products("7897000000011", "7897000000012")
+    await _create_purchase(
+        department_id=department.id,
+        ean="7897000000011",
+        suffix="catmapa1",
+        quantity=Decimal("1"),
+        total=Decimal("10.00"),
+    )
+    await _create_purchase(
+        department_id=department.id,
+        ean="7897000000012",
+        suffix="catmapa2",
+        quantity=Decimal("1"),
+        total=Decimal("20.00"),
+    )
+    await _create_mapping(
+        department_id=department.id,
+        original="7897000000011",
+        canonical="7897000000012",
+    )
+
+    result = await _category_summary(department.id)
+
+    assert result == [{"categoria": "Categoria 7897000000012", "total": 30.0}]
+
+
+@pytest.mark.asyncio
+async def test_resumo_categoria_mapeamento_de_um_tenant_nao_afeta_outro():
+    await _cleanup()
+    department_a = await _create_department("Canon Categoria Tenant A")
+    department_b = await _create_department("Canon Categoria Tenant B")
+    await _create_products("7897000000021", "7897000000022")
+    await _create_purchase(
+        department_id=department_b.id,
+        ean="7897000000021",
+        suffix="cattenantb1",
+        quantity=Decimal("1"),
+        total=Decimal("30.00"),
+    )
+    await _create_purchase(
+        department_id=department_b.id,
+        ean="7897000000022",
+        suffix="cattenantb2",
+        quantity=Decimal("1"),
+        total=Decimal("20.00"),
+    )
+    await _create_mapping(
+        department_id=department_a.id,
+        original="7897000000021",
+        canonical="7897000000022",
+    )
+
+    result = await _category_summary(department_b.id)
+
+    assert [item["categoria"] for item in result] == [
+        "Categoria 7897000000021",
+        "Categoria 7897000000022",
+    ]
+    assert _by_category(result)["Categoria 7897000000021"]["total"] == 30.0
+    assert _by_category(result)["Categoria 7897000000022"]["total"] == 20.0
+
+
+@pytest.mark.asyncio
+async def test_resumo_categoria_global_sem_department_id_nao_aplica_mapeamento():
+    await _cleanup()
+    department = await _create_department("Canon Categoria Global")
+    await _create_products("7897000000031", "7897000000032")
+    await _create_purchase(
+        department_id=department.id,
+        ean="7897000000031",
+        suffix="catglobal1",
+        quantity=Decimal("1"),
+        total=Decimal("30.00"),
+    )
+    await _create_purchase(
+        department_id=department.id,
+        ean="7897000000032",
+        suffix="catglobal2",
+        quantity=Decimal("1"),
+        total=Decimal("20.00"),
+    )
+    await _create_mapping(
+        department_id=department.id,
+        original="7897000000031",
+        canonical="7897000000032",
+    )
+
+    result = await _category_summary(None)
+
+    assert [item["categoria"] for item in result] == [
+        "Categoria 7897000000031",
+        "Categoria 7897000000032",
+    ]
+    assert _by_category(result)["Categoria 7897000000031"]["total"] == 30.0
+    assert _by_category(result)["Categoria 7897000000032"]["total"] == 20.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["inactive", "reverted"])
+async def test_resumo_categoria_status_nao_active_nao_aplica_mapeamento(status):
+    await _cleanup()
+    department = await _create_department(f"Canon Categoria {status}")
+    await _create_products("7897000000041", "7897000000042")
+    await _create_purchase(
+        department_id=department.id,
+        ean="7897000000041",
+        suffix=f"cat{status}1",
+        quantity=Decimal("1"),
+        total=Decimal("30.00"),
+    )
+    await _create_purchase(
+        department_id=department.id,
+        ean="7897000000042",
+        suffix=f"cat{status}2",
+        quantity=Decimal("1"),
+        total=Decimal("20.00"),
+    )
+    await _create_mapping(
+        department_id=department.id,
+        original="7897000000041",
+        canonical="7897000000042",
+        status=status,
+    )
+
+    result = await _category_summary(department.id)
+
+    assert [item["categoria"] for item in result] == [
+        "Categoria 7897000000041",
+        "Categoria 7897000000042",
+    ]
+    assert _by_category(result)["Categoria 7897000000041"]["total"] == 30.0
+
+
+@pytest.mark.asyncio
+async def test_resumo_categoria_nao_altera_dados_fiscais_ou_catalogo():
+    await _cleanup()
+    department = await _create_department("Canon Categoria Integridade")
+    await _create_products("7897000000051", "7897000000052")
+    await _create_purchase(
+        department_id=department.id,
+        ean="7897000000051",
+        suffix="catintegridade1",
+        quantity=Decimal("1"),
+        total=Decimal("10.00"),
+    )
+    await _create_mapping(
+        department_id=department.id,
+        original="7897000000051",
+        canonical="7897000000052",
+    )
+
+    async with SessionLocal() as db:
+        product = await db.get(Produto, "7897000000051")
+        item = await db.scalar(
+            select(ItemNotaFiscal).where(ItemNotaFiscal.ean == "7897000000051")
+        )
+        product_before = (
+            product.nome_limpo,
+            product.marca,
+            product.categoria,
+            product.unidade,
+        )
+        item_before = (
+            item.ean,
+            getattr(item, "descricao" + "_original"),
+            item.quantidade,
+            item.valor_unitario,
+            item.valor_total,
+        )
+
+    await _category_summary(department.id)
+
+    async with SessionLocal() as db:
+        product = await db.get(Produto, "7897000000051")
+        item = await db.scalar(
+            select(ItemNotaFiscal).where(ItemNotaFiscal.ean == "7897000000051")
         )
         product_after = (
             product.nome_limpo,
