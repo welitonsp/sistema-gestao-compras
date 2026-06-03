@@ -29,6 +29,14 @@ class ProdutoUpdate(BaseModel):
         except UnsafeLabelError as exc:
             raise ValueError(str(exc)) from exc
 
+class ProdutoCanonizacaoBrief(BaseModel):
+    status: str
+    ean_canonico: str
+    ean_original: str
+    reason: str | None = None
+    confidence_score: float | None = None
+
+
 class ProdutoResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     ean: str
@@ -36,6 +44,7 @@ class ProdutoResponse(BaseModel):
     marca: str | None
     categoria: str
     unidade: str
+    canonizacao: ProdutoCanonizacaoBrief | None = None
 
 
 class CategorySuggestionCandidate(BaseModel):

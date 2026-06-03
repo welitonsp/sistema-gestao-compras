@@ -130,6 +130,25 @@ async def listar_produtos(
 ) -> Any:
     """Retorna a lista de produtos cadastrados no sistema."""
     stmt = select(Produto).where(_produto_operacional_filter())
+    department_id = user.department_id
+
+    if department_id is not None:
+        from backend.models.compras import CanonizacaoProduto
+
+        stmt = stmt.outerjoin(
+            CanonizacaoProduto,
+            (
+                (CanonizacaoProduto.department_id == department_id)
+                & (CanonizacaoProduto.ean_original == Produto.ean)
+                & (CanonizacaoProduto.status == "active")
+            ),
+        ).add_columns(
+            CanonizacaoProduto.ean_original.label("canon_ean_original"),
+            CanonizacaoProduto.ean_canonico.label("canon_ean_canonico"),
+            CanonizacaoProduto.status.label("canon_status"),
+            CanonizacaoProduto.reason.label("canon_reason"),
+            CanonizacaoProduto.confidence_score.label("canon_confidence_score"),
+        )
     
     if search:
         stmt = stmt.where(
@@ -144,7 +163,36 @@ async def listar_produtos(
         
     stmt = stmt.order_by(Produto.nome_limpo).limit(limit).offset(offset)
     result = await db.execute(stmt)
-    return result.scalars().all()
+    if department_id is None:
+        return result.scalars().all()
+
+    products = []
+    for row in result.fetchall():
+        produto = row.Produto
+        canonizacao = None
+        if row.canon_ean_original is not None:
+            canonizacao = {
+                "status": row.canon_status,
+                "ean_original": row.canon_ean_original,
+                "ean_canonico": row.canon_ean_canonico,
+                "reason": row.canon_reason,
+                "confidence_score": (
+                    float(row.canon_confidence_score)
+                    if row.canon_confidence_score is not None
+                    else None
+                ),
+            }
+        products.append(
+            ProdutoResponse(
+                ean=produto.ean,
+                nome_limpo=produto.nome_limpo,
+                marca=produto.marca,
+                categoria=produto.categoria,
+                unidade=produto.unidade,
+                canonizacao=canonizacao,
+            )
+        )
+    return products
 
 
 @router.get(
