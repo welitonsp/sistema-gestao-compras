@@ -16,6 +16,8 @@ from backend.models.compras import AuditLog, Produto, ClassificacaoCache, UserRo
 from backend.schemas.canonization import (
     CanonizationCandidateGroup,
     CanonizationCandidatesResponse,
+    CanonizationConfirmationRequest,
+    CanonizationConfirmationResponse,
     CanonizationMatch,
     CanonizationProduct,
 )
@@ -32,6 +34,12 @@ from backend.services.product_matching import (
     MAX_PRODUCTS_TO_COMPARE,
     ProductMatchInput,
     generate_product_match_groups,
+)
+from backend.services.product_canonization import (
+    ProductCanonizationConflictError,
+    ProductCanonizationNotFoundError,
+    ProductCanonizationService,
+    ProductCanonizationValidationError,
 )
 from backend.services.product_categorization import get_category_suggestion_candidates
 
@@ -262,6 +270,76 @@ async def listar_candidatos_canonizacao(
         total_groups=total_groups,
         threshold=safe_threshold,
         limit=safe_limit,
+    )
+
+
+@router.post(
+    "/canonization/confirm",
+    response_model=CanonizationConfirmationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Confirmar canonizacao manual de produtos",
+)
+async def confirmar_canonizacao_produtos(
+    payload: CanonizationConfirmationRequest,
+    db: DbSession,
+    user: User = Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER])),
+) -> CanonizationConfirmationResponse:
+    """Cria mapeamentos logicos de canonizacao sem alterar produtos ou dados fiscais."""
+
+    if payload.confirmed is not True:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Confirmacao explicita e obrigatoria.",
+        )
+
+    department_id = payload.department_id
+    if user.role == UserRole.MANAGER:
+        if user.department_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Usuario sem departamento vinculado.",
+            )
+        if department_id is not None and department_id != user.department_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="MANAGER nao pode confirmar canonizacao para outro departamento.",
+            )
+        department_id = user.department_id
+    elif department_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="department_id e obrigatorio para ADMIN.",
+        )
+
+    service = ProductCanonizationService(db)
+    try:
+        result = await service.confirm_canonization(
+            ean_canonico=payload.ean_canonico,
+            eans_originais=payload.eans_originais,
+            department_id=department_id,
+            usuario_executor=user.username,
+            reason=payload.reason,
+        )
+    except ProductCanonizationValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except ProductCanonizationNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ProductCanonizationConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    return CanonizationConfirmationResponse(
+        summary=result.summary,
+        created_count=result.created_count,
+        ean_canonico=result.ean_canonico,
+        department_id=result.department_id,
+        created_mappings=[
+            {
+                "ean_original": mapping.ean_original,
+                "ean_canonico": mapping.ean_canonico,
+                "status": mapping.status,
+            }
+            for mapping in result.created_mappings
+        ],
     )
 
 

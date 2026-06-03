@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CanonizationProduct(BaseModel):
@@ -26,3 +28,27 @@ class CanonizationCandidatesResponse(BaseModel):
     total_groups: int = Field(ge=0)
     threshold: float = Field(ge=0, le=1)
     limit: int = Field(ge=1)
+
+
+class CanonizationConfirmationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ean_canonico: str
+    eans_originais: list[str]
+    reason: str | None = None
+    department_id: UUID | None = None
+    confirmed: bool | None = None
+
+
+class CanonizationCreatedMapping(BaseModel):
+    ean_original: str
+    ean_canonico: str
+    status: str
+
+
+class CanonizationConfirmationResponse(BaseModel):
+    summary: str
+    created_count: int = Field(ge=0)
+    ean_canonico: str
+    department_id: UUID
+    created_mappings: list[CanonizationCreatedMapping]
