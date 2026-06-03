@@ -10,7 +10,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import Date, ForeignKey, Numeric, String, UniqueConstraint, Text, DateTime, func, Boolean, Integer
+from sqlalchemy import CheckConstraint, Date, ForeignKey, Index, Numeric, String, UniqueConstraint, Text, DateTime, func, Boolean, Integer
 import enum
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -149,6 +149,69 @@ class Produto(TimestampMixin, Base):
         back_populates="produto",
         cascade="all, delete-orphan",
     )
+
+
+class CanonizacaoProduto(TimestampMixin, Base):
+    """Logical product canonization mapping scoped by department."""
+
+    __tablename__ = "canonizacoes_produtos"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'inactive', 'reverted')",
+            name="ck_canonizacoes_produtos_status",
+        ),
+        CheckConstraint(
+            "confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)",
+            name="ck_canonizacoes_produtos_confidence_score",
+        ),
+        CheckConstraint(
+            "ean_original <> ean_canonico",
+            name="ck_canonizacoes_produtos_eans_distintos",
+        ),
+        Index("ix_canonizacoes_produtos_department_id", "department_id"),
+        Index("ix_canonizacoes_produtos_ean_canonico", "ean_canonico"),
+        Index(
+            "ix_canonizacoes_produtos_department_id_ean_canonico",
+            "department_id",
+            "ean_canonico",
+        ),
+    )
+
+    department_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("departments.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    ean_original: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("produtos.ean", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    ean_canonico: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("produtos.ean", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="active",
+        server_default="active",
+    )
+    confidence_score: Mapped[Decimal | None] = mapped_column(
+        Numeric(precision=5, scale=4),
+        nullable=True,
+    )
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confirmado_por: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    confirmado_em: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    department: Mapped[Department] = relationship()
+    produto_original: Mapped[Produto] = relationship(foreign_keys=[ean_original])
+    produto_canonico: Mapped[Produto] = relationship(foreign_keys=[ean_canonico])
 
 
 class NotaFiscal(TimestampMixin, Base):
