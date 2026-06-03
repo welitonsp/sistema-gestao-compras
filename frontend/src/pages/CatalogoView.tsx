@@ -7,6 +7,7 @@ import {
 import { Produto } from '../types/api';
 import { apiClient } from '../api/client';
 import { Skeleton } from '../components/Skeleton';
+import { CanonizationReviewTab } from '../components/CanonizationReviewTab';
 import { CategoryReviewTab } from '../components/CategoryReviewTab';
 
 interface Suggestion {
@@ -22,7 +23,7 @@ interface CatalogoViewProps {
   onExport?: () => void;
 }
 
-type CatalogTab = 'products' | 'category-review';
+type CatalogTab = 'products' | 'category-review' | 'canonization-review';
 
 export const CatalogoView: React.FC<CatalogoViewProps> = ({ produtos, onRefresh, onExport }) => {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -93,6 +94,17 @@ export const CatalogoView: React.FC<CatalogoViewProps> = ({ produtos, onRefresh,
           aria-pressed={activeTab === 'category-review'}
         >
           Revisar Categorias
+        </button>
+        <button
+          onClick={() => setActiveTab('canonization-review')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'canonization-review'
+              ? 'bg-primary-600 text-white shadow-md shadow-primary-200'
+              : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+          aria-pressed={activeTab === 'canonization-review'}
+        >
+          Canonização (Beta)
         </button>
       </div>
 
@@ -306,8 +318,10 @@ export const CatalogoView: React.FC<CatalogoViewProps> = ({ produtos, onRefresh,
         </div>
       </div>
         </>
-      ) : (
+      ) : activeTab === 'category-review' ? (
         <CategoryReviewTab />
+      ) : (
+        <CanonizationReviewTab />
       )}
     </div>
   );
