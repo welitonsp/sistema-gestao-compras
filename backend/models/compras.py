@@ -208,6 +208,12 @@ class CanonizacaoProduto(TimestampMixin, Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    revertido_por: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    revertido_em: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    revert_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     department: Mapped[Department] = relationship()
     produto_original: Mapped[Produto] = relationship(foreign_keys=[ean_original])

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -105,8 +106,72 @@ async def test_cria_mapeamento_valido_com_status_default_active():
     assert stored.ean_original == original.ean
     assert stored.ean_canonico == canonical.ean
     assert stored.status == "active"
+    assert stored.revertido_por is None
+    assert stored.revertido_em is None
+    assert stored.revert_reason is None
     assert stored.created_at is not None
     assert stored.updated_at is not None
+
+
+@pytest.mark.asyncio
+async def test_cria_mapeamento_reverted_com_campos_de_reversao():
+    await _cleanup()
+    department, original, canonical = await _add_department_and_products()
+    reverted_at = datetime(2026, 6, 5, 12, 30, tzinfo=timezone.utc)
+
+    async with SessionLocal() as db:
+        await _enable_foreign_keys(db)
+        try:
+            mapping = CanonizacaoProduto(
+                department_id=department.id,
+                ean_original=original.ean,
+                ean_canonico=canonical.ean,
+                status="reverted",
+                revertido_por="auditor@sgc.local",
+                revertido_em=reverted_at,
+                revert_reason="Canonizacao revertida apos revisao operacional.",
+            )
+            db.add(mapping)
+            await db.commit()
+
+            stored = await db.scalar(select(CanonizacaoProduto))
+        finally:
+            await _disable_foreign_keys(db)
+
+    assert stored is not None
+    assert stored.status == "reverted"
+    assert stored.revertido_por == "auditor@sgc.local"
+    assert stored.revertido_em in {reverted_at, reverted_at.replace(tzinfo=None)}
+    assert stored.revert_reason == "Canonizacao revertida apos revisao operacional."
+
+
+@pytest.mark.asyncio
+async def test_campos_de_reversao_sao_opcionais():
+    await _cleanup()
+    department, original, canonical = await _add_department_and_products()
+
+    async with SessionLocal() as db:
+        await _enable_foreign_keys(db)
+        try:
+            db.add(
+                CanonizacaoProduto(
+                    department_id=department.id,
+                    ean_original=original.ean,
+                    ean_canonico=canonical.ean,
+                    status="reverted",
+                )
+            )
+            await db.commit()
+
+            stored = await db.scalar(select(CanonizacaoProduto))
+        finally:
+            await _disable_foreign_keys(db)
+
+    assert stored is not None
+    assert stored.status == "reverted"
+    assert stored.revertido_por is None
+    assert stored.revertido_em is None
+    assert stored.revert_reason is None
 
 
 @pytest.mark.asyncio
@@ -136,6 +201,29 @@ async def test_pk_composta_nao_permite_mesmo_department_e_ean_original():
                     department_id=department.id,
                     ean_original=original.ean,
                     ean_canonico=canonical.ean,
+                )
+            )
+            with pytest.raises(IntegrityError):
+                await db.commit()
+            await db.rollback()
+        finally:
+            await _disable_foreign_keys(db)
+
+
+@pytest.mark.asyncio
+async def test_check_status_invalido_bloqueado():
+    await _cleanup()
+    department, original, canonical = await _add_department_and_products()
+
+    async with SessionLocal() as db:
+        await _enable_foreign_keys(db)
+        try:
+            db.add(
+                CanonizacaoProduto(
+                    department_id=department.id,
+                    ean_original=original.ean,
+                    ean_canonico=canonical.ean,
+                    status="archived",
                 )
             )
             with pytest.raises(IntegrityError):
