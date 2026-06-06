@@ -14,7 +14,9 @@ from backend.models.compras import AuditLog, CanonizacaoProduto, Department, Pro
 
 
 ACTIVE_STATUS = "active"
+REVERTED_STATUS = "reverted"
 PRODUCT_CANONIZED_OPERATION = "PRODUCT_CANONIZED"
+PRODUCT_CANONIZATION_REVERTED_OPERATION = "PRODUCT_CANONIZATION_REVERTED"
 MAX_ORIGINAL_EANS = 50
 MAX_REASON_LENGTH = 500
 
@@ -55,6 +57,21 @@ class CanonizationConfirmationResult:
     @property
     def summary(self) -> str:
         return f"{self.created_count} mapeamento(s) de canonizacao criado(s)."
+
+
+@dataclass(frozen=True)
+class CanonizationRevertResult:
+    ean_original: str
+    ean_canonico: str
+    department_id: UUID
+    status: str
+    revertido_por: str
+    revertido_em: datetime
+    revert_reason: str | None
+
+    @property
+    def summary(self) -> str:
+        return "Mapeamento de canonizacao revertido."
 
 
 class ProductCanonizationService:
@@ -145,6 +162,79 @@ class ProductCanonizationService:
             await self.db.rollback()
             raise
 
+    async def revert_canonization(
+        self,
+        *,
+        ean_original: str,
+        department_id: UUID,
+        usuario_executor: str,
+        reason: str | None = None,
+    ) -> CanonizationRevertResult:
+        """Soft-revert an active mapping in a single transaction."""
+
+        try:
+            original = _sanitize_ean(ean_original, "ean_original")
+            safe_department_id = _sanitize_department_id(department_id)
+            safe_usuario = _sanitize_usuario(usuario_executor)
+            safe_reason = _sanitize_reason(reason)
+
+            mapping = await self.db.get(
+                CanonizacaoProduto,
+                (safe_department_id, original),
+            )
+            if mapping is None:
+                raise ProductCanonizationNotFoundError(
+                    "Mapeamento ativo de canonizacao nao encontrado."
+                )
+            if mapping.status != ACTIVE_STATUS:
+                raise ProductCanonizationConflictError(
+                    "Apenas mapeamentos ativos podem ser revertidos."
+                )
+
+            reverted_at = datetime.now(timezone.utc)
+            mapping.status = REVERTED_STATUS
+            mapping.revertido_por = safe_usuario
+            mapping.revertido_em = reverted_at
+            mapping.revert_reason = safe_reason
+            canonical = mapping.ean_canonico
+
+            self.db.add(
+                AuditLog(
+                    department_id=safe_department_id,
+                    usuario=safe_usuario,
+                    operacao=PRODUCT_CANONIZATION_REVERTED_OPERATION,
+                    entidade="CanonizacaoProduto",
+                    entidade_id=f"{safe_department_id}:{original}",
+                    detalhes=json.dumps(
+                        {
+                            "department_id": str(safe_department_id),
+                            "ean_original": mapping.ean_original,
+                            "ean_canonico": canonical,
+                            "usuario_executor": safe_usuario,
+                            "reason": safe_reason,
+                            "origem": "manual",
+                        },
+                        ensure_ascii=True,
+                        sort_keys=True,
+                    ),
+                )
+            )
+
+            await self.db.flush()
+            await self.db.commit()
+            return CanonizationRevertResult(
+                ean_original=original,
+                ean_canonico=canonical,
+                department_id=safe_department_id,
+                status=REVERTED_STATUS,
+                revertido_por=safe_usuario,
+                revertido_em=reverted_at,
+                revert_reason=safe_reason,
+            )
+        except Exception:
+            await self.db.rollback()
+            raise
+
     async def _ensure_products_exist(self, eans: list[str]) -> None:
         expected = set(eans)
         result = await self.db.execute(select(Produto.ean).where(Produto.ean.in_(expected)))
@@ -227,6 +317,12 @@ def _sanitize_original_eans(values: list[str]) -> list[str]:
     if len(set(originals)) != len(originals):
         raise ProductCanonizationValidationError("eans_originais nao pode conter duplicados.")
     return originals
+
+
+def _sanitize_department_id(value: UUID) -> UUID:
+    if value is None:
+        raise ProductCanonizationValidationError("department_id e obrigatorio.")
+    return value
 
 
 def _sanitize_reason(value: str | None) -> str | None:

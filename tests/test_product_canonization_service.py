@@ -14,6 +14,7 @@ from backend.models.compras import (
     CanonizacaoProduto,
     Department,
     Fornecedor,
+    HistoricoPreco,
     ItemNotaFiscal,
     NotaFiscal,
     Produto,
@@ -63,6 +64,14 @@ async def _seed_products(*eans: str) -> Department:
         return department
 
 
+async def _seed_department(name: str | None = None) -> Department:
+    async with SessionLocal() as db:
+        department = Department(id=uuid4(), name=name or f"Canonizacao {uuid4()}")
+        db.add(department)
+        await db.commit()
+        return department
+
+
 async def _create_item_for_product(department_id, ean: str) -> None:
     async with SessionLocal() as db:
         supplier = Fornecedor(
@@ -96,6 +105,24 @@ async def _create_item_for_product(department_id, ean: str) -> None:
         await db.commit()
 
 
+async def _create_history_for_existing_item(ean: str) -> None:
+    async with SessionLocal() as db:
+        item = await db.scalar(select(ItemNotaFiscal).where(ItemNotaFiscal.ean == ean))
+        assert item is not None
+        db.add(
+            HistoricoPreco(
+                ean=ean,
+                nota_fiscal_id=item.nota_fiscal_id,
+                item_nota_fiscal_id=item.id,
+                data_compra=date(2026, 5, 27),
+                local="Fornecedor Canonizacao",
+                preco_pago=Decimal("10.00"),
+                quantidade=Decimal("1"),
+            )
+        )
+        await db.commit()
+
+
 async def _confirm(
     department_id,
     canonical: str = "7894000000002",
@@ -111,6 +138,217 @@ async def _confirm(
             usuario_executor="service_user",
             reason=reason,
         )
+
+
+@pytest.mark.asyncio
+async def test_service_reverte_mapeamento_ativo():
+    await _cleanup()
+    department = await _seed_products("7894000000111", "7894000000112")
+    await _confirm(
+        department.id,
+        canonical="7894000000112",
+        originals=["7894000000111"],
+        reason="Confirmacao original",
+    )
+    async with SessionLocal() as db:
+        mapping = await db.get(CanonizacaoProduto, (department.id, "7894000000111"))
+        mapping.confidence_score = Decimal("0.8750")
+        await db.commit()
+
+    async with SessionLocal() as db:
+        service = ProductCanonizationService(db)
+        result = await service.revert_canonization(
+            ean_original="7894000000111",
+            department_id=department.id,
+            usuario_executor="revert_user",
+            reason="Revisao operacional",
+        )
+
+    async with SessionLocal() as db:
+        mapping = await db.get(CanonizacaoProduto, (department.id, "7894000000111"))
+        audit = await db.scalar(
+            select(AuditLog).where(
+                AuditLog.operacao == "PRODUCT_CANONIZATION_REVERTED"
+            )
+        )
+
+    assert result.status == "reverted"
+    assert result.ean_original == "7894000000111"
+    assert result.ean_canonico == "7894000000112"
+    assert result.revertido_por == "revert_user"
+    assert result.revertido_em.tzinfo is not None
+    assert result.revert_reason == "Revisao operacional"
+    assert mapping.status == "reverted"
+    assert mapping.revertido_por == "revert_user"
+    assert mapping.revertido_em is not None
+    assert mapping.revert_reason == "Revisao operacional"
+    assert mapping.ean_original == "7894000000111"
+    assert mapping.ean_canonico == "7894000000112"
+    assert mapping.reason == "Confirmacao original"
+    assert mapping.confidence_score == Decimal("0.8750")
+    assert audit is not None
+    assert audit.department_id == department.id
+    assert audit.usuario == "revert_user"
+    assert audit.entidade == "CanonizacaoProduto"
+    assert "7894000000111" in audit.detalhes
+    assert "7894000000112" in audit.detalhes
+    assert "Revisao operacional" in audit.detalhes
+
+
+@pytest.mark.asyncio
+async def test_service_bloqueia_reversao_tenant_errado():
+    await _cleanup()
+    department_a = await _seed_products("7894000000121", "7894000000122")
+    department_b = await _seed_department("Canonizacao Tenant B")
+    await _confirm(
+        department_a.id,
+        canonical="7894000000122",
+        originals=["7894000000121"],
+    )
+
+    async with SessionLocal() as db:
+        service = ProductCanonizationService(db)
+        with pytest.raises(ProductCanonizationNotFoundError):
+            await service.revert_canonization(
+                ean_original="7894000000121",
+                department_id=department_b.id,
+                usuario_executor="revert_user",
+            )
+
+    async with SessionLocal() as db:
+        mapping = await db.get(CanonizacaoProduto, (department_a.id, "7894000000121"))
+        audit_count = await db.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.operacao == "PRODUCT_CANONIZATION_REVERTED")
+        )
+
+    assert mapping.status == "active"
+    assert audit_count == 0
+
+
+@pytest.mark.asyncio
+async def test_service_bloqueia_reversao_ja_revertida():
+    await _cleanup()
+    department = await _seed_products("7894000000131", "7894000000132")
+    await _confirm(
+        department.id,
+        canonical="7894000000132",
+        originals=["7894000000131"],
+    )
+    async with SessionLocal() as db:
+        mapping = await db.get(CanonizacaoProduto, (department.id, "7894000000131"))
+        mapping.status = "reverted"
+        await db.commit()
+
+    async with SessionLocal() as db:
+        service = ProductCanonizationService(db)
+        with pytest.raises(ProductCanonizationConflictError):
+            await service.revert_canonization(
+                ean_original="7894000000131",
+                department_id=department.id,
+                usuario_executor="revert_user",
+            )
+
+    async with SessionLocal() as db:
+        mapping = await db.get(CanonizacaoProduto, (department.id, "7894000000131"))
+        audit_count = await db.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.operacao == "PRODUCT_CANONIZATION_REVERTED")
+        )
+
+    assert mapping.status == "reverted"
+    assert audit_count == 0
+
+
+@pytest.mark.asyncio
+async def test_service_rollback_em_erro_na_auditoria(monkeypatch):
+    await _cleanup()
+    department = await _seed_products("7894000000141", "7894000000142")
+    await _confirm(
+        department.id,
+        canonical="7894000000142",
+        originals=["7894000000141"],
+    )
+
+    async def fail_commit(self):
+        raise RuntimeError("falha simulada no commit")
+
+    monkeypatch.setattr(AsyncSession, "commit", fail_commit)
+
+    async with SessionLocal() as db:
+        service = ProductCanonizationService(db)
+        with pytest.raises(RuntimeError):
+            await service.revert_canonization(
+                ean_original="7894000000141",
+                department_id=department.id,
+                usuario_executor="revert_user",
+                reason="Revisao operacional",
+            )
+
+    async with SessionLocal() as db:
+        mapping = await db.get(CanonizacaoProduto, (department.id, "7894000000141"))
+        audit_count = await db.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.operacao == "PRODUCT_CANONIZATION_REVERTED")
+        )
+
+    assert mapping.status == "active"
+    assert mapping.revertido_por is None
+    assert mapping.revertido_em is None
+    assert mapping.revert_reason is None
+    assert audit_count == 0
+
+
+@pytest.mark.asyncio
+async def test_service_nao_altera_dados_fiscais():
+    await _cleanup()
+    department = await _seed_products("7894000000151", "7894000000152")
+    await _create_item_for_product(department.id, "7894000000151")
+    await _create_history_for_existing_item("7894000000151")
+    await _confirm(
+        department.id,
+        canonical="7894000000152",
+        originals=["7894000000151"],
+        reason="Confirmacao original",
+    )
+
+    async with SessionLocal() as db:
+        product = await db.get(Produto, "7894000000151")
+        item = await db.scalar(select(ItemNotaFiscal).where(ItemNotaFiscal.ean == "7894000000151"))
+        history = await db.scalar(select(HistoricoPreco).where(HistoricoPreco.ean == "7894000000151"))
+        mapping = await db.get(CanonizacaoProduto, (department.id, "7894000000151"))
+        product_before = (product.nome_limpo, product.marca, product.categoria, product.unidade)
+        item_before = (item.ean, item.quantidade, item.valor_unitario, item.valor_total)
+        history_before = (history.ean, history.data_compra, history.local, history.preco_pago)
+        mapping_before = (mapping.ean_original, mapping.ean_canonico, mapping.reason)
+
+    async with SessionLocal() as db:
+        service = ProductCanonizationService(db)
+        await service.revert_canonization(
+            ean_original="7894000000151",
+            department_id=department.id,
+            usuario_executor="revert_user",
+            reason="Revisao operacional",
+        )
+
+    async with SessionLocal() as db:
+        product = await db.get(Produto, "7894000000151")
+        item = await db.scalar(select(ItemNotaFiscal).where(ItemNotaFiscal.ean == "7894000000151"))
+        history = await db.scalar(select(HistoricoPreco).where(HistoricoPreco.ean == "7894000000151"))
+        mapping = await db.get(CanonizacaoProduto, (department.id, "7894000000151"))
+        product_after = (product.nome_limpo, product.marca, product.categoria, product.unidade)
+        item_after = (item.ean, item.quantidade, item.valor_unitario, item.valor_total)
+        history_after = (history.ean, history.data_compra, history.local, history.preco_pago)
+        mapping_after = (mapping.ean_original, mapping.ean_canonico, mapping.reason)
+
+    assert product_after == product_before
+    assert item_after == item_before
+    assert history_after == history_before
+    assert mapping_after == mapping_before
+    assert mapping.status == "reverted"
 
 
 @pytest.mark.asyncio
