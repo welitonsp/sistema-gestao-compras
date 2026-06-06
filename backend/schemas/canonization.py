@@ -31,6 +31,31 @@ class CanonizationCandidatesResponse(BaseModel):
     limit: int = Field(ge=1)
 
 
+class CanonizationMappingItem(BaseModel):
+    department_id: UUID
+    department_name: str | None = None
+    ean_original: str
+    original_name: str | None = None
+    ean_canonico: str
+    canonical_name: str | None = None
+    status: str
+    reason: str | None = None
+    confidence_score: float | None = None
+    confirmado_por: str | None = None
+    confirmado_em: datetime | None = None
+    revertido_por: str | None = None
+    revertido_em: datetime | None = None
+    revert_reason: str | None = None
+
+
+class CanonizationMappingsResponse(BaseModel):
+    items: list[CanonizationMappingItem]
+    total: int = Field(ge=0)
+    status: str
+    limit: int = Field(ge=1)
+    offset: int = Field(ge=0)
+
+
 class CanonizationConfirmationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
