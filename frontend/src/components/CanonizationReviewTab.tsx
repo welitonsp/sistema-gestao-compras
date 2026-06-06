@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
+  Clock,
   Eye,
   Hash,
   Info,
   Layers,
+  ListChecks,
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
@@ -14,6 +17,9 @@ import { formatPercentBR } from "../lib/formatters";
 import type {
   CanonizationCandidateGroup,
   CanonizationCandidatesResponse,
+  CanonizationMappingItem,
+  CanonizationMappingsResponse,
+  CanonizationMappingStatus,
   CanonizationMatch,
 } from "../types/api";
 import { Skeleton } from "./Skeleton";
@@ -40,6 +46,45 @@ const similarityClass = (value: number) => {
 };
 
 const categoryLabel = (category?: string | null) => category || "Sem categoria";
+
+const mappingStatusOptions: { value: CanonizationMappingStatus; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "active", label: "Ativos" },
+  { value: "reverted", label: "Revertidos" },
+  { value: "inactive", label: "Inativos" },
+];
+
+const mappingStatusLabel = (status: string) => {
+  if (status === "active") return "Ativo";
+  if (status === "reverted") return "Revertido";
+  if (status === "inactive") return "Inativo";
+  return status;
+};
+
+const mappingStatusClass = (status: string) => {
+  if (status === "active") {
+    return "border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-800/50 dark:bg-emerald-900/20 dark:text-emerald-300";
+  }
+
+  if (status === "reverted") {
+    return "border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-800/50 dark:bg-amber-900/20 dark:text-amber-300";
+  }
+
+  return "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300";
+};
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
 const MatchRow: React.FC<{
   match: CanonizationMatch;
@@ -202,10 +247,240 @@ const GroupCard: React.FC<{
   );
 };
 
+const MappingRow: React.FC<{ mapping: CanonizationMappingItem }> = ({ mapping }) => {
+  const confirmedAt = formatDateTime(mapping.confirmado_em);
+  const revertedAt = formatDateTime(mapping.revertido_em);
+
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded-full border px-3 py-1 text-[11px] font-bold ${mappingStatusClass(
+                mapping.status,
+              )}`}
+            >
+              {mappingStatusLabel(mapping.status)}
+            </span>
+            {mapping.department_name && (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                {mapping.department_name}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-center">
+            <div className="min-w-0 rounded-xl bg-slate-50 px-3 py-3 dark:bg-slate-800/60">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                EAN original
+              </p>
+              <p className="mt-1 break-words text-sm font-bold text-slate-800 dark:text-slate-100">
+                {mapping.original_name || "Produto sem nome"}
+              </p>
+              <p className="mt-1 font-mono text-xs font-bold text-slate-500 dark:text-slate-400">
+                {mapping.ean_original}
+              </p>
+            </div>
+
+            <div className="hidden text-slate-400 md:block">
+              <ArrowRight size={18} aria-hidden="true" />
+            </div>
+
+            <div className="min-w-0 rounded-xl bg-slate-50 px-3 py-3 dark:bg-slate-800/60">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                Produto canônico
+              </p>
+              <p className="mt-1 break-words text-sm font-bold text-slate-800 dark:text-slate-100">
+                {mapping.canonical_name || "Produto sem nome"}
+              </p>
+              <p className="mt-1 font-mono text-xs font-bold text-slate-500 dark:text-slate-400">
+                {mapping.ean_canonico}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="min-w-[220px] space-y-2 text-xs text-slate-500 dark:text-slate-400">
+          {mapping.confidence_score !== null && (
+            <p>
+              Confiança{" "}
+              <span className="font-bold text-slate-700 dark:text-slate-200">
+                {formatSimilarity(mapping.confidence_score)}
+              </span>
+            </p>
+          )}
+          {mapping.confirmado_por && (
+            <p>
+              Confirmado por{" "}
+              <span className="font-bold text-slate-700 dark:text-slate-200">
+                {mapping.confirmado_por}
+              </span>
+            </p>
+          )}
+          {confirmedAt && (
+            <p className="inline-flex items-center gap-1.5">
+              <Clock size={13} aria-hidden="true" />
+              {confirmedAt}
+            </p>
+          )}
+          {mapping.status === "reverted" && mapping.revertido_por && (
+            <p>
+              Revertido por{" "}
+              <span className="font-bold text-slate-700 dark:text-slate-200">
+                {mapping.revertido_por}
+              </span>
+            </p>
+          )}
+          {mapping.status === "reverted" && revertedAt && (
+            <p className="inline-flex items-center gap-1.5">
+              <Clock size={13} aria-hidden="true" />
+              {revertedAt}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {(mapping.reason || mapping.revert_reason) && (
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {mapping.reason && (
+            <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+              <span className="font-bold text-slate-700 dark:text-slate-200">
+                Motivo:
+              </span>{" "}
+              {mapping.reason}
+            </p>
+          )}
+          {mapping.revert_reason && (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+              <span className="font-bold">Reversão:</span>{" "}
+              {mapping.revert_reason}
+            </p>
+          )}
+        </div>
+      )}
+    </article>
+  );
+};
+
+const CanonizationMappingsPanel: React.FC<{
+  data: CanonizationMappingsResponse | null;
+  statusFilter: CanonizationMappingStatus;
+  loading: boolean;
+  error: boolean;
+  onStatusChange: (status: CanonizationMappingStatus) => void;
+  onRefresh: () => void;
+}> = ({ data, statusFilter, loading, error, onStatusChange, onRefresh }) => {
+  const mappings = data?.items || [];
+
+  return (
+    <section className="space-y-4">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-300">
+              <ListChecks size={20} aria-hidden="true" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800 dark:text-white">
+                Mapeamentos de canonização
+              </h3>
+              <p className="mt-2 max-w-3xl text-sm text-slate-500 dark:text-slate-400">
+                Mapeamentos ativos consolidam a leitura dos dashboards. Mapeamentos revertidos deixam o EAN original voltar a ser considerado separadamente, sem alterar dados fiscais.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={loading}
+            className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-widest text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <RefreshCw size={14} aria-hidden="true" />
+            Atualizar
+          </button>
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          {mappingStatusOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onStatusChange(option.value)}
+              className={`rounded-xl px-3 py-2 text-xs font-bold transition-colors ${
+                statusFilter === option.value
+                  ? "bg-primary-600 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              }`}
+              aria-pressed={statusFilter === option.value}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 flex items-start gap-2 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400">
+          <Info size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <p>
+            Esta visão é somente consulta. Confirmações e reversões permanecem registradas em auditoria.
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2].map((item) => (
+            <Skeleton key={item} className="h-36 rounded-3xl" />
+          ))}
+        </div>
+      ) : error ? (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 text-center">
+          <Info size={34} className="mx-auto mb-3 text-amber-500" aria-hidden="true" />
+          <h3 className="font-bold text-slate-800 dark:text-white">
+            Não foi possível carregar os mapeamentos
+          </h3>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            A revisão de candidatos continua disponível.
+          </p>
+        </div>
+      ) : mappings.length === 0 ? (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 text-center">
+          <CheckCircle2 size={36} className="mx-auto mb-3 text-emerald-500" aria-hidden="true" />
+          <h3 className="font-bold text-slate-800 dark:text-white">
+            Nenhum mapeamento encontrado
+          </h3>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            Ajuste o filtro para consultar outro status.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+            {data?.total || 0} mapeamento(s)
+          </p>
+          {mappings.map((mapping) => (
+            <MappingRow
+              key={`${mapping.department_id}-${mapping.ean_original}-${mapping.status}`}
+              mapping={mapping}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+};
+
 export const CanonizationReviewTab: React.FC = () => {
   const [data, setData] = useState<CanonizationCandidatesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [mappingsData, setMappingsData] =
+    useState<CanonizationMappingsResponse | null>(null);
+  const [loadingMappings, setLoadingMappings] = useState(true);
+  const [mappingsError, setMappingsError] = useState(false);
+  const [mappingStatus, setMappingStatus] =
+    useState<CanonizationMappingStatus>("all");
   const [selectedMatches, setSelectedMatches] = useState<Record<string, string[]>>(
     {},
   );
@@ -226,9 +501,29 @@ export const CanonizationReviewTab: React.FC = () => {
     }
   };
 
+  const fetchMappings = async (statusFilter: CanonizationMappingStatus = mappingStatus) => {
+    setLoadingMappings(true);
+    setMappingsError(false);
+    try {
+      const response = await apiClient.get<CanonizationMappingsResponse>(
+        `/produtos/canonization/mappings?status=${statusFilter}`,
+      );
+      setMappingsData(response);
+    } catch {
+      setMappingsData(null);
+      setMappingsError(true);
+    } finally {
+      setLoadingMappings(false);
+    }
+  };
+
   useEffect(() => {
     fetchCandidates();
   }, []);
+
+  useEffect(() => {
+    fetchMappings(mappingStatus);
+  }, [mappingStatus]);
 
   const toggleMatchSelection = (primaryEan: string, matchEan: string) => {
     setSelectedMatches((current) => {
@@ -367,6 +662,15 @@ export const CanonizationReviewTab: React.FC = () => {
           ))}
         </div>
       )}
+
+      <CanonizationMappingsPanel
+        data={mappingsData}
+        statusFilter={mappingStatus}
+        loading={loadingMappings}
+        error={mappingsError}
+        onStatusChange={setMappingStatus}
+        onRefresh={() => fetchMappings(mappingStatus)}
+      />
     </div>
   );
 };

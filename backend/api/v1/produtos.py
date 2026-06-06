@@ -6,19 +6,23 @@ from datetime import datetime, timezone
 from decimal import Decimal
 import json
 from typing import Any, Annotated
+from uuid import UUID
 from fastapi import APIRouter, HTTPException, status, Query, Depends
 from fastapi.responses import StreamingResponse
 import io
 import pandas as pd
-from sqlalchemy import select, or_
+from sqlalchemy import func, select, or_
+from sqlalchemy.orm import aliased
 from backend.api.dependencies import DbSession, CurrentUser, RoleChecker
-from backend.models.compras import AuditLog, Produto, ClassificacaoCache, UserRole, User, ItemNotaFiscal, NotaFiscal
+from backend.models.compras import AuditLog, CanonizacaoProduto, Department, Produto, ClassificacaoCache, UserRole, User, ItemNotaFiscal, NotaFiscal
 from backend.schemas.canonization import (
     CanonizationCandidateGroup,
     CanonizationCandidatesResponse,
     CanonizationConfirmationRequest,
     CanonizationConfirmationResponse,
     CanonizationMatch,
+    CanonizationMappingItem,
+    CanonizationMappingsResponse,
     CanonizationProduct,
     CanonizationRevertRequest,
     CanonizationRevertResponse,
@@ -320,6 +324,102 @@ async def listar_candidatos_canonizacao(
         total_groups=total_groups,
         threshold=safe_threshold,
         limit=safe_limit,
+    )
+
+
+@router.get(
+    "/canonization/mappings",
+    response_model=CanonizationMappingsResponse,
+    summary="Listar mapeamentos read-only de canonizacao",
+)
+async def listar_mapeamentos_canonizacao(
+    db: DbSession,
+    user: User = Depends(RoleChecker([UserRole.ADMIN, UserRole.AUDITOR, UserRole.MANAGER])),
+    status_filter: str = Query(
+        "all",
+        alias="status",
+        pattern="^(all|active|inactive|reverted)$",
+    ),
+    department_id: UUID | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> CanonizationMappingsResponse:
+    """Retorna mapeamentos de canonizacao sem expor dados fiscais."""
+
+    effective_department_id = department_id
+    if user.role != UserRole.ADMIN:
+        if user.department_id is None:
+            return CanonizationMappingsResponse(
+                items=[],
+                total=0,
+                status=status_filter,
+                limit=limit,
+                offset=offset,
+            )
+        if department_id is not None and department_id != user.department_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Usuario nao pode consultar mapeamentos de outro departamento.",
+            )
+        effective_department_id = user.department_id
+
+    original_product = aliased(Produto)
+    canonical_product = aliased(Produto)
+
+    filters = []
+    if effective_department_id is not None:
+        filters.append(CanonizacaoProduto.department_id == effective_department_id)
+    if status_filter != "all":
+        filters.append(CanonizacaoProduto.status == status_filter)
+
+    count_stmt = select(func.count()).select_from(CanonizacaoProduto).where(*filters)
+    total = await db.scalar(count_stmt)
+
+    stmt = (
+        select(
+            CanonizacaoProduto,
+            Department.name.label("department_name"),
+            original_product.nome_limpo.label("original_name"),
+            canonical_product.nome_limpo.label("canonical_name"),
+        )
+        .join(Department, Department.id == CanonizacaoProduto.department_id)
+        .join(original_product, original_product.ean == CanonizacaoProduto.ean_original)
+        .join(canonical_product, canonical_product.ean == CanonizacaoProduto.ean_canonico)
+        .where(*filters)
+        .order_by(CanonizacaoProduto.updated_at.desc(), CanonizacaoProduto.ean_original)
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await db.execute(stmt)
+
+    return CanonizationMappingsResponse(
+        items=[
+            CanonizationMappingItem(
+                department_id=row.CanonizacaoProduto.department_id,
+                department_name=row.department_name,
+                ean_original=row.CanonizacaoProduto.ean_original,
+                original_name=row.original_name,
+                ean_canonico=row.CanonizacaoProduto.ean_canonico,
+                canonical_name=row.canonical_name,
+                status=row.CanonizacaoProduto.status,
+                reason=row.CanonizacaoProduto.reason,
+                confidence_score=(
+                    float(row.CanonizacaoProduto.confidence_score)
+                    if row.CanonizacaoProduto.confidence_score is not None
+                    else None
+                ),
+                confirmado_por=row.CanonizacaoProduto.confirmado_por,
+                confirmado_em=row.CanonizacaoProduto.confirmado_em,
+                revertido_por=row.CanonizacaoProduto.revertido_por,
+                revertido_em=row.CanonizacaoProduto.revertido_em,
+                revert_reason=row.CanonizacaoProduto.revert_reason,
+            )
+            for row in result.fetchall()
+        ],
+        total=total or 0,
+        status=status_filter,
+        limit=limit,
+        offset=offset,
     )
 
 

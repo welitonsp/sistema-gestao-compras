@@ -203,6 +203,33 @@ export interface CanonizationCandidatesResponse {
   limit: number;
 }
 
+export type CanonizationMappingStatus = "all" | "active" | "inactive" | "reverted";
+
+export interface CanonizationMappingItem {
+  department_id: string;
+  department_name: string | null;
+  ean_original: string;
+  original_name: string | null;
+  ean_canonico: string;
+  canonical_name: string | null;
+  status: string;
+  reason: string | null;
+  confidence_score: number | null;
+  confirmado_por: string | null;
+  confirmado_em: string | null;
+  revertido_por: string | null;
+  revertido_em: string | null;
+  revert_reason: string | null;
+}
+
+export interface CanonizationMappingsResponse {
+  items: CanonizationMappingItem[];
+  total: number;
+  status: CanonizationMappingStatus;
+  limit: number;
+  offset: number;
+}
+
 export interface FornecedorImportado {
   id: string;
   cnpj: string;

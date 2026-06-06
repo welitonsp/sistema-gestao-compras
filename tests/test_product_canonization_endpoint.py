@@ -508,6 +508,208 @@ async def test_audit_logs_expoem_reversao_com_rastreabilidade_segura():
 
 
 @pytest.mark.asyncio
+async def test_endpoint_lista_mapeamentos_canonizacao_com_filtro_status():
+    await _cleanup()
+    department = await _create_department()
+    await _seed_products(
+        "7895000000011",
+        "7895000000012",
+        "7895000000013",
+        "7895000000014",
+    )
+    token = await _create_user("canon_mapping_manager", UserRole.MANAGER, department.id)
+    await _post_confirm(
+        token,
+        _payload(
+            department.id,
+            ean_canonico="7895000000012",
+            eans_originais=["7895000000011"],
+            reason="grupo ativo",
+        ),
+    )
+    await _post_confirm(
+        token,
+        _payload(
+            department.id,
+            ean_canonico="7895000000014",
+            eans_originais=["7895000000013"],
+            reason="grupo revertido",
+        ),
+    )
+    await _post_revert(
+        token,
+        _revert_payload(
+            ean_original="7895000000013",
+            reason="desfazer grupo",
+        ),
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        all_response = await client.get(
+            "/api/v1/produtos/canonization/mappings",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        active_response = await client.get(
+            "/api/v1/produtos/canonization/mappings?status=active",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        reverted_response = await client.get(
+            "/api/v1/produtos/canonization/mappings?status=reverted",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert all_response.status_code == 200
+    all_body = all_response.json()
+    assert all_body["total"] == 2
+    assert {item["status"] for item in all_body["items"]} == {"active", "reverted"}
+    assert all_body["items"][0]["department_id"] == str(department.id)
+    assert all_body["items"][0]["department_name"] is not None
+    assert all_body["items"][0]["original_name"] is not None
+    assert all_body["items"][0]["canonical_name"] is not None
+
+    assert active_response.status_code == 200
+    active_body = active_response.json()
+    assert active_body["total"] == 1
+    assert active_body["status"] == "active"
+    assert active_body["items"][0]["ean_original"] == "7895000000011"
+    assert active_body["items"][0]["confirmado_por"] == "canon_mapping_manager"
+
+    assert reverted_response.status_code == 200
+    reverted_body = reverted_response.json()
+    assert reverted_body["total"] == 1
+    assert reverted_body["status"] == "reverted"
+    assert reverted_body["items"][0]["ean_original"] == "7895000000013"
+    assert reverted_body["items"][0]["revertido_por"] == "canon_mapping_manager"
+    assert reverted_body["items"][0]["revert_reason"] == "desfazer grupo"
+
+
+@pytest.mark.asyncio
+async def test_endpoint_lista_mapeamentos_bloqueia_tenant_errado():
+    await _cleanup()
+    department_a = await _create_department("Dept Mappings A")
+    department_b = await _create_department("Dept Mappings B")
+    await _seed_products("7895000000021", "7895000000022")
+    token_a = await _create_user("canon_mapping_manager_a", UserRole.MANAGER, department_a.id)
+    token_b = await _create_user("canon_mapping_manager_b", UserRole.MANAGER, department_b.id)
+    await _post_confirm(
+        token_a,
+        _payload(
+            department_a.id,
+            ean_canonico="7895000000022",
+            eans_originais=["7895000000021"],
+        ),
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        own_response = await client.get(
+            "/api/v1/produtos/canonization/mappings",
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+        forbidden_response = await client.get(
+            f"/api/v1/produtos/canonization/mappings?department_id={department_a.id}",
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+
+    assert own_response.status_code == 200
+    assert own_response.json()["items"] == []
+    assert own_response.json()["total"] == 0
+    assert forbidden_response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_endpoint_lista_mapeamentos_admin_global_e_por_department():
+    await _cleanup()
+    department_a = await _create_department("Dept Mappings Admin A")
+    department_b = await _create_department("Dept Mappings Admin B")
+    await _seed_products(
+        "7895000000031",
+        "7895000000032",
+        "7895000000033",
+        "7895000000034",
+    )
+    token_a = await _create_user("canon_mapping_seed_a", UserRole.MANAGER, department_a.id)
+    token_b = await _create_user("canon_mapping_seed_b", UserRole.MANAGER, department_b.id)
+    admin_token = await _create_user("canon_mapping_admin", UserRole.ADMIN)
+    await _post_confirm(
+        token_a,
+        _payload(
+            department_a.id,
+            ean_canonico="7895000000032",
+            eans_originais=["7895000000031"],
+        ),
+    )
+    await _post_confirm(
+        token_b,
+        _payload(
+            department_b.id,
+            ean_canonico="7895000000034",
+            eans_originais=["7895000000033"],
+        ),
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        global_response = await client.get(
+            "/api/v1/produtos/canonization/mappings",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        filtered_response = await client.get(
+            f"/api/v1/produtos/canonization/mappings?department_id={department_a.id}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+    assert global_response.status_code == 200
+    assert global_response.json()["total"] == 2
+    assert {
+        item["department_id"]
+        for item in global_response.json()["items"]
+    } == {str(department_a.id), str(department_b.id)}
+
+    assert filtered_response.status_code == 200
+    assert filtered_response.json()["total"] == 1
+    assert filtered_response.json()["items"][0]["department_id"] == str(department_a.id)
+
+
+@pytest.mark.asyncio
+async def test_endpoint_lista_mapeamentos_nao_expoe_dados_sensiveis():
+    await _cleanup()
+    department = await _create_department()
+    await _seed_products("7895000000041", "7895000000042")
+    await _create_item(department.id, "7895000000041")
+    token = await _create_user("canon_mapping_privacy", UserRole.MANAGER, department.id)
+    await _post_confirm(
+        token,
+        _payload(
+            department.id,
+            ean_canonico="7895000000042",
+            eans_originais=["7895000000041"],
+        ),
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/produtos/canonization/mappings",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    body = response.text.lower()
+    forbidden = (
+        "descricao" + "_original",
+        "descricao fiscal",
+        "chave" + "_acesso",
+        "qr" + "_code",
+        "url" + "_sefaz",
+        "x" + "ml",
+        "json" + "_bruto",
+        "payload" + "_bruto",
+        "cn" + "pj",
+        "c" + "pf",
+    )
+    for term in forbidden:
+        assert term not in body
+
+
+@pytest.mark.asyncio
 async def test_endpoint_produto_inexistente_retorna_erro_adequado():
     await _cleanup()
     department = await _create_department()
