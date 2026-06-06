@@ -48,12 +48,23 @@ class CanonizationMappingItem(BaseModel):
     revert_reason: str | None = None
 
 
+class CanonizationMappingStatusCounts(BaseModel):
+    all: int = Field(ge=0)
+    active: int = Field(ge=0)
+    inactive: int = Field(ge=0)
+    reverted: int = Field(ge=0)
+
+
 class CanonizationMappingsResponse(BaseModel):
     items: list[CanonizationMappingItem]
     total: int = Field(ge=0)
     status: str
+    query: str | None = None
+    sort_by: str
+    sort_dir: str
     limit: int = Field(ge=1)
     offset: int = Field(ge=0)
+    counts: CanonizationMappingStatusCounts
 
 
 class CanonizationConfirmationRequest(BaseModel):

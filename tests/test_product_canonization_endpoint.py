@@ -313,6 +313,28 @@ async def test_endpoint_reversao_exige_confirmed_true():
 
 
 @pytest.mark.asyncio
+async def test_endpoint_reversao_exige_motivo():
+    await _cleanup()
+    department = await _create_department()
+    await _seed_products("7895000000001", "7895000000002")
+    token = await _create_user("canon_revert_reason_required", UserRole.MANAGER, department.id)
+    await _post_confirm(token, _payload(department.id))
+
+    missing_reason_payload = _revert_payload()
+    missing_reason_payload.pop("reason")
+    missing_response = await _post_revert(token, missing_reason_payload)
+    blank_response = await _post_revert(token, _revert_payload(reason="  "))
+
+    assert missing_response.status_code == 400
+    assert blank_response.status_code == 400
+    assert "Motivo" in missing_response.json()["detail"]
+    assert "Motivo" in blank_response.json()["detail"]
+    async with SessionLocal() as db:
+        mapping = await db.get(CanonizacaoProduto, (department.id, "7895000000001"))
+    assert mapping.status == "active"
+
+
+@pytest.mark.asyncio
 async def test_endpoint_bloqueia_mapping_inexistente():
     await _cleanup()
     department = await _create_department()
@@ -461,6 +483,10 @@ async def test_audit_logs_expoem_reversao_com_rastreabilidade_segura():
     await _post_revert(manager_token, _revert_payload(reason="auditoria segura"))
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        manager_response = await client.get(
+            "/api/v1/dashboard/audit-logs",
+            headers={"Authorization": f"Bearer {manager_token}"},
+        )
         response = await client.get(
             "/api/v1/dashboard/audit-logs",
             headers={"Authorization": f"Bearer {auditor_token}"},
@@ -469,6 +495,12 @@ async def test_audit_logs_expoem_reversao_com_rastreabilidade_segura():
             "/api/v1/dashboard/audit-logs",
             headers={"Authorization": f"Bearer {other_auditor_token}"},
         )
+
+    assert manager_response.status_code == 200
+    assert any(
+        log["operacao"] == "PRODUCT_CANONIZATION_REVERTED"
+        for log in manager_response.json()
+    )
 
     assert response.status_code == 200
     logs = [
@@ -707,6 +739,167 @@ async def test_endpoint_lista_mapeamentos_nao_expoe_dados_sensiveis():
     )
     for term in forbidden:
         assert term not in body
+
+
+@pytest.mark.asyncio
+async def test_endpoint_lista_mapeamentos_com_busca_contadores_paginacao_e_ordem():
+    await _cleanup()
+    department = await _create_department("Dept Mappings Search")
+    await _seed_products(
+        "7895000000051",
+        "7895000000052",
+        "7895000000053",
+        "7895000000054",
+        "7895000000055",
+        "7895000000056",
+    )
+    async with SessionLocal() as db:
+        names = {
+            "7895000000051": "Cafe Alfa Original",
+            "7895000000052": "Cafe Alfa Canonico",
+            "7895000000053": "Cafe Beta Original",
+            "7895000000054": "Cafe Beta Canonico",
+            "7895000000055": "Arroz Avulso Original",
+            "7895000000056": "Arroz Avulso Canonico",
+        }
+        for ean, name in names.items():
+            product = await db.get(Produto, ean)
+            product.nome_limpo = name
+        await db.commit()
+
+    token = await _create_user("canon_mapping_search", UserRole.MANAGER, department.id)
+    await _post_confirm(
+        token,
+        _payload(
+            department.id,
+            ean_canonico="7895000000052",
+            eans_originais=["7895000000051"],
+            reason="alfa ativo",
+        ),
+    )
+    await _post_confirm(
+        token,
+        _payload(
+            department.id,
+            ean_canonico="7895000000054",
+            eans_originais=["7895000000053"],
+            reason="beta revertido",
+        ),
+    )
+    await _post_revert(
+        token,
+        _revert_payload(
+            ean_original="7895000000053",
+            reason="beta revertido",
+        ),
+    )
+    await _post_confirm(
+        token,
+        _payload(
+            department.id,
+            ean_canonico="7895000000056",
+            eans_originais=["7895000000055"],
+            reason="arroz fora da busca",
+        ),
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        searched_response = await client.get(
+            "/api/v1/produtos/canonization/mappings?q=Cafe&sort_by=original_name&sort_dir=asc&limit=1&offset=1",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        active_response = await client.get(
+            "/api/v1/produtos/canonization/mappings?q=Cafe&status=active",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert searched_response.status_code == 200
+    searched = searched_response.json()
+    assert searched["query"] == "Cafe"
+    assert searched["sort_by"] == "original_name"
+    assert searched["sort_dir"] == "asc"
+    assert searched["limit"] == 1
+    assert searched["offset"] == 1
+    assert searched["total"] == 2
+    assert searched["counts"] == {
+        "all": 2,
+        "active": 1,
+        "inactive": 0,
+        "reverted": 1,
+    }
+    assert len(searched["items"]) == 1
+    assert searched["items"][0]["original_name"] == "Cafe Beta Original"
+
+    assert active_response.status_code == 200
+    active = active_response.json()
+    assert active["total"] == 1
+    assert active["counts"]["all"] == 2
+    assert active["counts"]["active"] == 1
+    assert active["items"][0]["ean_original"] == "7895000000051"
+
+
+@pytest.mark.asyncio
+async def test_endpoint_exporta_mapeamentos_sanitizados_com_filtros():
+    await _cleanup()
+    department = await _create_department("Dept Mappings Export")
+    await _seed_products("7895000000061", "7895000000062", "7895000000063", "7895000000064")
+    token = await _create_user("canon_mapping_export", UserRole.MANAGER, department.id)
+    await _post_confirm(
+        token,
+        _payload(
+            department.id,
+            ean_canonico="7895000000062",
+            eans_originais=["7895000000061"],
+            reason="export ativo",
+        ),
+    )
+    await _post_confirm(
+        token,
+        _payload(
+            department.id,
+            ean_canonico="7895000000064",
+            eans_originais=["7895000000063"],
+            reason="export revertido",
+        ),
+    )
+    await _post_revert(
+        token,
+        _revert_payload(
+            ean_original="7895000000063",
+            reason="motivo export",
+        ),
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/produtos/canonization/mappings/export?status=reverted",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "canonizacao_mapeamentos.csv" in response.headers["content-disposition"]
+    text_body = response.text
+    assert "Departamento;Status;EAN Original;Produto Original" in text_body
+    assert "7895000000063" in text_body
+    assert "7895000000061" not in text_body
+    assert "motivo export" in text_body
+
+    lowered = text_body.lower()
+    forbidden = (
+        "descricao" + "_original",
+        "descricao fiscal",
+        "chave" + "_acesso",
+        "qr" + "_code",
+        "url" + "_sefaz",
+        "x" + "ml",
+        "json" + "_bruto",
+        "payload" + "_bruto",
+        "cn" + "pj",
+        "c" + "pf",
+    )
+    for term in forbidden:
+        assert term not in lowered
 
 
 @pytest.mark.asyncio

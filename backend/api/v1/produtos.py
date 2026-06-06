@@ -22,6 +22,7 @@ from backend.schemas.canonization import (
     CanonizationConfirmationResponse,
     CanonizationMatch,
     CanonizationMappingItem,
+    CanonizationMappingStatusCounts,
     CanonizationMappingsResponse,
     CanonizationProduct,
     CanonizationRevertRequest,
@@ -53,6 +54,18 @@ router = APIRouter(prefix="/produtos", tags=["Produtos"])
 
 ACTIVE_INVOICE_STATUS = "active"
 CATEGORY_CONFIRMED_OPERATION = "CATEGORY_CONFIRMED"
+CANONIZATION_MAPPING_STATUSES = ("active", "inactive", "reverted")
+CANONIZATION_MAPPING_SORT_FIELDS = {
+    "updated_at",
+    "confirmed_at",
+    "reverted_at",
+    "ean_original",
+    "ean_canonico",
+    "status",
+    "department",
+    "original_name",
+    "canonical_name",
+}
 
 
 def _categoria_para_comparacao(categoria: str | None) -> str:
@@ -71,6 +84,124 @@ def _produto_operacional_filter():
         .exists()
     )
     return or_(~item_exists, active_item_exists)
+
+
+def _safe_csv(value: Any) -> str:
+    text = "" if value is None else str(value)
+    return text.replace("\r", " ").replace("\n", " ").replace(";", ",")
+
+
+def _canonization_mapping_item(row: Any) -> CanonizationMappingItem:
+    mapping = row.CanonizacaoProduto
+    return CanonizationMappingItem(
+        department_id=mapping.department_id,
+        department_name=row.department_name,
+        ean_original=mapping.ean_original,
+        original_name=row.original_name,
+        ean_canonico=mapping.ean_canonico,
+        canonical_name=row.canonical_name,
+        status=mapping.status,
+        reason=mapping.reason,
+        confidence_score=(
+            float(mapping.confidence_score)
+            if mapping.confidence_score is not None
+            else None
+        ),
+        confirmado_por=mapping.confirmado_por,
+        confirmado_em=mapping.confirmado_em,
+        revertido_por=mapping.revertido_por,
+        revertido_em=mapping.revertido_em,
+        revert_reason=mapping.revert_reason,
+    )
+
+
+def _resolve_canonization_department(
+    user: User,
+    department_id: UUID | None,
+) -> UUID | None:
+    if user.role == UserRole.ADMIN:
+        return department_id
+    if user.department_id is None:
+        return None
+    if department_id is not None and department_id != user.department_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Usuario nao pode consultar mapeamentos de outro departamento.",
+        )
+    return user.department_id
+
+
+def _canonization_mapping_filters(
+    original_product: Any,
+    canonical_product: Any,
+    effective_department_id: UUID | None,
+    search: str | None,
+) -> list[Any]:
+    filters = []
+    if effective_department_id is not None:
+        filters.append(CanonizacaoProduto.department_id == effective_department_id)
+
+    safe_search = (search or "").strip()
+    if safe_search:
+        pattern = f"%{safe_search}%"
+        filters.append(
+            or_(
+                CanonizacaoProduto.ean_original.ilike(pattern),
+                CanonizacaoProduto.ean_canonico.ilike(pattern),
+                CanonizacaoProduto.confirmado_por.ilike(pattern),
+                CanonizacaoProduto.revertido_por.ilike(pattern),
+                Department.name.ilike(pattern),
+                original_product.nome_limpo.ilike(pattern),
+                canonical_product.nome_limpo.ilike(pattern),
+            )
+        )
+
+    return filters
+
+
+def _canonization_mapping_base_stmt(original_product: Any, canonical_product: Any):
+    return (
+        select(
+            CanonizacaoProduto,
+            Department.name.label("department_name"),
+            original_product.nome_limpo.label("original_name"),
+            canonical_product.nome_limpo.label("canonical_name"),
+        )
+        .join(Department, Department.id == CanonizacaoProduto.department_id)
+        .join(original_product, original_product.ean == CanonizacaoProduto.ean_original)
+        .join(canonical_product, canonical_product.ean == CanonizacaoProduto.ean_canonico)
+    )
+
+
+def _canonization_mapping_count_from(original_product: Any, canonical_product: Any):
+    return (
+        CanonizacaoProduto.__table__
+        .join(Department.__table__, Department.id == CanonizacaoProduto.department_id)
+        .join(original_product, original_product.ean == CanonizacaoProduto.ean_original)
+        .join(canonical_product, canonical_product.ean == CanonizacaoProduto.ean_canonico)
+    )
+
+
+def _canonization_mapping_order(
+    sort_by: str,
+    sort_dir: str,
+    original_product: Any,
+    canonical_product: Any,
+) -> list[Any]:
+    sort_columns = {
+        "updated_at": CanonizacaoProduto.updated_at,
+        "confirmed_at": CanonizacaoProduto.confirmado_em,
+        "reverted_at": CanonizacaoProduto.revertido_em,
+        "ean_original": CanonizacaoProduto.ean_original,
+        "ean_canonico": CanonizacaoProduto.ean_canonico,
+        "status": CanonizacaoProduto.status,
+        "department": Department.name,
+        "original_name": original_product.nome_limpo,
+        "canonical_name": canonical_product.nome_limpo,
+    }
+    column = sort_columns.get(sort_by, CanonizacaoProduto.updated_at)
+    ordered = column.asc() if sort_dir == "asc" else column.desc()
+    return [ordered, CanonizacaoProduto.ean_original.asc()]
 
 @router.get(
     "/maintenance",
@@ -340,86 +471,181 @@ async def listar_mapeamentos_canonizacao(
         alias="status",
         pattern="^(all|active|inactive|reverted)$",
     ),
+    q: str | None = Query(None, max_length=120),
     department_id: UUID | None = Query(None),
+    sort_by: str = Query("updated_at", pattern="^(updated_at|confirmed_at|reverted_at|ean_original|ean_canonico|status|department|original_name|canonical_name)$"),
+    sort_dir: str = Query("desc", pattern="^(asc|desc)$"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> CanonizationMappingsResponse:
     """Retorna mapeamentos de canonizacao sem expor dados fiscais."""
 
-    effective_department_id = department_id
-    if user.role != UserRole.ADMIN:
-        if user.department_id is None:
-            return CanonizationMappingsResponse(
-                items=[],
-                total=0,
-                status=status_filter,
-                limit=limit,
-                offset=offset,
-            )
-        if department_id is not None and department_id != user.department_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Usuario nao pode consultar mapeamentos de outro departamento.",
-            )
-        effective_department_id = user.department_id
+    effective_department_id = _resolve_canonization_department(user, department_id)
+    safe_query = (q or "").strip() or None
+    empty_counts = CanonizationMappingStatusCounts(
+        all=0,
+        active=0,
+        inactive=0,
+        reverted=0,
+    )
+    if user.role != UserRole.ADMIN and user.department_id is None:
+        return CanonizationMappingsResponse(
+            items=[],
+            total=0,
+            status=status_filter,
+            query=safe_query,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            limit=limit,
+            offset=offset,
+            counts=empty_counts,
+        )
 
     original_product = aliased(Produto)
     canonical_product = aliased(Produto)
 
-    filters = []
-    if effective_department_id is not None:
-        filters.append(CanonizacaoProduto.department_id == effective_department_id)
+    base_filters = _canonization_mapping_filters(
+        original_product,
+        canonical_product,
+        effective_department_id,
+        safe_query,
+    )
+    filters = [*base_filters]
     if status_filter != "all":
         filters.append(CanonizacaoProduto.status == status_filter)
 
-    count_stmt = select(func.count()).select_from(CanonizacaoProduto).where(*filters)
+    count_from = _canonization_mapping_count_from(original_product, canonical_product)
+    count_stmt = select(func.count()).select_from(count_from).where(*filters)
     total = await db.scalar(count_stmt)
 
+    status_counts_stmt = (
+        select(CanonizacaoProduto.status, func.count())
+        .select_from(count_from)
+        .where(*base_filters)
+        .group_by(CanonizacaoProduto.status)
+    )
+    status_counts_result = await db.execute(status_counts_stmt)
+    status_counts = {status_name: 0 for status_name in CANONIZATION_MAPPING_STATUSES}
+    for status_name, count in status_counts_result.fetchall():
+        if status_name in status_counts:
+            status_counts[status_name] = count
+
     stmt = (
-        select(
-            CanonizacaoProduto,
-            Department.name.label("department_name"),
-            original_product.nome_limpo.label("original_name"),
-            canonical_product.nome_limpo.label("canonical_name"),
-        )
-        .join(Department, Department.id == CanonizacaoProduto.department_id)
-        .join(original_product, original_product.ean == CanonizacaoProduto.ean_original)
-        .join(canonical_product, canonical_product.ean == CanonizacaoProduto.ean_canonico)
+        _canonization_mapping_base_stmt(original_product, canonical_product)
         .where(*filters)
-        .order_by(CanonizacaoProduto.updated_at.desc(), CanonizacaoProduto.ean_original)
+        .order_by(
+            *_canonization_mapping_order(
+                sort_by,
+                sort_dir,
+                original_product,
+                canonical_product,
+            )
+        )
         .limit(limit)
         .offset(offset)
     )
     result = await db.execute(stmt)
 
     return CanonizationMappingsResponse(
-        items=[
-            CanonizationMappingItem(
-                department_id=row.CanonizacaoProduto.department_id,
-                department_name=row.department_name,
-                ean_original=row.CanonizacaoProduto.ean_original,
-                original_name=row.original_name,
-                ean_canonico=row.CanonizacaoProduto.ean_canonico,
-                canonical_name=row.canonical_name,
-                status=row.CanonizacaoProduto.status,
-                reason=row.CanonizacaoProduto.reason,
-                confidence_score=(
-                    float(row.CanonizacaoProduto.confidence_score)
-                    if row.CanonizacaoProduto.confidence_score is not None
-                    else None
-                ),
-                confirmado_por=row.CanonizacaoProduto.confirmado_por,
-                confirmado_em=row.CanonizacaoProduto.confirmado_em,
-                revertido_por=row.CanonizacaoProduto.revertido_por,
-                revertido_em=row.CanonizacaoProduto.revertido_em,
-                revert_reason=row.CanonizacaoProduto.revert_reason,
-            )
-            for row in result.fetchall()
-        ],
+        items=[_canonization_mapping_item(row) for row in result.fetchall()],
         total=total or 0,
         status=status_filter,
+        query=safe_query,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
         limit=limit,
         offset=offset,
+        counts=CanonizationMappingStatusCounts(
+            all=sum(status_counts.values()),
+            active=status_counts["active"],
+            inactive=status_counts["inactive"],
+            reverted=status_counts["reverted"],
+        ),
+    )
+
+
+@router.get(
+    "/canonization/mappings/export",
+    summary="Exportar mapeamentos de canonizacao sanitizados",
+)
+async def exportar_mapeamentos_canonizacao(
+    db: DbSession,
+    user: User = Depends(RoleChecker([UserRole.ADMIN, UserRole.AUDITOR, UserRole.MANAGER])),
+    status_filter: str = Query(
+        "all",
+        alias="status",
+        pattern="^(all|active|inactive|reverted)$",
+    ),
+    q: str | None = Query(None, max_length=120),
+    department_id: UUID | None = Query(None),
+    sort_by: str = Query("updated_at", pattern="^(updated_at|confirmed_at|reverted_at|ean_original|ean_canonico|status|department|original_name|canonical_name)$"),
+    sort_dir: str = Query("desc", pattern="^(asc|desc)$"),
+) -> StreamingResponse:
+    """Exporta somente metadados seguros dos mapeamentos de canonizacao."""
+
+    effective_department_id = _resolve_canonization_department(user, department_id)
+    safe_query = (q or "").strip() or None
+
+    async def generate_csv():
+        yield (
+            "Departamento;Status;EAN Original;Produto Original;EAN Canonico;"
+            "Produto Canonico;Confianca;Confirmado Por;Confirmado Em;"
+            "Revertido Por;Revertido Em;Motivo;Motivo Reversao\n"
+        )
+
+        if user.role != UserRole.ADMIN and user.department_id is None:
+            return
+
+        original_product = aliased(Produto)
+        canonical_product = aliased(Produto)
+        filters = _canonization_mapping_filters(
+            original_product,
+            canonical_product,
+            effective_department_id,
+            safe_query,
+        )
+        if status_filter != "all":
+            filters.append(CanonizacaoProduto.status == status_filter)
+
+        stmt = (
+            _canonization_mapping_base_stmt(original_product, canonical_product)
+            .where(*filters)
+            .order_by(
+                *_canonization_mapping_order(
+                    sort_by,
+                    sort_dir,
+                    original_product,
+                    canonical_product,
+                )
+            )
+            .limit(5000)
+        )
+        result = await db.stream(stmt)
+
+        async for row in result:
+            item = _canonization_mapping_item(row)
+            yield (
+                f"{_safe_csv(item.department_name)};"
+                f"{_safe_csv(item.status)};"
+                f"{_safe_csv(item.ean_original)};"
+                f"{_safe_csv(item.original_name)};"
+                f"{_safe_csv(item.ean_canonico)};"
+                f"{_safe_csv(item.canonical_name)};"
+                f"{_safe_csv(item.confidence_score)};"
+                f"{_safe_csv(item.confirmado_por)};"
+                f"{_safe_csv(item.confirmado_em)};"
+                f"{_safe_csv(item.revertido_por)};"
+                f"{_safe_csv(item.revertido_em)};"
+                f"{_safe_csv(item.reason)};"
+                f"{_safe_csv(item.revert_reason)}\n"
+            )
+
+    return StreamingResponse(
+        generate_csv(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=canonizacao_mapeamentos.csv"
+        },
     )
 
 
@@ -510,6 +736,12 @@ async def reverter_canonizacao_produto(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Confirmacao explicita e obrigatoria.",
         )
+    revert_reason = (payload.reason or "").strip()
+    if not revert_reason:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Motivo da reversao e obrigatorio.",
+        )
 
     department_id = payload.department_id
     if user.role == UserRole.MANAGER:
@@ -536,7 +768,7 @@ async def reverter_canonizacao_produto(
             ean_original=payload.ean_original,
             department_id=department_id,
             usuario_executor=user.username,
-            reason=payload.reason,
+            reason=revert_reason,
         )
     except ProductCanonizationValidationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
