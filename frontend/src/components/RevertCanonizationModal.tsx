@@ -52,13 +52,18 @@ export const RevertCanonizationModal: React.FC<RevertCanonizationModalProps> = (
   };
 
   const handleConfirm = async () => {
+    const normalizedReason = reason.trim();
+    if (!normalizedReason) {
+      setError('Informe o motivo da reversao para continuar.');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
-    const normalizedReason = reason.trim();
     const payload: CanonizationRevertRequest = {
       ean_original: produto.canonizacao!.ean_original,
-      reason: normalizedReason ? normalizedReason : null,
+      reason: normalizedReason,
       confirmed: true,
     };
 
@@ -151,13 +156,20 @@ export const RevertCanonizationModal: React.FC<RevertCanonizationModalProps> = (
             </span>
             <textarea
               value={reason}
-              onChange={(event) => setReason(event.target.value)}
+              onChange={(event) => {
+                setReason(event.target.value);
+                if (error && event.target.value.trim()) setError('');
+              }}
               disabled={loading}
               maxLength={500}
               rows={4}
               className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition-all focus:border-primary-500 focus:bg-white focus:ring-4 focus:ring-primary-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:bg-slate-800 dark:focus:ring-primary-900/20"
-              placeholder="Opcional"
+              placeholder="Descreva por que este mapeamento deve ser revertido"
+              required
             />
+            <span className="mt-1 block text-right text-[11px] font-bold text-slate-400 dark:text-slate-500">
+              {reason.length}/500
+            </span>
           </label>
 
           {error && (
@@ -183,7 +195,7 @@ export const RevertCanonizationModal: React.FC<RevertCanonizationModalProps> = (
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={loading}
+            disabled={loading || !reason.trim()}
             className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-600 px-5 py-3 text-sm font-bold text-white transition-all hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : <RotateCcw size={18} aria-hidden="true" />}

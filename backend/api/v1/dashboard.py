@@ -176,7 +176,7 @@ async def stream_notifications(user: CurrentUser):
 )
 async def exportar_audit_logs(
     db: DbSession,
-    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.AUDITOR]))],
+    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.AUDITOR, UserRole.MANAGER]))],
 ) -> StreamingResponse:
     """Exporta a trilha de auditoria via streaming para suportar grandes volumes (Zero-OOM)."""
 
@@ -209,7 +209,7 @@ async def exportar_audit_logs(
 )
 async def listar_audit_logs(
     db: DbSession,
-    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.AUDITOR]))],
+    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.AUDITOR, UserRole.MANAGER]))],
     limit: int = 50,
     offset: int = 0,
 ) -> list[dict[str, Any]]:

@@ -35,6 +35,7 @@ export interface HistoricoPrecoProduto {
   quantidade: number;
   valor_total: number;
   numero_nota?: string;
+  ean_original?: string | null;
 }
 
 export interface ProductPriceHistoryResponse {
@@ -226,8 +227,17 @@ export interface CanonizationMappingsResponse {
   items: CanonizationMappingItem[];
   total: number;
   status: CanonizationMappingStatus;
+  query: string | null;
+  sort_by: string;
+  sort_dir: string;
   limit: number;
   offset: number;
+  counts: {
+    all: number;
+    active: number;
+    inactive: number;
+    reverted: number;
+  };
 }
 
 export interface FornecedorImportado {

@@ -1134,6 +1134,7 @@ const ProductHistoryModal: React.FC<{
                   <thead>
                     <tr className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-widest border-b border-slate-100 dark:border-slate-800">
                       <th className="pb-3 px-2">Data</th>
+                      <th className="pb-3 px-2">EAN origem</th>
                       <th className="pb-3 px-2">Fornecedor</th>
                       <th className="pb-3 px-2">Preço Un.</th>
                       <th className="pb-3 px-2 text-center">Qtd.</th>
@@ -1148,6 +1149,9 @@ const ProductHistoryModal: React.FC<{
                       >
                         <td className="py-4 px-2 font-medium text-slate-600 dark:text-slate-400">
                           {new Date(h.data_compra).toLocaleDateString("pt-BR")}
+                        </td>
+                        <td className="py-4 px-2 font-mono text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                          {h.ean_original || historyData?.ean}
                         </td>
                         <td className="py-4 px-2 font-bold text-slate-700 dark:text-slate-200">
                           {h.fornecedor}
@@ -1172,7 +1176,7 @@ const ProductHistoryModal: React.FC<{
                     {historyData?.historico.length === 0 && (
                       <tr>
                         <td
-                          colSpan={5}
+                          colSpan={6}
                           className="py-8 text-center text-slate-400 italic"
                         >
                           Nenhuma compra encontrada.

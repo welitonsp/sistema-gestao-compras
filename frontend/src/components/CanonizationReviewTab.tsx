@@ -2,14 +2,18 @@ import React, { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
   Clock,
+  Download,
   Eye,
   Hash,
   Info,
   Layers,
   ListChecks,
   RefreshCw,
+  Search,
   ShieldCheck,
 } from "lucide-react";
 import { apiClient } from "../api/client";
@@ -53,6 +57,20 @@ const mappingStatusOptions: { value: CanonizationMappingStatus; label: string }[
   { value: "reverted", label: "Revertidos" },
   { value: "inactive", label: "Inativos" },
 ];
+
+const mappingSortOptions = [
+  { value: "updated_at", label: "Atualização" },
+  { value: "original_name", label: "Produto original" },
+  { value: "canonical_name", label: "Produto canônico" },
+  { value: "ean_original", label: "EAN original" },
+  { value: "ean_canonico", label: "EAN canônico" },
+  { value: "status", label: "Status" },
+  { value: "department", label: "Departamento" },
+  { value: "confirmed_at", label: "Confirmação" },
+  { value: "reverted_at", label: "Reversão" },
+];
+
+const mappingPageSize = 25;
 
 const mappingStatusLabel = (status: string) => {
   if (status === "active") return "Ativo";
@@ -366,12 +384,49 @@ const MappingRow: React.FC<{ mapping: CanonizationMappingItem }> = ({ mapping })
 const CanonizationMappingsPanel: React.FC<{
   data: CanonizationMappingsResponse | null;
   statusFilter: CanonizationMappingStatus;
+  searchTerm: string;
+  sortBy: string;
+  sortDir: "asc" | "desc";
+  page: number;
   loading: boolean;
   error: boolean;
   onStatusChange: (status: CanonizationMappingStatus) => void;
+  onSearchTermChange: (value: string) => void;
+  onSearchSubmit: () => void;
+  onSortByChange: (value: string) => void;
+  onSortDirChange: (value: "asc" | "desc") => void;
+  onPageChange: (page: number) => void;
   onRefresh: () => void;
-}> = ({ data, statusFilter, loading, error, onStatusChange, onRefresh }) => {
+  onExport: () => void;
+}> = ({
+  data,
+  statusFilter,
+  searchTerm,
+  sortBy,
+  sortDir,
+  page,
+  loading,
+  error,
+  onStatusChange,
+  onSearchTermChange,
+  onSearchSubmit,
+  onSortByChange,
+  onSortDirChange,
+  onPageChange,
+  onRefresh,
+  onExport,
+}) => {
   const mappings = data?.items || [];
+  const counts = data?.counts || {
+    all: 0,
+    active: 0,
+    inactive: 0,
+    reverted: 0,
+  };
+  const total = data?.total || 0;
+  const totalPages = Math.max(1, Math.ceil(total / mappingPageSize));
+  const canGoBack = page > 0;
+  const canGoForward = page + 1 < totalPages;
 
   return (
     <section className="space-y-4">
@@ -391,21 +446,113 @@ const CanonizationMappingsPanel: React.FC<{
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onRefresh}
-            disabled={loading}
-            className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-widest text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            <RefreshCw size={14} aria-hidden="true" />
-            Atualizar
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onExport}
+              disabled={loading || total === 0}
+              className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-widest text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              <Download size={14} aria-hidden="true" />
+              Exportar
+            </button>
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={loading}
+              className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-widest text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              <RefreshCw size={14} aria-hidden="true" />
+              Atualizar
+            </button>
+          </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-4">
           {mappingStatusOptions.map((option) => (
             <button
-              key={option.value}
+              key={`count-${option.value}`}
+              type="button"
+              onClick={() => onStatusChange(option.value)}
+              className={`rounded-xl border px-3 py-3 text-left transition-colors ${
+                statusFilter === option.value
+                  ? "border-primary-200 bg-primary-50 text-primary-700 dark:border-primary-800/60 dark:bg-primary-900/20 dark:text-primary-300"
+                  : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
+              aria-pressed={statusFilter === option.value}
+            >
+              <span className="block text-[10px] font-bold uppercase tracking-widest">
+                {option.label}
+              </span>
+              <span className="mt-1 block text-lg font-black">
+                {counts[option.value]}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <form
+          className="mt-5 grid gap-3 lg:grid-cols-[1fr_220px_150px_auto]"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSearchSubmit();
+          }}
+        >
+          <label className="relative block">
+            <span className="sr-only">Buscar mapeamentos</span>
+            <Search
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              aria-hidden="true"
+            />
+            <input
+              value={searchTerm}
+              onChange={(event) => onSearchTermChange(event.target.value)}
+              placeholder="Buscar por EAN, produto, usuário ou departamento"
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-400 focus:border-primary-300 focus:ring-2 focus:ring-primary-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-primary-700 dark:focus:ring-primary-900/40"
+            />
+          </label>
+
+          <label className="block">
+            <span className="sr-only">Ordenar por</span>
+            <select
+              value={sortBy}
+              onChange={(event) => onSortByChange(event.target.value)}
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-primary-300 focus:ring-2 focus:ring-primary-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+            >
+              {mappingSortOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="sr-only">Direção</span>
+            <select
+              value={sortDir}
+              onChange={(event) => onSortDirChange(event.target.value as "asc" | "desc")}
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-primary-300 focus:ring-2 focus:ring-primary-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+            >
+              <option value="desc">Descendente</option>
+              <option value="asc">Ascendente</option>
+            </select>
+          </label>
+
+          <button
+            type="submit"
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 text-xs font-bold uppercase tracking-widest text-white transition-colors hover:bg-primary-700"
+          >
+            <Search size={14} aria-hidden="true" />
+            Buscar
+          </button>
+        </form>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {mappingStatusOptions.map((option) => (
+            <button
+              key={`filter-${option.value}`}
               type="button"
               onClick={() => onStatusChange(option.value)}
               className={`rounded-xl px-3 py-2 text-xs font-bold transition-colors ${
@@ -456,9 +603,34 @@ const CanonizationMappingsPanel: React.FC<{
         </div>
       ) : (
         <div className="space-y-3">
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
-            {data?.total || 0} mapeamento(s)
-          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+              {total} mapeamento(s)
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onPageChange(page - 1)}
+                disabled={!canGoBack || loading}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                aria-label="Página anterior"
+              >
+                <ChevronLeft size={16} aria-hidden="true" />
+              </button>
+              <span className="min-w-[92px] text-center text-xs font-bold text-slate-500 dark:text-slate-400">
+                {page + 1} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => onPageChange(page + 1)}
+                disabled={!canGoForward || loading}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                aria-label="Próxima página"
+              >
+                <ChevronRight size={16} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
           {mappings.map((mapping) => (
             <MappingRow
               key={`${mapping.department_id}-${mapping.ean_original}-${mapping.status}`}
@@ -481,6 +653,11 @@ export const CanonizationReviewTab: React.FC = () => {
   const [mappingsError, setMappingsError] = useState(false);
   const [mappingStatus, setMappingStatus] =
     useState<CanonizationMappingStatus>("all");
+  const [mappingSearchInput, setMappingSearchInput] = useState("");
+  const [mappingQuery, setMappingQuery] = useState("");
+  const [mappingSortBy, setMappingSortBy] = useState("updated_at");
+  const [mappingSortDir, setMappingSortDir] = useState<"asc" | "desc">("desc");
+  const [mappingPage, setMappingPage] = useState(0);
   const [selectedMatches, setSelectedMatches] = useState<Record<string, string[]>>(
     {},
   );
@@ -501,12 +678,22 @@ export const CanonizationReviewTab: React.FC = () => {
     }
   };
 
-  const fetchMappings = async (statusFilter: CanonizationMappingStatus = mappingStatus) => {
+  const fetchMappings = async () => {
     setLoadingMappings(true);
     setMappingsError(false);
     try {
+      const params = new URLSearchParams({
+        status: mappingStatus,
+        sort_by: mappingSortBy,
+        sort_dir: mappingSortDir,
+        limit: String(mappingPageSize),
+        offset: String(mappingPage * mappingPageSize),
+      });
+      if (mappingQuery.trim()) {
+        params.set("q", mappingQuery.trim());
+      }
       const response = await apiClient.get<CanonizationMappingsResponse>(
-        `/produtos/canonization/mappings?status=${statusFilter}`,
+        `/produtos/canonization/mappings?${params.toString()}`,
       );
       setMappingsData(response);
     } catch {
@@ -522,8 +709,40 @@ export const CanonizationReviewTab: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchMappings(mappingStatus);
-  }, [mappingStatus]);
+    fetchMappings();
+  }, [mappingStatus, mappingQuery, mappingSortBy, mappingSortDir, mappingPage]);
+
+  const handleMappingStatusChange = (status: CanonizationMappingStatus) => {
+    setMappingStatus(status);
+    setMappingPage(0);
+  };
+
+  const handleMappingSearchSubmit = () => {
+    setMappingQuery(mappingSearchInput.trim());
+    setMappingPage(0);
+  };
+
+  const handleMappingSortByChange = (value: string) => {
+    setMappingSortBy(value);
+    setMappingPage(0);
+  };
+
+  const handleMappingSortDirChange = (value: "asc" | "desc") => {
+    setMappingSortDir(value);
+    setMappingPage(0);
+  };
+
+  const exportMappings = () => {
+    const params = new URLSearchParams({
+      status: mappingStatus,
+      sort_by: mappingSortBy,
+      sort_dir: mappingSortDir,
+    });
+    if (mappingQuery.trim()) {
+      params.set("q", mappingQuery.trim());
+    }
+    window.location.href = `/api/v1/produtos/canonization/mappings/export?${params.toString()}`;
+  };
 
   const toggleMatchSelection = (primaryEan: string, matchEan: string) => {
     setSelectedMatches((current) => {
@@ -666,10 +885,20 @@ export const CanonizationReviewTab: React.FC = () => {
       <CanonizationMappingsPanel
         data={mappingsData}
         statusFilter={mappingStatus}
+        searchTerm={mappingSearchInput}
+        sortBy={mappingSortBy}
+        sortDir={mappingSortDir}
+        page={mappingPage}
         loading={loadingMappings}
         error={mappingsError}
-        onStatusChange={setMappingStatus}
-        onRefresh={() => fetchMappings(mappingStatus)}
+        onStatusChange={handleMappingStatusChange}
+        onSearchTermChange={setMappingSearchInput}
+        onSearchSubmit={handleMappingSearchSubmit}
+        onSortByChange={handleMappingSortByChange}
+        onSortDirChange={handleMappingSortDirChange}
+        onPageChange={setMappingPage}
+        onRefresh={fetchMappings}
+        onExport={exportMappings}
       />
     </div>
   );
