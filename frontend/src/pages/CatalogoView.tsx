@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { 
   Package, Search, Download, Edit2, Check, X, 
   Sparkles, Wand2, Filter, ChevronRight, Hash,
-  Tag, Layers, Info
+  Tag, Layers, Info, RotateCcw
 } from 'lucide-react';
 import { Produto } from '../types/api';
 import { apiClient } from '../api/client';
 import { Skeleton } from '../components/Skeleton';
 import { CanonizationReviewTab } from '../components/CanonizationReviewTab';
 import { CategoryReviewTab } from '../components/CategoryReviewTab';
+import { RevertCanonizationModal } from '../components/RevertCanonizationModal';
 
 interface Suggestion {
   type: string;
@@ -33,6 +34,7 @@ export const CatalogoView: React.FC<CatalogoViewProps> = ({ produtos, onRefresh,
   const [editValue, setEditValue] = useState('');
   const [filterCategory, setFilterCategory] = useState('Todas');
   const [activeTab, setActiveTab] = useState<CatalogTab>('products');
+  const [revertTarget, setRevertTarget] = useState<Produto | null>(null);
 
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -319,13 +321,26 @@ export const CatalogoView: React.FC<CatalogoViewProps> = ({ produtos, onRefresh,
                           <button onClick={() => setEditingEan(null)} className="p-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors" aria-label="Cancelar alteração"><X size={18} /></button>
                         </div>
                       ) : (
-                        <button 
-                          onClick={() => { setEditingEan(p.ean); setEditValue(p.categoria); }}
-                          className="p-2 text-slate-300 dark:text-slate-600 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-xl transition-all opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0"
-                          aria-label={`Editar ${p.nome_limpo}`}
-                        >
-                          <Edit2 size={16} />
-                        </button>
+                        <div className="flex justify-end gap-2">
+                          {p.canonizacao && (
+                            <button
+                              type="button"
+                              onClick={() => setRevertTarget(p)}
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700 ring-1 ring-amber-100 transition-all hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-300 dark:ring-amber-800/70 dark:hover:bg-amber-900/30"
+                              aria-label={`Reverter canonização de ${p.nome_limpo}`}
+                            >
+                              <RotateCcw size={14} aria-hidden="true" />
+                              Reverter
+                            </button>
+                          )}
+                          <button
+                            onClick={() => { setEditingEan(p.ean); setEditValue(p.categoria); }}
+                            className="p-2 text-slate-300 dark:text-slate-600 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-xl transition-all opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0"
+                            aria-label={`Editar ${p.nome_limpo}`}
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -341,6 +356,11 @@ export const CatalogoView: React.FC<CatalogoViewProps> = ({ produtos, onRefresh,
       ) : (
         <CanonizationReviewTab />
       )}
+      <RevertCanonizationModal
+        produto={revertTarget}
+        onClose={() => setRevertTarget(null)}
+        onSuccess={onRefresh}
+      />
     </div>
   );
 };

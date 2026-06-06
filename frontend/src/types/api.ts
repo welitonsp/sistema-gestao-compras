@@ -356,6 +356,23 @@ export interface Produto {
   } | null;
 }
 
+export interface CanonizationRevertRequest {
+  ean_original: string;
+  reason?: string | null;
+  confirmed: true;
+}
+
+export interface CanonizationRevertResponse {
+  ean_original: string;
+  ean_canonico: string;
+  department_id: string;
+  status: string;
+  revertido_por: string;
+  revertido_em: string;
+  revert_reason: string | null;
+  message: string;
+}
+
 export interface ProdutoUpdate {
   nome_limpo?: string;
   marca?: string;
