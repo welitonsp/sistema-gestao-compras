@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   FileText, ShieldCheck, User as UserIcon, Calendar, 
   ArrowRight, Search, Filter, Download, MoreHorizontal,
-  Globe
+  Globe, RotateCcw
 } from 'lucide-react';
 import { AuditLog } from '../types/api';
 import { Skeleton } from '../components/Skeleton';
@@ -11,6 +11,55 @@ interface AuditoriaViewProps {
   logs: AuditLog[] | null;
   onExport?: () => void;
 }
+
+const operationLabel = (operation: string) => {
+  if (operation === 'PRODUCT_CANONIZATION_REVERTED') return 'CANONIZACAO REVERTIDA';
+  if (operation === 'PRODUCT_CANONIZED') return 'CANONIZACAO';
+  if (operation === 'CATEGORY_CONFIRMED') return 'CATEGORIA CONFIRMADA';
+  return operation;
+};
+
+const operationClass = (operation: string) => {
+  if (operation === 'PRODUCT_CANONIZATION_REVERTED') {
+    return 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300';
+  }
+  if (operation === 'PRODUCT_CANONIZED') {
+    return 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300';
+  }
+  if (operation === 'LOGIN') {
+    return 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400';
+  }
+  if (operation === 'DELETE' || operation === 'IMPORT_DELETED') {
+    return 'bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400';
+  }
+  if (operation === 'IMPORT' || operation.startsWith('IMPORT_')) {
+    return 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400';
+  }
+  return 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400';
+};
+
+const canonicalDetailsSummary = (log: AuditLog): string | null => {
+  if (
+    log.operacao !== 'PRODUCT_CANONIZATION_REVERTED'
+    && log.operacao !== 'PRODUCT_CANONIZED'
+  ) {
+    return null;
+  }
+
+  try {
+    const details = JSON.parse(log.detalhes || '{}') as {
+      ean_original?: string;
+      ean_canonico?: string;
+      reason?: string | null;
+    };
+    if (!details.ean_original || !details.ean_canonico) return null;
+
+    const base = `EAN ${details.ean_original} -> ${details.ean_canonico}`;
+    return details.reason ? `${base} · ${details.reason}` : base;
+  } catch {
+    return null;
+  }
+};
 
 export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) => {
   const handleShare = async () => {
@@ -98,7 +147,11 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) 
                   </td>
                 </tr>
               ) : (
-                logs.map((log, i) => (
+                logs.map((log, i) => {
+                  const detailsSummary = canonicalDetailsSummary(log);
+                  const isCanonizationRevert = log.operacao === 'PRODUCT_CANONIZATION_REVERTED';
+
+                  return (
                   <tr key={i} className="group hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
                     <td className="px-8 py-5">
                       <div className="flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-400">
@@ -118,22 +171,25 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) 
                       </div>
                     </td>
                     <td className="px-8 py-5">
-                      <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-tight ${
-                        log.operacao === 'LOGIN' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' :
-                        log.operacao === 'DELETE' ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400' :
-                        log.operacao === 'IMPORT' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' :
-                        'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                      }`}>
-                        {log.operacao}
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-tight ${operationClass(log.operacao)}`}>
+                        {isCanonizationRevert && <RotateCcw size={12} aria-hidden="true" />}
+                        {operationLabel(log.operacao)}
                       </span>
                     </td>
                     <td className="px-8 py-5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{log.entidade}</span>
-                        <ArrowRight size={12} className="text-slate-300 dark:text-slate-700" />
-                        <span className="text-xs font-mono text-slate-400 dark:text-slate-500 truncate max-w-[120px] bg-slate-50 dark:bg-slate-800/50 px-1.5 py-0.5 rounded border border-slate-100 dark:border-slate-800">
-                          {log.entidade_id}
-                        </span>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{log.entidade}</span>
+                          <ArrowRight size={12} className="text-slate-300 dark:text-slate-700" />
+                          <span className="text-xs font-mono text-slate-400 dark:text-slate-500 truncate max-w-[120px] bg-slate-50 dark:bg-slate-800/50 px-1.5 py-0.5 rounded border border-slate-100 dark:border-slate-800">
+                            {log.entidade_id}
+                          </span>
+                        </div>
+                        {detailsSummary && (
+                          <p className="max-w-md text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                            {detailsSummary}
+                          </p>
+                        )}
                       </div>
                     </td>
                     <td className="px-8 py-5">
@@ -151,7 +207,8 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) 
                       </button>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
