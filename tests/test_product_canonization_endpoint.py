@@ -445,6 +445,69 @@ async def test_response_reversao_nao_contem_dados_sensiveis():
 
 
 @pytest.mark.asyncio
+async def test_audit_logs_expoem_reversao_com_rastreabilidade_segura():
+    await _cleanup()
+    department = await _create_department()
+    other_department = await _create_department("Dept Auditoria Outro")
+    await _seed_products("7895000000001", "7895000000002")
+    manager_token = await _create_user("canon_revert_audit_manager", UserRole.MANAGER, department.id)
+    auditor_token = await _create_user("canon_revert_audit_reader", UserRole.AUDITOR, department.id)
+    other_auditor_token = await _create_user(
+        "canon_revert_audit_other",
+        UserRole.AUDITOR,
+        other_department.id,
+    )
+    await _post_confirm(manager_token, _payload(department.id))
+    await _post_revert(manager_token, _revert_payload(reason="auditoria segura"))
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/dashboard/audit-logs",
+            headers={"Authorization": f"Bearer {auditor_token}"},
+        )
+        other_response = await client.get(
+            "/api/v1/dashboard/audit-logs",
+            headers={"Authorization": f"Bearer {other_auditor_token}"},
+        )
+
+    assert response.status_code == 200
+    logs = [
+        log
+        for log in response.json()
+        if log["operacao"] == "PRODUCT_CANONIZATION_REVERTED"
+    ]
+    assert len(logs) == 1
+    assert logs[0]["usuario"] == "canon_revert_audit_manager"
+    assert logs[0]["entidade"] == "CanonizacaoProduto"
+    assert "7895000000001" in logs[0]["entidade_id"]
+    assert "7895000000001" in logs[0]["detalhes"]
+    assert "7895000000002" in logs[0]["detalhes"]
+    assert "auditoria segura" in logs[0]["detalhes"]
+
+    forbidden = (
+        "descricao" + "_original",
+        "descricao fiscal",
+        "chave" + "_acesso",
+        "qr" + "_code",
+        "url" + "_sefaz",
+        "x" + "ml",
+        "json" + "_bruto",
+        "payload" + "_bruto",
+        "cn" + "pj",
+        "c" + "pf",
+    )
+    lowered = response.text.lower()
+    for term in forbidden:
+        assert term not in lowered
+
+    assert other_response.status_code == 200
+    assert all(
+        log["operacao"] != "PRODUCT_CANONIZATION_REVERTED"
+        for log in other_response.json()
+    )
+
+
+@pytest.mark.asyncio
 async def test_endpoint_produto_inexistente_retorna_erro_adequado():
     await _cleanup()
     department = await _create_department()
