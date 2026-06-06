@@ -20,6 +20,8 @@ from backend.schemas.canonization import (
     CanonizationConfirmationResponse,
     CanonizationMatch,
     CanonizationProduct,
+    CanonizationRevertRequest,
+    CanonizationRevertResponse,
 )
 from backend.schemas.produtos import (
     CategorySuggestionCandidatesResponse,
@@ -388,6 +390,70 @@ async def confirmar_canonizacao_produtos(
             }
             for mapping in result.created_mappings
         ],
+    )
+
+
+@router.post(
+    "/canonization/revert",
+    response_model=CanonizationRevertResponse,
+    summary="Reverter canonizacao manual de produto",
+)
+async def reverter_canonizacao_produto(
+    payload: CanonizationRevertRequest,
+    db: DbSession,
+    user: User = Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER])),
+) -> CanonizationRevertResponse:
+    """Reverte logicamente um mapeamento de canonizacao ativo."""
+
+    if payload.confirmed is not True:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Confirmacao explicita e obrigatoria.",
+        )
+
+    department_id = payload.department_id
+    if user.role == UserRole.MANAGER:
+        if user.department_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Usuario sem departamento vinculado.",
+            )
+        if department_id is not None and department_id != user.department_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="MANAGER nao pode reverter canonizacao para outro departamento.",
+            )
+        department_id = user.department_id
+    elif department_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="department_id e obrigatorio para ADMIN.",
+        )
+
+    service = ProductCanonizationService(db)
+    try:
+        result = await service.revert_canonization(
+            ean_original=payload.ean_original,
+            department_id=department_id,
+            usuario_executor=user.username,
+            reason=payload.reason,
+        )
+    except ProductCanonizationValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except ProductCanonizationNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ProductCanonizationConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    return CanonizationRevertResponse(
+        ean_original=result.ean_original,
+        ean_canonico=result.ean_canonico,
+        department_id=result.department_id,
+        status=result.status,
+        revertido_por=result.revertido_por,
+        revertido_em=result.revertido_em,
+        revert_reason=result.revert_reason,
+        message=result.summary,
     )
 
 

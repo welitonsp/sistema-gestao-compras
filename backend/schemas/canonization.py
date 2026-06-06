@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -52,3 +53,23 @@ class CanonizationConfirmationResponse(BaseModel):
     ean_canonico: str
     department_id: UUID
     created_mappings: list[CanonizationCreatedMapping]
+
+
+class CanonizationRevertRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ean_original: str
+    reason: str | None = None
+    department_id: UUID | None = None
+    confirmed: bool | None = None
+
+
+class CanonizationRevertResponse(BaseModel):
+    ean_original: str
+    ean_canonico: str
+    department_id: UUID
+    status: str
+    revertido_por: str
+    revertido_em: datetime
+    revert_reason: str | None = None
+    message: str
