@@ -88,7 +88,11 @@ def _produto_operacional_filter():
 
 def _safe_csv(value: Any) -> str:
     text = "" if value is None else str(value)
-    return text.replace("\r", " ").replace("\n", " ").replace(";", ",")
+    text = text.replace("\r", " ").replace("\n", " ").replace(";", ",")
+    stripped = text.strip()
+    if stripped and stripped[0] in ("=", "+", "-", "@"):
+        return f"'{text}"
+    return text
 
 
 def _canonization_mapping_item(row: Any) -> CanonizationMappingItem:

@@ -1009,3 +1009,32 @@ async def test_endpoint_nao_altera_produto_ou_item_nota_fiscal():
 
     assert product_after == product_before
     assert item_after == item_before
+
+
+@pytest.mark.asyncio
+async def test_endpoint_exporta_mapeamentos_previne_csv_injection():
+    await _cleanup()
+    department = await _create_department("Dept Mappings CSV Injection")
+    await _seed_products("7895000000071", "7895000000072")
+    token = await _create_user("canon_mapping_export_inj", UserRole.MANAGER, department.id)
+
+    await _post_confirm(
+        token,
+        _payload(
+            department.id,
+            ean_canonico="7895000000072",
+            eans_originais=["7895000000071"],
+            reason="=cmd|' /C calc'!A0",
+        ),
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/produtos/canonization/mappings/export",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    text_body = response.text
+
+    assert "'=cmd|' /C calc'!A0" in text_body
