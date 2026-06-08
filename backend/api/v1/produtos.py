@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
+import csv
 import json
 from typing import Any, Annotated
 from uuid import UUID
@@ -14,6 +15,7 @@ import pandas as pd
 from sqlalchemy import func, select, or_
 from sqlalchemy.orm import aliased
 from backend.api.dependencies import DbSession, CurrentUser, RoleChecker
+from backend.core.csv_utils import sanitize_csv_cell
 from backend.models.compras import AuditLog, CanonizacaoProduto, Department, Produto, ClassificacaoCache, UserRole, User, ItemNotaFiscal, NotaFiscal
 from backend.schemas.canonization import (
     CanonizationCandidateGroup,
@@ -84,15 +86,6 @@ def _produto_operacional_filter():
         .exists()
     )
     return or_(~item_exists, active_item_exists)
-
-
-def _safe_csv(value: Any) -> str:
-    text = "" if value is None else str(value)
-    text = text.replace("\r", " ").replace("\n", " ").replace(";", ",")
-    stripped = text.strip()
-    if stripped and stripped[0] in ("=", "+", "-", "@"):
-        return f"'{text}"
-    return text
 
 
 def _canonization_mapping_item(row: Any) -> CanonizationMappingItem:
@@ -239,16 +232,24 @@ async def exportar_produtos(
     """Exporta o catálogo de produtos via streaming (Zero-OOM)."""
     
     async def generate_csv():
-        yield "EAN/Codigo;Descricao Canonica;Marca;Categoria;Unidade\n"
+        output = io.StringIO()
+        writer = csv.writer(output, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+
+        def yield_row(row_data: list[Any]):
+            sanitized = [sanitize_csv_cell(cell) for cell in row_data]
+            output.seek(0)
+            output.truncate(0)
+            writer.writerow(sanitized)
+            return output.getvalue()
+
+        yield yield_row(["EAN/Codigo", "Descricao Canonica", "Marca", "Categoria", "Unidade"])
         
         stmt = select(Produto).where(_produto_operacional_filter()).order_by(Produto.nome_limpo)
         result = await db.stream(stmt)
         
         async for row in result:
             p = row[0]
-            marca = (p.marca or "").replace(";", ",")
-            nome = p.nome_limpo.replace(";", ",")
-            yield f"{p.ean};{nome};{marca};{p.categoria};{p.unidade}\n"
+            yield yield_row([p.ean, p.nome_limpo, p.marca, p.categoria, p.unidade])
 
     return StreamingResponse(
         generate_csv(),
@@ -591,10 +592,32 @@ async def exportar_mapeamentos_canonizacao(
     safe_query = (q or "").strip() or None
 
     async def generate_csv():
-        yield (
-            "Departamento;Status;EAN Original;Produto Original;EAN Canonico;"
-            "Produto Canonico;Confianca;Confirmado Por;Confirmado Em;"
-            "Revertido Por;Revertido Em;Motivo;Motivo Reversao\n"
+        output = io.StringIO()
+        writer = csv.writer(output, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+
+        def yield_row(row_data: list[Any]):
+            sanitized = [sanitize_csv_cell(cell) for cell in row_data]
+            output.seek(0)
+            output.truncate(0)
+            writer.writerow(sanitized)
+            return output.getvalue()
+
+        yield yield_row(
+            [
+                "Departamento",
+                "Status",
+                "EAN Original",
+                "Produto Original",
+                "EAN Canonico",
+                "Produto Canonico",
+                "Confianca",
+                "Confirmado Por",
+                "Confirmado Em",
+                "Revertido Por",
+                "Revertido Em",
+                "Motivo",
+                "Motivo Reversao",
+            ]
         )
 
         if user.role != UserRole.ADMIN and user.department_id is None:
@@ -628,20 +651,22 @@ async def exportar_mapeamentos_canonizacao(
 
         async for row in result:
             item = _canonization_mapping_item(row)
-            yield (
-                f"{_safe_csv(item.department_name)};"
-                f"{_safe_csv(item.status)};"
-                f"{_safe_csv(item.ean_original)};"
-                f"{_safe_csv(item.original_name)};"
-                f"{_safe_csv(item.ean_canonico)};"
-                f"{_safe_csv(item.canonical_name)};"
-                f"{_safe_csv(item.confidence_score)};"
-                f"{_safe_csv(item.confirmado_por)};"
-                f"{_safe_csv(item.confirmado_em)};"
-                f"{_safe_csv(item.revertido_por)};"
-                f"{_safe_csv(item.revertido_em)};"
-                f"{_safe_csv(item.reason)};"
-                f"{_safe_csv(item.revert_reason)}\n"
+            yield yield_row(
+                [
+                    item.department_name,
+                    item.status,
+                    item.ean_original,
+                    item.original_name,
+                    item.ean_canonico,
+                    item.canonical_name,
+                    item.confidence_score,
+                    item.confirmado_por,
+                    item.confirmado_em,
+                    item.revertido_por,
+                    item.revertido_em,
+                    item.reason,
+                    item.revert_reason,
+                ]
             )
 
     return StreamingResponse(

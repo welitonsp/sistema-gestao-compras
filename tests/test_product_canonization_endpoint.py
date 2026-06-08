@@ -903,6 +903,65 @@ async def test_endpoint_exporta_mapeamentos_sanitizados_com_filtros():
 
 
 @pytest.mark.asyncio
+async def test_endpoint_exporta_catalogo_previne_csv_injection():
+    await _cleanup()
+    department = await _create_department("Dept Catalog CSV Injection")
+    token = await _create_user("catalog_export_inj", UserRole.MANAGER, department.id)
+
+    async with SessionLocal() as db:
+        db.add_all(
+            [
+                Produto(
+                    ean="7895000000081",
+                    nome_limpo="=cmd|' /C calc'!A0",
+                    marca="Marca Segura",
+                    categoria="MERCEARIA",
+                    unidade="un",
+                ),
+                Produto(
+                    ean="7895000000082",
+                    nome_limpo="Produto Plus",
+                    marca="+SUM(1,1)",
+                    categoria="MERCEARIA",
+                    unidade="un",
+                ),
+                Produto(
+                    ean="7895000000083",
+                    nome_limpo="Produto Minus",
+                    marca="Marca Segura",
+                    categoria="-10+20",
+                    unidade="un",
+                ),
+                Produto(
+                    ean="7895000000084",
+                    nome_limpo="Produto At",
+                    marca="Marca Segura",
+                    categoria="MERCEARIA",
+                    unidade="@SUM(1+1)",
+                ),
+            ]
+        )
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/produtos/export",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "catalogo_produtos.csv" in response.headers["content-disposition"]
+    text_body = response.text
+
+    assert "EAN/Codigo;Descricao Canonica;Marca;Categoria;Unidade" in text_body
+    assert "'=cmd|' /C calc'!A0" in text_body
+    assert "'+SUM(1,1)" in text_body
+    assert "'-10+20" in text_body
+    assert "'@SUM(1+1)" in text_body
+
+
+@pytest.mark.asyncio
 async def test_endpoint_produto_inexistente_retorna_erro_adequado():
     await _cleanup()
     department = await _create_department()
@@ -1014,8 +1073,27 @@ async def test_endpoint_nao_altera_produto_ou_item_nota_fiscal():
 @pytest.mark.asyncio
 async def test_endpoint_exporta_mapeamentos_previne_csv_injection():
     await _cleanup()
-    department = await _create_department("Dept Mappings CSV Injection")
-    await _seed_products("7895000000071", "7895000000072")
+    department = await _create_department("+SUM(1,1)")
+    async with SessionLocal() as db:
+        db.add_all(
+            [
+                Produto(
+                    ean="7895000000071",
+                    nome_limpo="-10+20",
+                    marca="TESTE",
+                    categoria="MERCEARIA",
+                    unidade="un",
+                ),
+                Produto(
+                    ean="7895000000072",
+                    nome_limpo="@SUM(1+1)",
+                    marca="TESTE",
+                    categoria="MERCEARIA",
+                    unidade="un",
+                ),
+            ]
+        )
+        await db.commit()
     token = await _create_user("canon_mapping_export_inj", UserRole.MANAGER, department.id)
 
     await _post_confirm(
@@ -1038,3 +1116,6 @@ async def test_endpoint_exporta_mapeamentos_previne_csv_injection():
     text_body = response.text
 
     assert "'=cmd|' /C calc'!A0" in text_body
+    assert "'+SUM(1,1)" in text_body
+    assert "'-10+20" in text_body
+    assert "'@SUM(1+1)" in text_body

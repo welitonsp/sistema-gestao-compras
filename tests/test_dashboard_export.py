@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from sqlalchemy import delete
 from backend.models.compras import (
+    AuditLog,
     NotaFiscal,
     ItemNotaFiscal,
     Fornecedor,
@@ -296,3 +297,46 @@ async def test_export_fornecedor_department_isolation(client):
     assert response.status_code == 200
     # Header only, no data
     assert "Secret Forn" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_export_audit_logs_sanitiza_csv_injection_e_isola_departamento(client):
+    other_dept_id = uuid4()
+    async with SessionLocal() as db:
+        db.add(
+            AuditLog(
+                department_id=TEST_DEPT_ID,
+                usuario="=cmd|' /C calc'!A0",
+                operacao="+SUM(1,1)",
+                entidade="-10+20",
+                entidade_id="audit-safe-id",
+                detalhes="@SUM(1+1)",
+                ip_origem="127.0.0.1",
+            )
+        )
+        db.add(
+            AuditLog(
+                department_id=other_dept_id,
+                usuario="Other Department User",
+                operacao="OTHER_DEPT",
+                entidade="AuditLog",
+                entidade_id="other-safe-id",
+                detalhes="Other Department Leak",
+                ip_origem="127.0.0.2",
+            )
+        )
+        await db.commit()
+
+    response = await client.get("/api/v1/dashboard/audit-logs/export")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "text/csv; charset=utf-8"
+    assert "auditoria_logs.csv" in response.headers["content-disposition"]
+
+    content = response.text
+    assert "Data/Hora;Usuario;Operacao;Entidade;Detalhes;IP de Origem" in content
+    assert "'=cmd|' /C calc'!A0" in content
+    assert "'+SUM(1,1)" in content
+    assert "'-10+20" in content
+    assert "'@SUM(1+1)" in content
+    assert "Other Department Leak" not in content
