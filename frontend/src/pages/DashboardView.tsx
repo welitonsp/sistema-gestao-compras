@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Package,
   ArrowUpRight,
+  ArrowDownRight,
   Activity,
   Calendar,
   Download,
@@ -31,6 +32,8 @@ import {
 } from "recharts";
 import {
   DashboardResumo,
+  DashboardComparisonItem,
+  DashboardComparisonResponse,
   DataHealthMetrics,
   AlertaPreco,
   AlertaRisco,
@@ -197,6 +200,184 @@ const DataHealthCard: React.FC<{ metrics: DataHealthMetrics }> = ({
   );
 };
 
+const formatPercent = (value?: number | null) => {
+  if (value === null || value === undefined) return "sem base";
+  return `${value > 0 ? "+" : ""}${value.toLocaleString("pt-BR", {
+    maximumFractionDigits: 1,
+  })}%`;
+};
+
+const DeltaBadge: React.FC<{ delta: number; percent?: number | null }> = ({
+  delta,
+  percent,
+}) => {
+  const isUp = delta > 0;
+  const isFlat = delta === 0;
+  const Icon = isUp ? ArrowUpRight : ArrowDownRight;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${
+        isFlat
+          ? "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+          : isUp
+            ? "bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-300"
+            : "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-300"
+      }`}
+    >
+      {!isFlat && <Icon size={12} />}
+      {formatPercent(percent)}
+    </span>
+  );
+};
+
+const ComparisonMetricCard: React.FC<{
+  label: string;
+  metric: DashboardComparisonResponse["summary"]["total_spend"];
+  currency?: boolean;
+}> = ({ label, metric, currency = false }) => (
+  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        {label}
+      </p>
+      <DeltaBadge delta={metric.delta} percent={metric.delta_percent} />
+    </div>
+    <div className="text-xl font-bold text-slate-800 dark:text-white">
+      {currency
+        ? formatCurrencyBRL(metric.current)
+        : metric.current.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
+    </div>
+    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+      Antes:{" "}
+      {currency
+        ? formatCurrencyBRL(metric.previous)
+        : metric.previous.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
+    </p>
+  </div>
+);
+
+const ComparisonList: React.FC<{
+  title: string;
+  items: DashboardComparisonItem[];
+  emptyLabel: string;
+}> = ({ title, items, emptyLabel }) => (
+  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-950/30">
+    <h4 className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+      {title}
+    </h4>
+    <div className="space-y-3">
+      {items.slice(0, 5).map((item) => (
+        <div key={item.key} className="rounded-xl bg-white p-3 dark:bg-slate-900">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-bold text-slate-700 dark:text-slate-200">
+                {item.label}
+              </p>
+              <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                Atual {formatCurrencyBRL(item.current_total)} · Antes{" "}
+                {formatCurrencyBRL(item.previous_total)}
+              </p>
+              {item.source_eans_count && item.source_eans_count > 1 && (
+                <p className="mt-1 text-[10px] font-medium text-indigo-500">
+                  consolidado de {item.source_eans_count} EANs
+                </p>
+              )}
+            </div>
+            <DeltaBadge delta={item.delta} percent={item.delta_percent} />
+          </div>
+        </div>
+      ))}
+      {items.length === 0 && (
+        <p className="py-6 text-center text-xs text-slate-400">{emptyLabel}</p>
+      )}
+    </div>
+  </div>
+);
+
+const DashboardComparisonSection: React.FC<{
+  comparison: DashboardComparisonResponse | null;
+  loading: boolean;
+  error: boolean;
+}> = ({ comparison, loading, error }) => (
+  <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+      <div>
+        <h3 className="text-lg font-bold text-slate-800 dark:text-white">
+          Comparativo de Gastos
+        </h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Atual vs período anterior, com produtos consolidados pela canonização ativa.
+        </p>
+      </div>
+      <Activity size={18} className="text-slate-400" />
+    </div>
+
+    {loading ? (
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {[1, 2, 3].map((item) => (
+          <Skeleton key={item} className="h-28 rounded-2xl" />
+        ))}
+      </div>
+    ) : error ? (
+      <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-600 dark:border-rose-900/40 dark:bg-rose-900/10 dark:text-rose-300">
+        Não foi possível carregar o comparativo agora.
+      </div>
+    ) : comparison ? (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <ComparisonMetricCard
+            label="Gasto"
+            metric={comparison.summary.total_spend}
+            currency
+          />
+          <ComparisonMetricCard
+            label="Notas"
+            metric={comparison.summary.invoice_count}
+          />
+          <ComparisonMetricCard
+            label="Ticket médio"
+            metric={comparison.summary.ticket_avg}
+            currency
+          />
+        </div>
+
+        {comparison.warnings.length > 0 && (
+          <div className="rounded-2xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300">
+            {comparison.warnings[0]}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <ComparisonList
+            title="Produtos"
+            items={comparison.products}
+            emptyLabel="Sem produtos para comparar"
+          />
+          <ComparisonList
+            title="Fornecedores"
+            items={comparison.suppliers}
+            emptyLabel="Sem fornecedores para comparar"
+          />
+          <ComparisonList
+            title="Categorias"
+            items={comparison.categories}
+            emptyLabel="Sem categorias para comparar"
+          />
+        </div>
+
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+          Percentuais sem base aparecem quando o período anterior não possui dados.
+          A comparação usa data de emissão da nota e ignora registros não ativos.
+        </p>
+      </div>
+    ) : (
+      <p className="py-8 text-center text-xs text-slate-400">
+        Sem dados comparativos disponíveis.
+      </p>
+    )}
+  </section>
+);
+
 export const DashboardView: React.FC<DashboardViewProps> = ({
   data: initialData,
   alerts,
@@ -208,6 +389,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     useState<SavingOpportunitiesSummary | null>(null);
   const [savingsLoading, setSavingsLoading] = useState(false);
   const [savingsError, setSavingsError] = useState(false);
+  const [comparison, setComparison] =
+    useState<DashboardComparisonResponse | null>(null);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [comparisonError, setComparisonError] = useState(false);
   const [period, setPeriod] = useState<PeriodPreset>("all");
   const [selectedEan, setSelectedEan] = useState<string | null>(null);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(
@@ -277,6 +462,65 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const getDateParams = () => buildDateParams(period);
 
+  const toISODate = (value: Date) => value.toISOString().split("T")[0];
+
+  const buildComparisonParams = (preset: PeriodPreset) => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    let currentStart: Date;
+    let currentEnd: Date;
+    let previousStart: Date;
+    let previousEnd: Date;
+
+    if (preset === "30d") {
+      currentEnd = today;
+      currentStart = new Date(today);
+      currentStart.setDate(currentStart.getDate() - 30);
+      previousEnd = new Date(currentStart);
+      previousEnd.setDate(previousEnd.getDate() - 1);
+      previousStart = new Date(previousEnd);
+      previousStart.setDate(previousStart.getDate() - 30);
+    } else if (preset === "year") {
+      currentStart = new Date(today.getFullYear(), 0, 1);
+      currentEnd = today;
+      previousStart = new Date(today.getFullYear() - 1, 0, 1);
+      previousEnd = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+    } else {
+      currentStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      currentEnd = today;
+      previousStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      previousEnd = new Date(currentStart);
+      previousEnd.setDate(previousEnd.getDate() - 1);
+    }
+
+    return {
+      current_start: toISODate(currentStart),
+      current_end: toISODate(currentEnd),
+      previous_start: toISODate(previousStart),
+      previous_end: toISODate(previousEnd),
+    };
+  };
+
+  const fetchComparison = async (preset: PeriodPreset) => {
+    setComparisonLoading(true);
+    setComparisonError(false);
+    try {
+      const query = new URLSearchParams(buildComparisonParams(preset));
+      query.append("dimension", "all");
+      query.append("limit", "5");
+      const response = await apiClient.get<DashboardComparisonResponse>(
+        `/dashboard/comparativo?${query.toString()}`,
+      );
+      setComparison(response);
+    } catch (error) {
+      setComparison(null);
+      setComparisonError(true);
+    } finally {
+      setComparisonLoading(false);
+    }
+  };
+
   const fetchSavingsOpportunities = async (params: DateParams) => {
     setSavingsLoading(true);
     setSavingsError(false);
@@ -341,13 +585,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const fetchFilteredData = async (preset: PeriodPreset) => {
     setLoading(true);
     setSavingsLoading(true);
+    setComparisonLoading(true);
     setSavingsError(false);
+    setComparisonError(false);
     try {
       const queryString = buildQueryString(buildDateParams(preset));
-      const [dashboardResult, savingsResult] = await Promise.allSettled([
+      const comparisonQuery = new URLSearchParams(buildComparisonParams(preset));
+      comparisonQuery.append("dimension", "all");
+      comparisonQuery.append("limit", "5");
+      const [dashboardResult, savingsResult, comparisonResult] =
+        await Promise.allSettled([
         apiClient.get<DashboardResumo>(`/dashboard/resumo?${queryString}`),
         apiClient.get<SavingOpportunitiesSummary>(
           `/dashboard/oportunidades/economia${queryString ? `?${queryString}` : ""}`,
+        ),
+        apiClient.get<DashboardComparisonResponse>(
+          `/dashboard/comparativo?${comparisonQuery.toString()}`,
         ),
       ]);
 
@@ -363,11 +616,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         setSavingsSummary(null);
         setSavingsError(true);
       }
+
+      if (comparisonResult.status === "fulfilled") {
+        setComparison(comparisonResult.value);
+      } else {
+        setComparison(null);
+        setComparisonError(true);
+      }
     } catch (error) {
       console.error("Erro ao carregar dados filtrados:", error);
     } finally {
       setLoading(false);
       setSavingsLoading(false);
+      setComparisonLoading(false);
     }
   };
 
@@ -377,6 +638,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     } else {
       setData(initialData);
       fetchSavingsOpportunities(buildDateParams(period));
+      fetchComparison(period);
     }
   }, [period, initialData]);
 
@@ -573,6 +835,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           {/* Basic Risk Alerts */}
           <RiskAlertsSection alerts={data?.alertas_risco || []} />
+
+          <DashboardComparisonSection
+            comparison={comparison}
+            loading={comparisonLoading}
+            error={comparisonError}
+          />
 
           {/* Data Health Section */}
           {data?.saude_dados && (

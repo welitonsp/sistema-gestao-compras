@@ -63,9 +63,418 @@ def _bounded_score(value: int) -> int:
     return max(0, min(100, value))
 
 
+def _comparison_metric(current: float, previous: float) -> Dict[str, Any]:
+    delta = current - previous
+    if previous == 0:
+        delta_percent = 0.0 if current == 0 else None
+    else:
+        delta_percent = (delta / previous) * 100
+    return {
+        "current": current,
+        "previous": previous,
+        "delta": delta,
+        "delta_percent": delta_percent,
+    }
+
+
+def _comparison_confidence(current_count: int, previous_count: int) -> str:
+    if current_count <= 0 or previous_count <= 0:
+        return "insufficient_data"
+    if current_count >= 3 and previous_count >= 3:
+        return "high"
+    if current_count >= 2 and previous_count >= 2:
+        return "medium"
+    return "low"
+
+
 class PriceInsightsService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def obter_comparativo_dashboard(
+        self,
+        *,
+        department_id: UUID | None = None,
+        current_start: date,
+        current_end: date,
+        previous_start: date,
+        previous_end: date,
+        dimension: str = "all",
+        limit: int = 10,
+    ) -> Dict[str, Any]:
+        """Compare fiscal spend between two periods using canonical product reads."""
+
+        limit = max(1, min(50, limit))
+        warnings: list[str] = []
+
+        current_days = (current_end - current_start).days
+        previous_days = (previous_end - previous_start).days
+        if current_days != previous_days:
+            warnings.append(
+                "Os periodos comparados possuem duracoes diferentes; interprete deltas com cautela."
+            )
+
+        current_summary = await self._comparison_summary(
+            department_id=department_id,
+            start_date=current_start,
+            end_date=current_end,
+        )
+        previous_summary = await self._comparison_summary(
+            department_id=department_id,
+            start_date=previous_start,
+            end_date=previous_end,
+        )
+
+        if previous_summary["total_spend"] == 0 and current_summary["total_spend"] > 0:
+            warnings.append(
+                "O periodo anterior nao possui gasto registrado; percentuais podem ficar indisponiveis."
+            )
+
+        products: list[dict[str, Any]] = []
+        suppliers: list[dict[str, Any]] = []
+        categories: list[dict[str, Any]] = []
+
+        if dimension in {"all", "products"}:
+            products = await self._comparison_products(
+                department_id=department_id,
+                current_start=current_start,
+                current_end=current_end,
+                previous_start=previous_start,
+                previous_end=previous_end,
+                limit=limit,
+            )
+        if dimension in {"all", "suppliers"}:
+            suppliers = await self._comparison_suppliers(
+                department_id=department_id,
+                current_start=current_start,
+                current_end=current_end,
+                previous_start=previous_start,
+                previous_end=previous_end,
+                limit=limit,
+            )
+        if dimension in {"all", "categories"}:
+            categories = await self._comparison_categories(
+                department_id=department_id,
+                current_start=current_start,
+                current_end=current_end,
+                previous_start=previous_start,
+                previous_end=previous_end,
+                limit=limit,
+            )
+
+        return {
+            "periods": {
+                "current_start": current_start,
+                "current_end": current_end,
+                "previous_start": previous_start,
+                "previous_end": previous_end,
+            },
+            "summary": {
+                "total_spend": _comparison_metric(
+                    current_summary["total_spend"],
+                    previous_summary["total_spend"],
+                ),
+                "invoice_count": _comparison_metric(
+                    current_summary["invoice_count"],
+                    previous_summary["invoice_count"],
+                ),
+                "ticket_avg": _comparison_metric(
+                    current_summary["ticket_avg"],
+                    previous_summary["ticket_avg"],
+                ),
+            },
+            "products": products,
+            "suppliers": suppliers,
+            "categories": categories,
+            "warnings": warnings,
+        }
+
+    async def _comparison_summary(
+        self,
+        *,
+        department_id: UUID | None,
+        start_date: date,
+        end_date: date,
+    ) -> Dict[str, float]:
+        stmt = (
+            select(
+                func.coalesce(func.sum(NotaFiscal.valor_total), 0).label("total_spend"),
+                func.count(NotaFiscal.id).label("invoice_count"),
+            )
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
+            .where(NotaFiscal.data_emissao >= start_date)
+            .where(NotaFiscal.data_emissao <= end_date)
+        )
+        if department_id:
+            stmt = stmt.where(NotaFiscal.department_id == department_id)
+
+        row = (await self.db.execute(stmt)).one()
+        total = float(row.total_spend or 0)
+        invoice_count = int(row.invoice_count or 0)
+        return {
+            "total_spend": total,
+            "invoice_count": float(invoice_count),
+            "ticket_avg": total / invoice_count if invoice_count else 0.0,
+        }
+
+    async def _comparison_products(
+        self,
+        *,
+        department_id: UUID | None,
+        current_start: date,
+        current_end: date,
+        previous_start: date,
+        previous_end: date,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        current = await self._aggregate_products(
+            department_id=department_id,
+            start_date=current_start,
+            end_date=current_end,
+        )
+        previous = await self._aggregate_products(
+            department_id=department_id,
+            start_date=previous_start,
+            end_date=previous_end,
+        )
+        return self._merge_comparison_items(current, previous, limit)
+
+    async def _comparison_suppliers(
+        self,
+        *,
+        department_id: UUID | None,
+        current_start: date,
+        current_end: date,
+        previous_start: date,
+        previous_end: date,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        current = await self._aggregate_suppliers(
+            department_id=department_id,
+            start_date=current_start,
+            end_date=current_end,
+        )
+        previous = await self._aggregate_suppliers(
+            department_id=department_id,
+            start_date=previous_start,
+            end_date=previous_end,
+        )
+        return self._merge_comparison_items(current, previous, limit)
+
+    async def _comparison_categories(
+        self,
+        *,
+        department_id: UUID | None,
+        current_start: date,
+        current_end: date,
+        previous_start: date,
+        previous_end: date,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        current = await self._aggregate_categories(
+            department_id=department_id,
+            start_date=current_start,
+            end_date=current_end,
+        )
+        previous = await self._aggregate_categories(
+            department_id=department_id,
+            start_date=previous_start,
+            end_date=previous_end,
+        )
+        return self._merge_comparison_items(current, previous, limit)
+
+    async def _aggregate_products(
+        self,
+        *,
+        department_id: UUID | None,
+        start_date: date,
+        end_date: date,
+    ) -> dict[str, dict[str, Any]]:
+        canonical_ean = build_canonical_item_ean_join(ItemNotaFiscal.ean, department_id)
+        stmt = (
+            select(
+                canonical_ean.ean_expr.label("key"),
+                Produto.nome_limpo.label("label"),
+                func.sum(ItemNotaFiscal.valor_total).label("total"),
+                func.sum(ItemNotaFiscal.quantidade).label("quantity"),
+                func.count(func.distinct(NotaFiscal.id)).label("count"),
+                func.count(func.distinct(ItemNotaFiscal.ean)).label("source_eans_count"),
+            )
+            .select_from(ItemNotaFiscal)
+            .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+        )
+        if canonical_ean.mapping_alias is not None:
+            stmt = stmt.outerjoin(
+                canonical_ean.mapping_alias,
+                canonical_ean.join_condition,
+            )
+        stmt = (
+            stmt.join(Produto, Produto.ean == canonical_ean.ean_expr)
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
+            .where(NotaFiscal.data_emissao >= start_date)
+            .where(NotaFiscal.data_emissao <= end_date)
+        )
+        if department_id:
+            stmt = stmt.where(NotaFiscal.department_id == department_id)
+
+        stmt = stmt.group_by(canonical_ean.ean_expr, Produto.nome_limpo)
+        result = await self.db.execute(stmt)
+        rows: dict[str, dict[str, Any]] = {}
+        for row in result.fetchall():
+            total = float(row.total or 0)
+            quantity = float(row.quantity or 0)
+            key = row._mapping["key"]
+            rows[key] = {
+                "key": key,
+                "label": row.label,
+                "total": total,
+                "count": int(row.count or 0),
+                "ean": key,
+                "source_eans_count": int(row.source_eans_count or 0),
+                "quantity": quantity,
+                "avg_price": total / quantity if quantity else 0.0,
+            }
+        return rows
+
+    async def _aggregate_categories(
+        self,
+        *,
+        department_id: UUID | None,
+        start_date: date,
+        end_date: date,
+    ) -> dict[str, dict[str, Any]]:
+        canonical_ean = build_canonical_item_ean_join(ItemNotaFiscal.ean, department_id)
+        category_expr = func.coalesce(Produto.categoria, "Outros")
+        stmt = (
+            select(
+                category_expr.label("key"),
+                category_expr.label("label"),
+                func.sum(ItemNotaFiscal.valor_total).label("total"),
+                func.count(func.distinct(NotaFiscal.id)).label("count"),
+            )
+            .select_from(ItemNotaFiscal)
+            .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+        )
+        if canonical_ean.mapping_alias is not None:
+            stmt = stmt.outerjoin(
+                canonical_ean.mapping_alias,
+                canonical_ean.join_condition,
+            )
+        stmt = (
+            stmt.join(Produto, Produto.ean == canonical_ean.ean_expr)
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
+            .where(NotaFiscal.data_emissao >= start_date)
+            .where(NotaFiscal.data_emissao <= end_date)
+        )
+        if department_id:
+            stmt = stmt.where(NotaFiscal.department_id == department_id)
+
+        stmt = stmt.group_by(category_expr)
+        result = await self.db.execute(stmt)
+        rows: dict[str, dict[str, Any]] = {}
+        for row in result.fetchall():
+            key = row._mapping["key"] or "Outros"
+            rows[key] = {
+                "key": key,
+                "label": row.label or "Outros",
+                "total": float(row.total or 0),
+                "count": int(row.count or 0),
+                "categoria": key,
+            }
+        return rows
+
+    async def _aggregate_suppliers(
+        self,
+        *,
+        department_id: UUID | None,
+        start_date: date,
+        end_date: date,
+    ) -> dict[str, dict[str, Any]]:
+        stmt = (
+            select(
+                Fornecedor.id.label("key"),
+                Fornecedor.razao_social.label("label"),
+                func.sum(NotaFiscal.valor_total).label("total"),
+                func.count(NotaFiscal.id).label("count"),
+            )
+            .join(NotaFiscal, Fornecedor.id == NotaFiscal.fornecedor_id)
+            .where(NotaFiscal.status == ACTIVE_INVOICE_STATUS)
+            .where(NotaFiscal.data_emissao >= start_date)
+            .where(NotaFiscal.data_emissao <= end_date)
+        )
+        if department_id:
+            stmt = stmt.where(NotaFiscal.department_id == department_id)
+
+        stmt = stmt.group_by(Fornecedor.id, Fornecedor.razao_social)
+        result = await self.db.execute(stmt)
+        rows: dict[str, dict[str, Any]] = {}
+        for row in result.fetchall():
+            key = str(row._mapping["key"])
+            rows[key] = {
+                "key": key,
+                "label": row.label,
+                "total": float(row.total or 0),
+                "count": int(row.count or 0),
+                "fornecedor_id": key,
+            }
+        return rows
+
+    def _merge_comparison_items(
+        self,
+        current: dict[str, dict[str, Any]],
+        previous: dict[str, dict[str, Any]],
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for key in set(current) | set(previous):
+            cur = current.get(key, {})
+            prev = previous.get(key, {})
+            current_total = float(cur.get("total", 0) or 0)
+            previous_total = float(prev.get("total", 0) or 0)
+            delta = current_total - previous_total
+            current_count = int(cur.get("count", 0) or 0)
+            previous_count = int(prev.get("count", 0) or 0)
+            quantity_current = cur.get("quantity")
+            quantity_previous = prev.get("quantity")
+            avg_current = cur.get("avg_price")
+            avg_previous = prev.get("avg_price")
+            item = {
+                "key": key,
+                "label": cur.get("label") or prev.get("label") or key,
+                "current_total": current_total,
+                "previous_total": previous_total,
+                "delta": delta,
+                "delta_percent": _comparison_metric(current_total, previous_total)[
+                    "delta_percent"
+                ],
+                "current_count": current_count,
+                "previous_count": previous_count,
+                "confidence": _comparison_confidence(current_count, previous_count),
+                "ean": cur.get("ean") or prev.get("ean"),
+                "fornecedor_id": cur.get("fornecedor_id") or prev.get("fornecedor_id"),
+                "categoria": cur.get("categoria") or prev.get("categoria"),
+                "source_eans_count": max(
+                    int(cur.get("source_eans_count", 0) or 0),
+                    int(prev.get("source_eans_count", 0) or 0),
+                )
+                or None,
+                "current_quantity": float(quantity_current)
+                if quantity_current is not None
+                else None,
+                "previous_quantity": float(quantity_previous)
+                if quantity_previous is not None
+                else None,
+                "current_avg_price": float(avg_current)
+                if avg_current is not None
+                else None,
+                "previous_avg_price": float(avg_previous)
+                if avg_previous is not None
+                else None,
+            }
+            items.append(item)
+
+        items.sort(key=lambda item: abs(item["delta"]), reverse=True)
+        return items[:limit]
 
     async def get_saving_opportunities(
         self,

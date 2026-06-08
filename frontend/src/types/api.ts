@@ -107,6 +107,61 @@ export interface DashboardResumo {
   saude_dados?: DataHealthMetrics | null;
 }
 
+export interface ComparisonPeriods {
+  current_start: string;
+  current_end: string;
+  previous_start: string;
+  previous_end: string;
+}
+
+export interface ComparisonMetric {
+  current: number;
+  previous: number;
+  delta: number;
+  delta_percent?: number | null;
+}
+
+export interface DashboardComparisonSummary {
+  total_spend: ComparisonMetric;
+  invoice_count: ComparisonMetric;
+  ticket_avg: ComparisonMetric;
+}
+
+export type DashboardComparisonConfidence =
+  | "high"
+  | "medium"
+  | "low"
+  | "insufficient_data";
+
+export interface DashboardComparisonItem {
+  key: string;
+  label: string;
+  current_total: number;
+  previous_total: number;
+  delta: number;
+  delta_percent?: number | null;
+  current_count: number;
+  previous_count: number;
+  confidence: DashboardComparisonConfidence;
+  ean?: string | null;
+  fornecedor_id?: string | null;
+  categoria?: string | null;
+  source_eans_count?: number | null;
+  current_quantity?: number | null;
+  previous_quantity?: number | null;
+  current_avg_price?: number | null;
+  previous_avg_price?: number | null;
+}
+
+export interface DashboardComparisonResponse {
+  periods: ComparisonPeriods;
+  summary: DashboardComparisonSummary;
+  products: DashboardComparisonItem[];
+  suppliers: DashboardComparisonItem[];
+  categories: DashboardComparisonItem[];
+  warnings: string[];
+}
+
 export interface AlertaPreco {
   ean: string;
   produto: string;
