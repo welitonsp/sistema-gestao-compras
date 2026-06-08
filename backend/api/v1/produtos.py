@@ -15,8 +15,9 @@ import pandas as pd
 from sqlalchemy import func, select, or_
 from sqlalchemy.orm import aliased
 from backend.api.dependencies import DbSession, CurrentUser, RoleChecker
+from backend.core.classification_cache import upsert_classification_cache_entry
 from backend.core.csv_utils import sanitize_csv_cell
-from backend.models.compras import AuditLog, CanonizacaoProduto, Department, Produto, ClassificacaoCache, UserRole, User, ItemNotaFiscal, NotaFiscal
+from backend.models.compras import AuditLog, CanonizacaoProduto, Department, Produto, UserRole, User, ItemNotaFiscal, NotaFiscal
 from backend.schemas.canonization import (
     CanonizationCandidateGroup,
     CanonizationCandidatesResponse,
@@ -909,39 +910,35 @@ async def atualizar_produto(
         from backend.models.compras import ItemNotaFiscal
         from core.classificador_regras import _normalizar
         
-        # Encontra descrições originais que levaram a este produto
-        stmt_desc = select(ItemNotaFiscal.descricao_original).where(ItemNotaFiscal.ean == ean).distinct()
+        # Encontra descrições originais que levaram a este produto no escopo do usuário.
+        stmt_desc = (
+            select(ItemNotaFiscal.descricao_original)
+            .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+            .where(ItemNotaFiscal.ean == ean)
+            .distinct()
+        )
+        if user.role != UserRole.ADMIN:
+            stmt_desc = stmt_desc.where(NotaFiscal.department_id == user.department_id)
         res_desc = await db.execute(stmt_desc)
         descricoes = res_desc.scalars().all()
         
         for desc in descricoes:
             desc_norm = _normalizar(desc)
-            # Atualiza ou insere no cache com a nova verdade definida pelo humano
-            cache_stmt = select(ClassificacaoCache).where(ClassificacaoCache.descricao_original == desc_norm)
-            cache_res = await db.execute(cache_stmt)
-            cache_entry = cache_res.scalar_one_or_none()
-            
-            if cache_entry:
-                cache_entry.categoria = update_data["categoria"]
-                if "marca" in update_data:
-                    cache_entry.marca = update_data["marca"]
-                cache_entry.produto_canonico = produto.nome_limpo
-                cache_entry.verificado_usuario = True
-            else:
-                # Se não existia no cache, cria para blindar futuras importações
-                new_cache = ClassificacaoCache(
-                    descricao_original=desc_norm,
-                    produto_canonico=produto.nome_limpo,
-                    categoria=update_data["categoria"],
-                    marca=update_data.get("marca", produto.marca),
-                    unidade=produto.unidade,
-                    verificado_usuario=True
-                )
-                db.add(new_cache)
+            await upsert_classification_cache_entry(
+                db,
+                department_id=None if user.role == UserRole.ADMIN else user.department_id,
+                descricao_original=desc_norm,
+                produto_canonico=produto.nome_limpo,
+                categoria=update_data["categoria"],
+                marca=update_data.get("marca", produto.marca),
+                unidade=produto.unidade,
+                verificado_usuario=True,
+            )
 
     if categoria_alterada:
         stmt_sugestoes = (
             select(ItemNotaFiscal.categoria_sugerida)
+            .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
             .where(
                 ItemNotaFiscal.ean == ean,
                 ItemNotaFiscal.categoria_sugerida.is_not(None),
@@ -949,6 +946,8 @@ async def atualizar_produto(
             .distinct()
             .limit(5)
         )
+        if user.role != UserRole.ADMIN:
+            stmt_sugestoes = stmt_sugestoes.where(NotaFiscal.department_id == user.department_id)
         res_sugestoes = await db.execute(stmt_sugestoes)
         categorias_sugeridas = [categoria for categoria in res_sugestoes.scalars().all() if categoria]
         detalhes = {

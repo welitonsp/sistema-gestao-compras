@@ -42,7 +42,7 @@ class AuditChatService:
         intent = await self._identify_intent(message)
         
         if intent.get("action") == "UPDATE_CATEGORY":
-            return await self._handle_category_correction(intent, message)
+            return await self._handle_category_correction(intent, message, department_id)
 
         # 2. Se for uma pergunta, segue o fluxo normal de SQL
         sql_query = await self._generate_sql(message, department_id)
@@ -158,9 +158,10 @@ class AuditChatService:
         )
         return json.loads(chat_completion.choices[0].message.content)
 
-    async def _handle_category_correction(self, intent: Dict[str, Any], original_message: str) -> Dict[str, Any]:
+    async def _handle_category_correction(self, intent: Dict[str, Any], original_message: str, department_id: Any | None = None) -> Dict[str, Any]:
         """Executa a atualização da categoria no banco e no cache."""
-        from backend.models.compras import Produto, ClassificacaoCache, ItemNotaFiscal
+        from backend.core.classification_cache import upsert_classification_cache_entry
+        from backend.models.compras import Produto, ItemNotaFiscal, NotaFiscal
         from sqlalchemy import update, select
         from core.classificador_regras import _normalizar
 
@@ -179,26 +180,32 @@ class AuditChatService:
             await self.db.execute(stmt_prod)
 
             # 2. Atualiza Cache de todas as descrições que levam a este EAN
-            stmt_items = select(ItemNotaFiscal.descricao_original).where(ItemNotaFiscal.ean == ean).distinct()
+            stmt_items = (
+                select(ItemNotaFiscal.descricao_original)
+                .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+                .where(ItemNotaFiscal.ean == ean)
+                .distinct()
+            )
+            if department_id is not None:
+                stmt_items = stmt_items.where(NotaFiscal.department_id == department_id)
             res_items = await self.db.execute(stmt_items)
             descricoes = res_items.scalars().all()
+
+            stmt_p = select(Produto.nome_limpo).where(Produto.ean == ean)
+            p_res = await self.db.execute(stmt_p)
+            p_nome = p_res.scalar()
 
             for desc in descricoes:
                 desc_norm = _normalizar(desc)
                 # Sincroniza cache com flag de verificado
-                cache_entry = ClassificacaoCache(
+                await upsert_classification_cache_entry(
+                    self.db,
+                    department_id=department_id,
                     descricao_original=desc_norm,
                     categoria=nova_cat,
                     verificado_usuario=True,
-                    produto_canonico=desc_norm # Fallback simples
+                    produto_canonico=p_nome or desc_norm,
                 )
-                # Busca nome limpo se existir
-                stmt_p = select(Produto.nome_limpo).where(Produto.ean == ean)
-                p_res = await self.db.execute(stmt_p)
-                p_nome = p_res.scalar()
-                if p_nome: cache_entry.produto_canonico = p_nome
-                
-                await self.db.merge(cache_entry)
 
             await self.db.commit()
             

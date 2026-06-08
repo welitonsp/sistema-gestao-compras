@@ -13,6 +13,10 @@ from uuid import UUID
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.classification_cache import (
+    classification_cache_scope_filter,
+    classification_cache_scope_order,
+)
 from backend.models.compras import (
     ClassificacaoCache,
     ItemNotaFiscal,
@@ -478,12 +482,13 @@ async def get_category_suggestion_candidates(
             cache_stmt = (
                 select(ClassificacaoCache)
                 .where(
+                    classification_cache_scope_filter(department_id),
                     or_(
                         ClassificacaoCache.descricao_original.in_(cache_keys),
                         ClassificacaoCache.produto_canonico == first.nome_limpo,
                     )
                 )
-                .order_by(ClassificacaoCache.verificado_usuario.desc())
+                .order_by(*classification_cache_scope_order(department_id))
                 .limit(1)
             )
             cache_result = await db.execute(cache_stmt)

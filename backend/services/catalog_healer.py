@@ -5,7 +5,8 @@ import asyncio
 from typing import List, Dict, Any
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.models.compras import Produto, ClassificacaoCache, ItemNotaFiscal, NotaFiscal
+from backend.core.classification_cache import get_classification_cache_entry
+from backend.models.compras import Produto, ItemNotaFiscal, NotaFiscal
 from backend.services.ai_processor import AIStructuredExtractor
 from backend.services.text_sanitizer import sanitize_manual_brand, sanitize_manual_category
 from core.logger import get_logger
@@ -94,8 +95,11 @@ class CatalogHealerService:
         
         for desc in descricoes:
             norm = _normalizar(desc)
-            cache_stmt = select(ClassificacaoCache).where(ClassificacaoCache.descricao_original == norm)
-            cache_entry = (await self.db.execute(cache_stmt)).scalar_one_or_none()
+            cache_entry = await get_classification_cache_entry(
+                self.db,
+                descricao_original=norm,
+                department_id=None,
+            )
             if cache_entry:
                 cache_entry.categoria = produto.categoria
                 cache_entry.marca = produto.marca
