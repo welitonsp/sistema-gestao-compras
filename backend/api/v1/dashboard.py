@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 import io
 import csv
 from backend.api.dependencies import DbSession, CurrentUser
+from backend.core.csv_utils import sanitize_csv_cell
 from backend.schemas.dashboard import (
     DashboardResumoResponse,
     AlertasPrecoResponse,
@@ -40,26 +41,6 @@ class ExportDataset(str, Enum):
     top_fornecedores = "top_fornecedores"
     evolucao_mensal = "evolucao_mensal"
     alertas = "alertas"
-
-
-def sanitize_csv_cell(value: Any) -> str:
-    """Sanitiza uma célula CSV para prevenir Injection e normalizar quebras de linha."""
-    if value is None:
-        return ""
-
-    # Converte números para string de forma estável
-    str_val = str(value)
-
-    # Normaliza quebras de linha e tabs
-    str_val = str_val.replace("\n", " ").replace("\r", " ").replace("\t", " ")
-
-    # Prevenção de CSV Injection (=, +, -, @)
-    # Se começar com um desses caracteres, prefixa com aspa simples
-    stripped = str_val.strip()
-    if stripped and stripped[0] in ("=", "+", "-", "@"):
-        str_val = f"'{str_val}"
-
-    return str_val
 
 
 @router.get(
@@ -181,11 +162,25 @@ async def exportar_audit_logs(
     """Exporta a trilha de auditoria via streaming para suportar grandes volumes (Zero-OOM)."""
 
     async def generate_csv():
-        # Header
-        yield "Data/Hora;Usuario;Operacao;Entidade;Detalhes;IP de Origem\n"
+        output = io.StringIO()
+        writer = csv.writer(output, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+
+        def yield_row(row_data: list[Any]):
+            sanitized = [sanitize_csv_cell(cell) for cell in row_data]
+            output.seek(0)
+            output.truncate(0)
+            writer.writerow(sanitized)
+            return output.getvalue()
+
+        yield yield_row(
+            ["Data/Hora", "Usuario", "Operacao", "Entidade", "Detalhes", "IP de Origem"]
+        )
 
         # Stream do Banco via Async iterator do SQLAlchemy
-        stmt = select(AuditLog).order_by(desc(AuditLog.created_at))
+        stmt = select(AuditLog)
+        if user.role != UserRole.ADMIN:
+            stmt = stmt.where(AuditLog.department_id == user.department_id)
+        stmt = stmt.order_by(desc(AuditLog.created_at))
         result = await db.stream(stmt)  # Uso de stream() para carregar em chunks do DB
 
         async for row in result:
@@ -193,8 +188,16 @@ async def exportar_audit_logs(
             data_str = (
                 log.created_at.strftime("%d/%m/%Y %H:%M:%S") if log.created_at else ""
             )
-            detalhes = (log.detalhes or "").replace(";", ",").replace("\n", " ")
-            yield f"{data_str};{log.usuario};{log.operacao};{log.entidade};{detalhes};{log.ip_origem}\n"
+            yield yield_row(
+                [
+                    data_str,
+                    log.usuario,
+                    log.operacao,
+                    log.entidade,
+                    log.detalhes,
+                    log.ip_origem,
+                ]
+            )
 
     return StreamingResponse(
         generate_csv(),
