@@ -9,6 +9,10 @@ from datetime import datetime
 from groq import Groq, AsyncGroq
 from sqlalchemy import select
 
+from backend.core.classification_cache import (
+    get_classification_cache_entry,
+    upsert_classification_cache_entry,
+)
 from backend.core.database import SessionLocal
 from backend.models.compras import Produto, HistoricoPreco, ClassificacaoCache
 from core.classificador_regras import aplicar_regras_nome_categoria, _normalizar
@@ -65,13 +69,15 @@ def get_async_groq_client() -> AsyncGroq:
 # 2. BANCO DE DADOS (UNIFICADO COM ORM)
 # ==========================================
 
-async def buscar_no_cache(descricao: str) -> dict | None:
+async def buscar_no_cache(descricao: str, department_id=None) -> dict | None:
     """Busca uma classificação prévia no cache do banco."""
     async with SessionLocal() as session:
         desc_norm = _normalizar(descricao)
-        stmt = select(ClassificacaoCache).where(ClassificacaoCache.descricao_original == desc_norm)
-        result = await session.execute(stmt)
-        cached = result.scalar_one_or_none()
+        cached = await get_classification_cache_entry(
+            session,
+            descricao_original=desc_norm,
+            department_id=department_id,
+        )
         
         if cached:
             logger.info(f"Cache hit para: {desc_norm}")
@@ -83,10 +89,23 @@ async def buscar_no_cache(descricao: str) -> dict | None:
             }
     return None
 
-async def obter_exemplos_verificados(limit: int = 10) -> str:
+async def obter_exemplos_verificados(limit: int = 10, department_id=None) -> str:
     """Busca as classificações verificadas por humanos para injetar no prompt."""
     async with SessionLocal() as db:
-        stmt = select(ClassificacaoCache).where(ClassificacaoCache.verificado_usuario == True).limit(limit)
+        from backend.core.classification_cache import (
+            classification_cache_scope_filter,
+            classification_cache_scope_order,
+        )
+
+        stmt = (
+            select(ClassificacaoCache)
+            .where(
+                ClassificacaoCache.verificado_usuario == True,
+                classification_cache_scope_filter(department_id),
+            )
+            .order_by(*classification_cache_scope_order(department_id))
+            .limit(limit)
+        )
         res = await db.execute(stmt)
         exemplos = res.scalars().all()
         
@@ -98,18 +117,19 @@ async def obter_exemplos_verificados(limit: int = 10) -> str:
             texto += f"- \"{ex.descricao_original}\" -> PRODUTO: {ex.produto_canonico}, CATEGORIA: {ex.categoria}\n"
         return texto
 
-async def salvar_no_cache(descricao_original: str, dados: dict):
+async def salvar_no_cache(descricao_original: str, dados: dict, department_id=None):
     """Salva o resultado da IA no cache."""
     async with SessionLocal() as session:
         desc_norm = _normalizar(descricao_original)
-        cache_entry = ClassificacaoCache(
+        await upsert_classification_cache_entry(
+            session,
+            department_id=department_id,
             descricao_original=desc_norm,
             produto_canonico=dados["produto"],
             marca=dados.get("marca"),
             categoria=dados["categoria"],
-            unidade=dados.get("unidade", "un")
+            unidade=dados.get("unidade", "un"),
         )
-        await session.merge(cache_entry)
         await session.commit()
 
 async def produto_ja_existe(id_produto: str) -> bool:
@@ -155,9 +175,9 @@ async def salvar_compra(id_produto, data, mercado, preco, qtd):
 # 3. IA — FUNÇÕES (MANTIDAS)
 # ==========================================
 
-async def consultar_ia_async(nome_sujo: str) -> dict:
+async def consultar_ia_async(nome_sujo: str, department_id=None) -> dict:
     # 1. Tentar Cache
-    cached = await buscar_no_cache(nome_sujo)
+    cached = await buscar_no_cache(nome_sujo, department_id=department_id)
     if cached:
         return cached
 
@@ -198,7 +218,7 @@ async def consultar_ia_async(nome_sujo: str) -> dict:
         }
         
         # 3. Salvar no Cache
-        await salvar_no_cache(nome_sujo, resultado)
+        await salvar_no_cache(nome_sujo, resultado, department_id=department_id)
         
         return resultado
     except GroqNotConfiguredError:
@@ -235,4 +255,5 @@ async def extrair_json_com_groq_async(
 # ==========================================
 
 async def classificar_produto_async(descricao: str, contexto: dict | None = None) -> dict:
-    return await consultar_ia_async(descricao)
+    department_id = (contexto or {}).get("department_id")
+    return await consultar_ia_async(descricao, department_id=department_id)

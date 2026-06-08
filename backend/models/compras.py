@@ -10,7 +10,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Index, Numeric, String, UniqueConstraint, Text, DateTime, func, Boolean, Integer
+from sqlalchemy import CheckConstraint, Date, ForeignKey, Index, Numeric, String, UniqueConstraint, Text, DateTime, func, Boolean, Integer, text
 import enum
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -404,10 +404,40 @@ class ClassificacaoCache(TimestampMixin, Base):
     """Cache for AI classification results to avoid redundant API calls."""
 
     __tablename__ = "classificacao_cache"
+    __table_args__ = (
+        Index("ix_classificacao_cache_department_descricao", "department_id", "descricao_original"),
+        Index(
+            "uq_classificacao_cache_global_descricao",
+            "descricao_original",
+            unique=True,
+            postgresql_where=text("department_id IS NULL"),
+            sqlite_where=text("department_id IS NULL"),
+        ),
+        Index(
+            "uq_classificacao_cache_department_descricao",
+            "department_id",
+            "descricao_original",
+            unique=True,
+            postgresql_where=text("department_id IS NOT NULL"),
+            sqlite_where=text("department_id IS NOT NULL"),
+        ),
+    )
 
+    id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    department_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("departments.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     descricao_original: Mapped[str] = mapped_column(
         String(500),
-        primary_key=True,
+        index=True,
+        nullable=False,
         doc="Normalized raw description used as cache key.",
     )
     produto_canonico: Mapped[str] = mapped_column(String(255), nullable=False)

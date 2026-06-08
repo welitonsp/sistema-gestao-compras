@@ -244,6 +244,55 @@ async def test_sugestao_por_classificacao_cache_e_usada(client):
 
 
 @pytest.mark.asyncio
+async def test_cache_de_classificacao_prefere_escopo_do_departamento(client):
+    await _cleanup()
+    await _add_product_purchase(
+        ean="7891000000044",
+        name="PRODUTO CACHE TENANT",
+        current_category=None,
+        note_seed="cache-tenant",
+    )
+
+    async with SessionLocal() as db:
+        db.add_all(
+            [
+                ClassificacaoCache(
+                    department_id=None,
+                    descricao_original=normalizar_descricao_produto("PRODUTO CACHE TENANT"),
+                    produto_canonico="PRODUTO CACHE TENANT",
+                    categoria="BEBIDAS",
+                    unidade="un",
+                    verificado_usuario=True,
+                ),
+                ClassificacaoCache(
+                    department_id=TEST_DEPT_ID,
+                    descricao_original=normalizar_descricao_produto("PRODUTO CACHE TENANT"),
+                    produto_canonico="PRODUTO CACHE TENANT",
+                    categoria="LIMPEZA",
+                    unidade="un",
+                    verificado_usuario=True,
+                ),
+                ClassificacaoCache(
+                    department_id=OTHER_DEPT_ID,
+                    descricao_original=normalizar_descricao_produto("PRODUTO CACHE TENANT"),
+                    produto_canonico="PRODUTO CACHE TENANT",
+                    categoria="PET SHOP",
+                    unidade="un",
+                    verificado_usuario=True,
+                ),
+            ]
+        )
+        await db.commit()
+
+    response = await client.get("/api/v1/produtos/categorization/candidates")
+
+    assert response.status_code == 200
+    candidate = response.json()["candidates"][0]
+    assert candidate["suggested_category"] == "LIMPEZA"
+    assert candidate["source"] == "classification_cache"
+
+
+@pytest.mark.asyncio
 async def test_sem_sugestao_retorna_insufficient_data_sem_inventar_categoria(client):
     await _cleanup()
     await _add_product_purchase(

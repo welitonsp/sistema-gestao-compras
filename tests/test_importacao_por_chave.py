@@ -4,6 +4,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 import json
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -17,6 +18,7 @@ from backend.main import app
 from backend.models.compras import (
     AuditLog,
     ClassificacaoCache,
+    Department,
     Fornecedor,
     HistoricoPreco,
     ItemNotaFiscal,
@@ -63,15 +65,29 @@ def _qrcode_url_for_key(chave: str) -> str:
     return f"https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p={chave}%7C2%7C1%7C1%7CHASH-SINTETICO"
 
 
-async def _create_user(username: str, role: str = UserRole.ADMIN) -> str:
+async def _create_user(
+    username: str,
+    role: str = UserRole.ADMIN,
+    department_id=None,
+) -> str:
     async with SessionLocal() as db:
         await db.execute(delete(User).where(User.username == username))
+        if department_id is not None and await db.get(Department, department_id) is None:
+            db.add(
+                Department(
+                    id=department_id,
+                    name=f"Departamento {username}",
+                    is_active=True,
+                )
+            )
+            await db.flush()
         db.add(
             User(
                 username=username,
                 email=f"{username}@test.local",
                 hashed_password="unused",
                 role=role,
+                department_id=department_id,
                 is_active=True,
             )
         )
@@ -1397,6 +1413,96 @@ async def test_patch_produto_categoria_preenche_confirmacao_manual():
     assert detalhes["usuario"] == "catalog_confirm_manager"
     assert detalhes["produto"] == "PRODUTO PATCH CATEGORIA"
     assert detalhes["categorias_sugeridas_relacionadas"] == ["CATEGORIA SUGERIDA IA"]
+
+
+@pytest.mark.anyio
+async def test_patch_produto_categoria_grava_cache_no_departamento_do_manager():
+    department_id = uuid4()
+    chave = _valid_access_key("5226051745740400118365511000040940127519910")
+    token = await _create_user(
+        "catalog_confirm_tenant_manager",
+        UserRole.MANAGER,
+        department_id=department_id,
+    )
+    ean = "7891000000440"
+
+    async with SessionLocal() as db:
+        fornecedor = Fornecedor(
+            cnpj="17457404001940",
+            razao_social="MERCADO PATCH TENANT LTDA",
+        )
+        produto = Produto(
+            ean=ean,
+            nome_limpo="PRODUTO PATCH TENANT",
+            marca="ANTIGA",
+            categoria="ANTIGA",
+            unidade="un",
+        )
+        db.add_all([fornecedor, produto])
+        await db.flush()
+
+        nota = NotaFiscal(
+            fornecedor_id=fornecedor.id,
+            numero_nota="40940",
+            chave_acesso=chave,
+            data_emissao=date(2026, 5, 26),
+            valor_total=Decimal("7.50"),
+            department_id=department_id,
+        )
+        db.add(nota)
+        await db.flush()
+
+        db.add_all(
+            [
+                ItemNotaFiscal(
+                    nota_fiscal_id=nota.id,
+                    ean=ean,
+                    descricao_original="PRODUTO PATCH TENANT DESCRICAO",
+                    quantidade=Decimal("1"),
+                    valor_unitario=Decimal("7.50"),
+                    valor_total=Decimal("7.50"),
+                ),
+                ClassificacaoCache(
+                    department_id=None,
+                    descricao_original="PRODUTO PATCH TENANT DESCRICAO",
+                    produto_canonico="PRODUTO PATCH TENANT",
+                    categoria="GLOBAL",
+                    unidade="un",
+                    verificado_usuario=True,
+                ),
+            ]
+        )
+        await db.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.patch(
+            f"/api/v1/produtos/{ean}",
+            json={"categoria": "TENANT CONFIRMADA"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+
+    async with SessionLocal() as db:
+        tenant_cache = await db.scalar(
+            select(ClassificacaoCache).where(
+                ClassificacaoCache.department_id == department_id,
+                ClassificacaoCache.descricao_original == "PRODUTO PATCH TENANT DESCRICAO",
+            )
+        )
+        global_cache = await db.scalar(
+            select(ClassificacaoCache).where(
+                ClassificacaoCache.department_id.is_(None),
+                ClassificacaoCache.descricao_original == "PRODUTO PATCH TENANT DESCRICAO",
+            )
+        )
+
+    assert tenant_cache is not None
+    assert tenant_cache.categoria == "TENANT CONFIRMADA"
+    assert tenant_cache.produto_canonico == "PRODUTO PATCH TENANT"
+    assert tenant_cache.verificado_usuario is True
+    assert global_cache is not None
+    assert global_cache.categoria == "GLOBAL"
 
 
 @pytest.mark.anyio
