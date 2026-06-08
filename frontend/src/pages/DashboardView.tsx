@@ -298,7 +298,8 @@ const DashboardComparisonSection: React.FC<{
   comparison: DashboardComparisonResponse | null;
   loading: boolean;
   error: boolean;
-}> = ({ comparison, loading, error }) => (
+  disabled: boolean;
+}> = ({ comparison, loading, error, disabled }) => (
   <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
     <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
       <div>
@@ -312,7 +313,19 @@ const DashboardComparisonSection: React.FC<{
       <Activity size={18} className="text-slate-400" />
     </div>
 
-    {loading ? (
+    {disabled ? (
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center dark:border-slate-800 dark:bg-slate-950/40">
+        <Info size={24} className="mx-auto mb-3 text-slate-400" />
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+          Selecione um período para ver o comparativo
+        </p>
+        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+          A visão “Tudo” mantém o histórico completo nos demais gráficos. O
+          comparativo precisa de um recorte temporal para evitar interpretação
+          incorreta.
+        </p>
+      </div>
+    ) : loading ? (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {[1, 2, 3].map((item) => (
           <Skeleton key={item} className="h-28 rounded-2xl" />
@@ -638,7 +651,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     } else {
       setData(initialData);
       fetchSavingsOpportunities(buildDateParams(period));
-      fetchComparison(period);
+      setComparison(null);
+      setComparisonError(false);
+      setComparisonLoading(false);
     }
   }, [period, initialData]);
 
@@ -840,6 +855,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             comparison={comparison}
             loading={comparisonLoading}
             error={comparisonError}
+            disabled={period === "all"}
           />
 
           {/* Data Health Section */}
