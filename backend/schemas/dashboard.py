@@ -135,6 +135,65 @@ class DashboardResumoResponse(BaseModel):
     saude_dados: Optional[DataHealthMetrics] = None
 
 
+class ComparisonPeriods(BaseModel):
+    """Current and previous periods used by a dashboard comparison."""
+
+    current_start: date
+    current_end: date
+    previous_start: date
+    previous_end: date
+
+
+class ComparisonMetric(BaseModel):
+    """A numeric metric compared between two periods."""
+
+    current: float
+    previous: float
+    delta: float
+    delta_percent: Optional[float] = None
+
+
+class DashboardComparisonSummary(BaseModel):
+    """Top-level comparison KPIs."""
+
+    total_spend: ComparisonMetric
+    invoice_count: ComparisonMetric
+    ticket_avg: ComparisonMetric
+
+
+class DashboardComparisonItem(BaseModel):
+    """Dimension item compared between current and previous periods."""
+
+    key: str
+    label: str
+    current_total: float
+    previous_total: float
+    delta: float
+    delta_percent: Optional[float] = None
+    current_count: int = 0
+    previous_count: int = 0
+    confidence: Literal["high", "medium", "low", "insufficient_data"]
+    ean: Optional[str] = None
+    fornecedor_id: Optional[str] = None
+    categoria: Optional[str] = None
+    source_eans_count: Optional[int] = None
+    current_quantity: Optional[float] = None
+    previous_quantity: Optional[float] = None
+    current_avg_price: Optional[float] = None
+    previous_avg_price: Optional[float] = None
+
+
+class DashboardComparisonResponse(BaseModel):
+    """Dashboard comparison response without fiscal-sensitive fields."""
+
+    periods: ComparisonPeriods
+    summary: DashboardComparisonSummary
+    products: List[DashboardComparisonItem] = []
+    suppliers: List[DashboardComparisonItem] = []
+    categories: List[DashboardComparisonItem] = []
+    warnings: List[str] = []
+
+
 class AlertaPreco(BaseModel):
     """Price anomaly alert."""
     ean: str

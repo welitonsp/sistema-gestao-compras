@@ -12,6 +12,7 @@ from backend.core.csv_utils import sanitize_csv_cell
 from backend.schemas.dashboard import (
     DashboardResumoResponse,
     AlertasPrecoResponse,
+    DashboardComparisonResponse,
     ProductPriceHistoryResponse,
     SavingOpportunitiesSummary,
     SupplierDrilldownResponse,
@@ -352,6 +353,51 @@ async def obter_oportunidades_economia(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+
+
+@router.get(
+    "/comparativo",
+    response_model=DashboardComparisonResponse,
+    summary="Comparar indicadores do dashboard entre dois periodos",
+)
+async def obter_comparativo_dashboard(
+    db: DbSession,
+    user: CurrentUser,
+    current_start: date = Query(..., description="Inicio do periodo atual"),
+    current_end: date = Query(..., description="Fim do periodo atual"),
+    previous_start: date = Query(..., description="Inicio do periodo anterior"),
+    previous_end: date = Query(..., description="Fim do periodo anterior"),
+    dimension: str = Query(
+        "all",
+        pattern="^(all|products|suppliers|categories|summary)$",
+        description="Dimensao comparativa desejada",
+    ),
+    limit: int = Query(10, ge=1, le=50),
+) -> DashboardComparisonResponse:
+    """Retorna comparativo analitico sem expor dados fiscais sensiveis."""
+
+    if current_end < current_start:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="current_end must be greater than or equal to current_start",
+        )
+    if previous_end < previous_start:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="previous_end must be greater than or equal to previous_start",
+        )
+
+    service = PriceInsightsService(db)
+    dept_id = user.department_id if user.role != UserRole.ADMIN else None
+    return await service.obter_comparativo_dashboard(
+        department_id=dept_id,
+        current_start=current_start,
+        current_end=current_end,
+        previous_start=previous_start,
+        previous_end=previous_end,
+        dimension=dimension,
+        limit=limit,
+    )
 
 
 

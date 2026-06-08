@@ -7,6 +7,7 @@ from backend.models.compras import User, UserRole
 from backend.core.database import SessionLocal, engine
 from sqlalchemy import delete
 from unittest.mock import AsyncMock
+from backend.api.v1.produtos import _safe_product_audit_details
 
 @pytest.fixture(scope="session")
 def anyio_backend():
@@ -71,3 +72,40 @@ async def test_rbac_restriction_via_cookie(client):
     # 3. GET
     response = await client.get("/api/v1/dashboard/audit-logs", headers=headers)
     assert response.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_product_audit_details_redige_campos_sensiveis_e_descarta_payload():
+    details = {
+        "categoria_anterior": "ANTIGA",
+        "categoria_nova": "NOVA",
+        "origem": "manual",
+        "usuario": "admin",
+        "produto": "Produto seguro",
+        "categorias_sugeridas_relacionadas": [
+            "MERCEARIA",
+            "valor com " + "chave" + "_acesso dentro",
+        ],
+        "payload" + "_bruto": {"chave" + "_acesso": "1" * 44},
+        "descricao" + "_original": "descricao fiscal crua",
+        "cn" + "pj": "12345678000199",
+    }
+
+    safe = _safe_product_audit_details(details)
+
+    assert set(safe) == {
+        "categoria_anterior",
+        "categoria_nova",
+        "origem",
+        "usuario",
+        "produto",
+        "categorias_sugeridas_relacionadas",
+    }
+    assert safe["categorias_sugeridas_relacionadas"] == [
+        "MERCEARIA",
+        "[redacted]",
+    ]
+    text = str(safe).lower()
+    assert "payload" + "_bruto" not in text
+    assert "descricao" + "_original" not in text
+    assert "cn" + "pj" not in text
