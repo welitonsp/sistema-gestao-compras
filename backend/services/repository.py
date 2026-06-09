@@ -48,9 +48,23 @@ class ProcurementRepository:
         result = await self.db.execute(stmt)
         return result.fetchone() is not None
 
-    async def obter_categorias_unicas(self) -> list[str]:
-        """Retorna uma lista de categorias distintas existentes no catálogo."""
-        stmt = select(Produto.categoria).distinct().where(Produto.categoria != None)
+    async def obter_categorias_unicas(self, department_id: Any | None = None) -> list[str]:
+        """Retorna categorias distintas do catálogo, com escopo por departamento quando disponível."""
+        stmt = (
+            select(Produto.categoria)
+            .distinct()
+            .where(Produto.categoria != None)
+            .order_by(Produto.categoria)
+        )
+        if department_id is not None:
+            stmt = (
+                stmt.join(ItemNotaFiscal, ItemNotaFiscal.ean == Produto.ean)
+                .join(NotaFiscal, NotaFiscal.id == ItemNotaFiscal.nota_fiscal_id)
+                .where(
+                    NotaFiscal.department_id == department_id,
+                    NotaFiscal.status == "active",
+                )
+            )
         res = await self.db.execute(stmt)
         return [c for c in res.scalars() if c and c != "Não Classificado"]
 

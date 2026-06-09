@@ -255,7 +255,12 @@ class ImportadorSefazService:
             raise SefazConsultaInvalidaError(message, error_code=html_error_code)
 
         # 3. Extração (Parser Determinístico -> Fallback IA)
-        categorias_contexto = await self.repo.obter_categorias_unicas()
+        if department_id is None:
+            categorias_contexto = await self.repo.obter_categorias_unicas()
+        else:
+            categorias_contexto = await self.repo.obter_categorias_unicas(
+                department_id=department_id
+            )
         nota_dto = self.parser.parse(html_content)
         
         if not nota_dto:
