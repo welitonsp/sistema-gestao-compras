@@ -202,12 +202,20 @@ def _canonization_mapping_order(
 @router.get(
     "/maintenance",
     summary="Obter sugestões de manutenção do catálogo",
-    dependencies=[Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER]))]
 )
-async def obter_sugestoes_manutencao(db: DbSession):
+async def obter_sugestoes_manutencao(
+    db: DbSession,
+    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.MANAGER]))],
+):
     """Retorna inconsistências detectadas pela IA no catálogo."""
+    if user.role != UserRole.ADMIN and user.department_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Usuario sem departamento nao pode consultar manutencao do catalogo.",
+        )
+    department_id = None if user.role == UserRole.ADMIN else user.department_id
     service = CatalogHealerService(db)
-    return await service.get_maintenance_suggestions()
+    return await service.get_maintenance_suggestions(department_id=department_id)
 
 @router.post(
     "/{ean}/heal",
