@@ -11,6 +11,27 @@ O sistema é dividido em:
 - **Configuração de IA:** `AI_PROVIDER=groq` e `ENABLE_GEMINI=false` são os padrões; `GEMINI_API_KEY` é opcional.
 - **Parser Determinístico:** Motor de alta performance para SEFAZ GO.
 
+## ✅ Estado Operacional Atual (Junho/2026)
+
+Checkpoint para evitar retrabalho em fases já encerradas:
+
+- **Canonização de produtos (H9E):** concluída e em produção controlada. Inclui preview, confirmação, reversão, badges no catálogo, painel administrativo, dashboards canônicos e Dashboard Comparativo pós-canonização.
+- **Reversão de canonização:** implementada como reversão lógica (`status = "reverted"`), preservando produtos, itens fiscais, histórico de preços, EAN fiscal e `descricao_original`.
+- **CSV sanitization (H9F):** centralizada em `backend/core/csv_utils.py` e aplicada aos exports conhecidos, incluindo Dashboard, catálogo, auditoria e mapeamentos de canonização.
+- **AuditLog hardening (H10B):** detalhes de auditoria passam por redação central em `backend/core/security.py`, com allow-list e proteção contra serialização bruta futura.
+- **ClassificacaoCache tenant-aware (H10A-H10D):** cache, exemplos verificados, importação SEFAZ, importação manual e contexto de categorias de IA respeitam `department_id` quando disponível, com fallback global explícito apenas quando não há tenant.
+
+Não refazer sem nova motivação técnica:
+
+- não recriar endpoint de reversão de canonização;
+- não recriar botão/modal de reversão no Catálogo;
+- não recriar sanitização CSV local por endpoint;
+- não voltar a gravar `AuditLog.detalhes` com payload bruto;
+- não tratar `ClassificacaoCache` como global quando houver `department_id`;
+- não alterar fisicamente `Produto`, `ItemNotaFiscal`, `HistoricoPreco`, `descricao_original` ou EAN fiscal para canonização.
+
+Referência arquitetural: [docs/PRODUCT_CANONIZATION_ARCHITECTURE.md](docs/PRODUCT_CANONIZATION_ARCHITECTURE.md).
+
 ## 🛠️ Configuração Rápida
 
 1. **Requisitos:** Python 3.11+, Docker, Redis.
@@ -29,6 +50,8 @@ O sistema é dividido em:
 - **Secrets:** Nunca faça commit de arquivos `.env` ou chaves privadas. Use o `.env.example` como base.
 - **CORS:** Em produção, a variável `CORS_ORIGINS` deve ser configurada obrigatoriamente.
 - **Logs:** O sistema possui filtros automáticos de sanitização para ocultar chaves fiscais e CNPJs nos arquivos de log.
+- **AuditLog:** use `redact_audit_details` para qualquer novo detalhe estruturado de auditoria.
+- **CSV:** use `sanitize_csv_cell` em qualquer novo export CSV.
 
 ## 📑 Documentação de Importação
 
