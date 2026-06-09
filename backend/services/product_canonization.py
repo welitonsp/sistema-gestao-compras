@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import json
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.security import redact_audit_details
 from backend.models.compras import AuditLog, CanonizacaoProduto, Department, Produto
 
 
@@ -129,7 +129,7 @@ class ProductCanonizationService:
                         operacao=PRODUCT_CANONIZED_OPERATION,
                         entidade="CanonizacaoProduto",
                         entidade_id=f"{department_id}:{original}",
-                        detalhes=json.dumps(
+                        detalhes=redact_audit_details(
                             {
                                 "department_id": str(department_id),
                                 "ean_original": original,
@@ -137,9 +137,7 @@ class ProductCanonizationService:
                                 "usuario_executor": safe_usuario,
                                 "reason": safe_reason,
                                 "origem": "manual",
-                            },
-                            ensure_ascii=True,
-                            sort_keys=True,
+                            }
                         ),
                     )
                 )
@@ -205,7 +203,7 @@ class ProductCanonizationService:
                     operacao=PRODUCT_CANONIZATION_REVERTED_OPERATION,
                     entidade="CanonizacaoProduto",
                     entidade_id=f"{safe_department_id}:{original}",
-                    detalhes=json.dumps(
+                    detalhes=redact_audit_details(
                         {
                             "department_id": str(safe_department_id),
                             "ean_original": mapping.ean_original,
@@ -213,9 +211,7 @@ class ProductCanonizationService:
                             "usuario_executor": safe_usuario,
                             "reason": safe_reason,
                             "origem": "manual",
-                        },
-                        ensure_ascii=True,
-                        sort_keys=True,
+                        }
                     ),
                 )
             )

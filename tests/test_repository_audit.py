@@ -1,4 +1,5 @@
 import pytest
+import json
 from datetime import date
 from decimal import Decimal
 from uuid import uuid4
@@ -63,3 +64,40 @@ async def test_bulk_persistence_and_audit():
         log = res_audit.scalar_one()
         assert log.usuario == "admin"
         assert log.operacao == "TEST_BULK"
+        assert json.loads(log.detalhes) == {"message": "Teste de auditoria e bulk insert"}
+
+
+@pytest.mark.asyncio
+async def test_registrar_auditoria_redige_detalhes_sensiveis():
+    async with SessionLocal() as db:
+        repo = ProcurementRepository(db)
+        audit_entity_id = f"audit-{uuid4()}"
+
+        async with db.begin():
+            await repo.registrar_auditoria(
+                usuario="admin",
+                operacao="TEST_REDACTION",
+                entidade="NotaFiscal",
+                entidade_id=audit_entity_id,
+                detalhes={
+                    "action": "UPDATE",
+                    "reason": "Ajuste operacional",
+                    "payload" + "_bruto": {"chave" + "_acesso": "1" * 44},
+                    "descricao" + "_original": "ITEM FISCAL CRU",
+                    "categoria": "MERCEARIA",
+                },
+                ip="127.0.0.1",
+            )
+
+        log = await db.scalar(select(AuditLog).where(AuditLog.entidade_id == audit_entity_id))
+        detalhes = json.loads(log.detalhes)
+
+    assert detalhes == {
+        "action": "UPDATE",
+        "categoria": "MERCEARIA",
+        "reason": "Ajuste operacional",
+    }
+    rendered = json.dumps(detalhes, ensure_ascii=False).lower()
+    assert "payload" + "_bruto" not in rendered
+    assert "descricao" + "_original" not in rendered
+    assert "chave" + "_acesso" not in rendered

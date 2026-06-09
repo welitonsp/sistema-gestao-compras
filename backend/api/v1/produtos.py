@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from decimal import Decimal
 import csv
-import json
+from decimal import Decimal
 from typing import Any, Annotated
 from uuid import UUID
 from fastapi import APIRouter, HTTPException, status, Query, Depends
@@ -17,6 +16,7 @@ from sqlalchemy.orm import aliased
 from backend.api.dependencies import DbSession, CurrentUser, RoleChecker
 from backend.core.classification_cache import upsert_classification_cache_entry
 from backend.core.csv_utils import sanitize_csv_cell
+from backend.core.security import redact_audit_details
 from backend.models.compras import AuditLog, CanonizacaoProduto, Department, Produto, UserRole, User, ItemNotaFiscal, NotaFiscal
 from backend.schemas.canonization import (
     CanonizationCandidateGroup,
@@ -69,53 +69,8 @@ CANONIZATION_MAPPING_SORT_FIELDS = {
     "original_name",
     "canonical_name",
 }
-SENSITIVE_AUDIT_TERMS = (
-    "c" + "pf",
-    "cn" + "pj",
-    "chave" + "_acesso",
-    "qr" + "_code",
-    "url" + "_sefaz",
-    "x" + "ml",
-    "json" + "_bruto",
-    "payload" + "_bruto",
-    "descricao" + "_original",
-)
-PRODUCT_AUDIT_ALLOWED_DETAIL_KEYS = {
-    "categoria_anterior",
-    "categoria_nova",
-    "origem",
-    "usuario",
-    "produto",
-    "categorias_sugeridas_relacionadas",
-}
-
-
 def _categoria_para_comparacao(categoria: str | None) -> str:
     return (categoria or "").strip()
-
-
-def _safe_product_audit_details(details: dict[str, Any]) -> dict[str, Any]:
-    safe_details: dict[str, Any] = {}
-    for key in PRODUCT_AUDIT_ALLOWED_DETAIL_KEYS:
-        value = details.get(key)
-        if isinstance(value, list):
-            safe_details[key] = [
-                _safe_product_audit_value(item)
-                for item in value[:5]
-            ]
-        else:
-            safe_details[key] = _safe_product_audit_value(value)
-    return safe_details
-
-
-def _safe_product_audit_value(value: Any) -> Any:
-    if value is None:
-        return None
-    text = str(value)
-    lowered = text.lower()
-    if any(term in lowered for term in SENSITIVE_AUDIT_TERMS):
-        return "[redacted]"
-    return text[:200]
 
 
 def _produto_operacional_filter():
@@ -954,7 +909,7 @@ async def atualizar_produto(
             "categoria_anterior": categoria_anterior,
             "categoria_nova": categoria_nova,
             "origem": "manual",
-            "usuario": user.username,
+            "usuario_executor": user.username,
             "produto": produto.nome_limpo,
             "categorias_sugeridas_relacionadas": categorias_sugeridas,
         }
@@ -964,11 +919,7 @@ async def atualizar_produto(
                 operacao=CATEGORY_CONFIRMED_OPERATION,
                 entidade="Produto",
                 entidade_id=ean,
-                detalhes=json.dumps(
-                    _safe_product_audit_details(detalhes),
-                    ensure_ascii=True,
-                    default=str,
-                ),
+                detalhes=redact_audit_details(detalhes),
                 department_id=user.department_id,
             )
         )
