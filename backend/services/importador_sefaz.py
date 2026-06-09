@@ -279,14 +279,24 @@ class ImportadorSefazService:
                     "HTML limpo para fallback IA excedeu o limite e foi truncado "
                     f"(limite={AI_FALLBACK_TEXT_LIMIT}, tamanho_limpo={clean_text_length})."
                 )
-            nota_dto = await self.ai.extrair_nota(texto_limpo, categorias_contexto=categorias_contexto)
+            ai_scope = {"department_id": department_id} if department_id is not None else {}
+            nota_dto = await self.ai.extrair_nota(
+                texto_limpo,
+                categorias_contexto=categorias_contexto,
+                **ai_scope,
+            )
             if chave_acesso: nota_dto.chave_acesso = chave_acesso
         else:
             parser_source = "deterministic"
             quality_details = {}
             # Enriquecimento: O parser determinístico não categoriza, chamamos IA para os itens
             # Isso garante que mesmo notas parseadas via CSS tenham categorias inteligentes
-            nota_dto.itens = await self.ai.classificar_itens_lote(nota_dto.itens, categorias_contexto)
+            ai_scope = {"department_id": department_id} if department_id is not None else {}
+            nota_dto.itens = await self.ai.classificar_itens_lote(
+                nota_dto.itens,
+                categorias_contexto,
+                **ai_scope,
+            )
 
         chave_final = chave_acesso or nota_dto.chave_acesso
         extraction_quality = build_extraction_quality(

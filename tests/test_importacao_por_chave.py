@@ -264,6 +264,42 @@ def _dto_without_items(chave: str, suffix: str) -> NotaFiscalDTO:
     )
 
 
+@pytest.mark.anyio
+async def test_importador_repassa_department_id_para_classificacao_ia(monkeypatch):
+    department_id = uuid4()
+    token = await _create_user(
+        "tenant_ai_import_manager",
+        UserRole.MANAGER,
+        department_id=department_id,
+    )
+    chave = _valid_access_key("5226051745740400118365511000040999127519990")
+    dto = _dto_for_batch_key(chave, "992")
+    captured_department_ids = []
+
+    async def fake_fetch_url(self, url: str) -> str:
+        return "<html><body><table><tr><td>Produto Descricao Quantidade Valor</td></tr></table></body></html>"
+
+    async def fake_classificar_itens_lote(self, itens, categorias_contexto, department_id=None):
+        captured_department_ids.append(department_id)
+        return itens
+
+    _allow_plain_access_key_fetch_in_test(monkeypatch)
+    monkeypatch.setattr(ImportadorSefazService, "_fetch_url", fake_fetch_url)
+    monkeypatch.setattr(SefazGoParser, "parse", lambda self, html: dto)
+    monkeypatch.setattr(AIStructuredExtractor, "classificar_itens_lote", fake_classificar_itens_lote)
+    app.state.http_client = AsyncMock()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/notas/importacao-por-chave",
+            json={"chave_acesso": chave},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 201
+    assert captured_department_ids == [department_id]
+
+
 def _mock_batch_import_dependencies(monkeypatch, dto_by_key: dict[str, NotaFiscalDTO]) -> None:
     _allow_plain_access_key_fetch_in_test(monkeypatch)
 
