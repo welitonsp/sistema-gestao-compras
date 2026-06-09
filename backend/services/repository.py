@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,22 +19,24 @@ class ProcurementRepository:
         self._cache_fornecedores = {}
 
     async def registrar_auditoria(
-        self, 
-        usuario: str, 
-        operacao: str, 
-        entidade: str, 
-        entidade_id: str, 
-        detalhes: str | None = None,
+        self,
+        usuario: str,
+        operacao: str,
+        entidade: str,
+        entidade_id: str,
+        detalhes: Any | None = None,
         ip: str | None = None,
         department_id: str | None = None
     ) -> None:
-        """Persiste uma entrada na trilha de auditoria com isolamento de departamento."""
+        """Persiste uma entrada na trilha de auditoria com isolamento de departamento e redação automática."""
+        from backend.core.security import redact_audit_details
+
         log = AuditLog(
             usuario=usuario,
             operacao=operacao,
             entidade=entidade,
             entidade_id=entidade_id,
-            detalhes=detalhes,
+            detalhes=redact_audit_details(detalhes),
             ip_origem=ip,
             department_id=department_id
         )
@@ -60,7 +63,7 @@ class ProcurementRepository:
     ) -> NotaFiscal:
         # 1. Obter Fornecedor (usa cache local de sessão se necessário)
         fornecedor = await self._obter_ou_criar_fornecedor(dto.fornecedor)
-        
+
         # 2. Bulk Lookup de Produtos Existentes para evitar N+1
         eans_na_nota = list({item.codigo_produto for item in dto.itens})
         stmt_produtos = select(Produto).where(Produto.ean.in_(eans_na_nota))
@@ -108,8 +111,8 @@ class ProcurementRepository:
                     unidade="un"
                 )
                 self.db.add(produto)
-                produtos_map[produto.ean] = produto 
-            
+                produtos_map[produto.ean] = produto
+
             item_fiscal = ItemNotaFiscal(
                 nota_fiscal_id=nota.id,
                 ean=produto.ean,
@@ -142,7 +145,7 @@ class ProcurementRepository:
     async def _obter_ou_criar_fornecedor(self, dto) -> Fornecedor:
         if dto.cnpj in self._cache_fornecedores:
             return self._cache_fornecedores[dto.cnpj]
-            
+
         stmt = select(Fornecedor).where(Fornecedor.cnpj == dto.cnpj)
         fornecedor = await self.db.scalar(stmt)
         if not fornecedor:
@@ -153,6 +156,6 @@ class ProcurementRepository:
             )
             self.db.add(fornecedor)
             await self.db.flush()
-        
+
         self._cache_fornecedores[dto.cnpj] = fornecedor
         return fornecedor

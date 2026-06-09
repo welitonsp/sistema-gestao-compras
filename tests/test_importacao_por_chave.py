@@ -1410,7 +1410,7 @@ async def test_patch_produto_categoria_preenche_confirmacao_manual():
     assert detalhes["categoria_anterior"] == "ANTIGA"
     assert detalhes["categoria_nova"] == "CATEGORIA CONFIRMADA"
     assert detalhes["origem"] == "manual"
-    assert detalhes["usuario"] == "catalog_confirm_manager"
+    assert detalhes["usuario_executor"] == "catalog_confirm_manager"
     assert detalhes["produto"] == "PRODUTO PATCH CATEGORIA"
     assert detalhes["categorias_sugeridas_relacionadas"] == ["CATEGORIA SUGERIDA IA"]
 
