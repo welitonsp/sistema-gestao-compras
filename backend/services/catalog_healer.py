@@ -3,6 +3,7 @@
 from __future__ import annotations
 import asyncio
 from typing import List, Dict, Any
+from uuid import UUID
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.classification_cache import get_classification_cache_entry
@@ -16,7 +17,7 @@ logger = get_logger("services.healer")
 ACTIVE_INVOICE_STATUS = "active"
 
 
-def _produto_operacional_filter():
+def _produto_operacional_filter(department_id: UUID | None = None):
     item_exists = select(ItemNotaFiscal.id).where(ItemNotaFiscal.ean == Produto.ean).exists()
     active_item_exists = (
         select(ItemNotaFiscal.id)
@@ -25,8 +26,12 @@ def _produto_operacional_filter():
             ItemNotaFiscal.ean == Produto.ean,
             NotaFiscal.status == ACTIVE_INVOICE_STATUS,
         )
-        .exists()
     )
+    if department_id is not None:
+        active_item_exists = active_item_exists.where(NotaFiscal.department_id == department_id)
+        return active_item_exists.exists()
+
+    active_item_exists = active_item_exists.exists()
     return or_(~item_exists, active_item_exists)
 
 class CatalogHealerService:
@@ -36,7 +41,10 @@ class CatalogHealerService:
         self.db = db
         self.ai = AIStructuredExtractor()
 
-    async def get_maintenance_suggestions(self) -> List[Dict[str, Any]]:
+    async def get_maintenance_suggestions(
+        self,
+        department_id: UUID | None = None,
+    ) -> List[Dict[str, Any]]:
         """
         Scans the catalog for products with very similar names but different brands/categories.
         Returns a list of suggested unifications.
@@ -45,7 +53,7 @@ class CatalogHealerService:
         
         # 1. Busca produtos que podem ser duplicados ou inconsistentes
         # Pega produtos agrupados por nome aproximado (simulação simples)
-        stmt = select(Produto).where(_produto_operacional_filter()).order_by(Produto.nome_limpo)
+        stmt = select(Produto).where(_produto_operacional_filter(department_id)).order_by(Produto.nome_limpo)
         result = await self.db.execute(stmt)
         all_products = result.scalars().all()
         

@@ -98,7 +98,7 @@ Completed phases:
 3. **H9E-6:** Administrative read-only mappings view baseline.
 4. **H9G:** Dashboard Comparativo MVP with explicit behavior for the `Tudo` period.
 5. **H9F/H10B:** CSV and AuditLog sanitization hardening.
-6. **H10A-H10D:** Tenant-aware `ClassificacaoCache`, AI cache scope propagation, and tenant-scoped category context for import prompts.
+6. **H10A-H10E:** Tenant-aware `ClassificacaoCache`, AI cache scope propagation, tenant-scoped category context for import prompts, and tenant-scoped catalog maintenance suggestions.
 
 Future work should focus on operational polish, richer administrative filters,
 exports/history where needed, and final manual QA of analytics rather than
