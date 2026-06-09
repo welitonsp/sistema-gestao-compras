@@ -17,7 +17,13 @@ class ManualImportService:
         self.repo = repo
         self.ai = ai_extractor
 
-    async def processar_texto_manual(self, linhas: List[str], data_compra: date, mercado: str):
+    async def processar_texto_manual(
+        self,
+        linhas: List[str],
+        data_compra: date,
+        mercado: str,
+        department_id=None,
+    ):
         """Processa linhas de um extrato manual e salva no banco de forma resiliente."""
         
         print(f"📦 Processando {len(linhas)} itens manuais...")
@@ -50,7 +56,10 @@ class ManualImportService:
 
                 # Usa a IA para classificar o produto individualmente (ou busca no catálogo)
                 # Como é manual, fazemos um de cada vez para garantir precisão
-                dados_ia = await self.ai.classificar_item_manual(descricao_original)
+                dados_ia = await self.ai.classificar_item_manual(
+                    descricao_original,
+                    department_id=department_id,
+                )
                 
                 # Criamos um DTO de Nota Fiscal "Fake" para usar o repositório unificado
                 # Isso garante que a lógica de "Obter ou Criar Fornecedor/Produto" seja idêntica

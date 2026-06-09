@@ -39,7 +39,12 @@ class AIStructuredExtractor:
             self._client = genai.Client(api_key=api_key)
         return self._client
 
-    async def extrair_nota(self, texto_limpo: str, categorias_contexto: list[str] | None = None) -> NotaFiscalDTO:
+    async def extrair_nota(
+        self,
+        texto_limpo: str,
+        categorias_contexto: list[str] | None = None,
+        department_id=None,
+    ) -> NotaFiscalDTO:
         start_time = time.perf_counter()
         logger.info(f"Chamando Groq ({self.model_name}) para extração estruturada.")
 
@@ -52,7 +57,7 @@ class AIStructuredExtractor:
          LIMPEZA - COZINHA E BANHEIRO, LIMPEZA - UTENSÍLIOS E DESCARTÁVEIS, BAZAR E UTILIDADES DOMÉSTICAS,
          PET SHOP, OUTROS]
         """
-        exemplos = await obter_exemplos_verificados(limit=10)
+        exemplos = await obter_exemplos_verificados(limit=10, department_id=department_id)
 
         prompt_sistema = (
             "Você é um extrator especialista em documentos fiscais brasileiros (NFC-e). "
@@ -111,14 +116,19 @@ class AIStructuredExtractor:
             logger.error(f"Erro na extração via Groq ({self.model_name}): {e}")
             raise
 
-    async def classificar_itens_lote(self, itens: list[ItemNotaDTO], categorias_contexto: list[str]) -> list[ItemNotaDTO]:
+    async def classificar_itens_lote(
+        self,
+        itens: list[ItemNotaDTO],
+        categorias_contexto: list[str],
+        department_id=None,
+    ) -> list[ItemNotaDTO]:
         """Classifica itens usando Groq."""
         if not itens: return []
 
         start_time = time.perf_counter()
         categorias_seguras = sanitize_prompt_categories(categorias_contexto)
         lista_cats = ", ".join(categorias_seguras)
-        exemplos = await obter_exemplos_verificados(limit=10)
+        exemplos = await obter_exemplos_verificados(limit=10, department_id=department_id)
 
         prompt_user = "Classifique os seguintes itens de supermercado:\n"
         for i, item in enumerate(itens):
@@ -153,10 +163,10 @@ class AIStructuredExtractor:
             logger.error(f"Erro ao classificar via Groq: {e}")
             return itens
 
-    async def classificar_item_manual(self, descricao: str) -> dict:
+    async def classificar_item_manual(self, descricao: str, department_id=None) -> dict:
         """Classifica um único item de texto manual usando Groq com Cache."""
         # 1. Tentar Cache
-        cached = await buscar_no_cache(descricao)
+        cached = await buscar_no_cache(descricao, department_id=department_id)
         if cached:
             return cached
 
@@ -165,7 +175,7 @@ class AIStructuredExtractor:
 
         try:
             async with _ai_semaphore:
-                resultado = await consultar_ia_async(descricao)
+                resultado = await consultar_ia_async(descricao, department_id=department_id)
 
             duration = time.perf_counter() - start_time
             logger.info(f"Groq (classificar_item) respondeu em {duration:.2f}s.")
