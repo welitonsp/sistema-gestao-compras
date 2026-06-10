@@ -27,13 +27,15 @@ const InsightsView = lazy(() => import('./pages/InsightsView').then(m => ({ defa
 const ImportarNotaView = lazy(() => import('./pages/ImportarNotaView').then(m => ({ default: m.ImportarNotaView })));
 
 type Tab = 'dashboard' | 'importar' | 'auditoria' | 'produtos' | 'gestao' | 'insights';
+const AUDIT_LOG_PAGE_SIZE = 100;
 
-const buildAuditLogsEndpoint = (base: string, filters: AuditLogFilters = {}, limit?: number) => {
+const buildAuditLogsEndpoint = (base: string, filters: AuditLogFilters = {}, limit?: number, offset?: number) => {
   const params = new URLSearchParams();
   const search = filters.q?.trim();
   const operation = filters.operation?.trim();
 
   if (limit) params.set('limit', String(limit));
+  if (offset) params.set('offset', String(offset));
   if (search) params.set('q', search);
   if (operation && operation !== 'all') params.set('operation', operation);
 
@@ -47,6 +49,8 @@ export default function App() {
   const [data, setData] = useState<DashboardResumo | null>(null);
   const [alerts, setAlertas] = useState<AlertaPreco[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[] | null>(null);
+  const [auditHasMore, setAuditHasMore] = useState(false);
+  const [auditLoadingMore, setAuditLoadingMore] = useState(false);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -59,13 +63,14 @@ export default function App() {
       const [resumo, alertas, logs, prods] = await Promise.all([
         apiClient.get<DashboardResumo>('/dashboard/resumo'),
         apiClient.get<{ alertas: AlertaPreco[] }>('/dashboard/alertas'),
-        apiClient.get<AuditLog[]>(buildAuditLogsEndpoint('/dashboard/audit-logs', {}, 100)),
+        apiClient.get<AuditLog[]>(buildAuditLogsEndpoint('/dashboard/audit-logs', {}, AUDIT_LOG_PAGE_SIZE)),
         apiClient.get<Produto[]>('/produtos'),
       ]);
       
       setData(resumo);
       setAlertas(alertas.alertas);
       setAuditLogs(logs);
+      setAuditHasMore(logs.length === AUDIT_LOG_PAGE_SIZE);
       setProdutos(prods);
       
       if (authUser?.role === 'admin') {
@@ -89,15 +94,35 @@ export default function App() {
     try {
       setAuditLogs(null);
       const logs = await apiClient.get<AuditLog[]>(
-        buildAuditLogsEndpoint('/dashboard/audit-logs', filters, 100)
+        buildAuditLogsEndpoint('/dashboard/audit-logs', filters, AUDIT_LOG_PAGE_SIZE)
       );
       setAuditLogs(logs);
+      setAuditHasMore(logs.length === AUDIT_LOG_PAGE_SIZE);
     } catch (err) {
       console.error(err);
       setStatusMessage('Falha ao filtrar auditoria. Verifique sua conexão.');
       setTimeout(() => setStatusMessage(''), 5000);
     }
   }, []);
+
+  const loadMoreAuditLogs = useCallback(async (filters: AuditLogFilters = {}) => {
+    if (!auditLogs || auditLoadingMore) return;
+
+    try {
+      setAuditLoadingMore(true);
+      const nextLogs = await apiClient.get<AuditLog[]>(
+        buildAuditLogsEndpoint('/dashboard/audit-logs', filters, AUDIT_LOG_PAGE_SIZE, auditLogs.length)
+      );
+      setAuditLogs((current) => [...(current || []), ...nextLogs]);
+      setAuditHasMore(nextLogs.length === AUDIT_LOG_PAGE_SIZE);
+    } catch (err) {
+      console.error(err);
+      setStatusMessage('Falha ao carregar mais registros de auditoria.');
+      setTimeout(() => setStatusMessage(''), 5000);
+    } finally {
+      setAuditLoadingMore(false);
+    }
+  }, [auditLoadingMore, auditLogs]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -284,6 +309,9 @@ export default function App() {
                   logs={auditLogs}
                   onExport={handleExportAudit}
                   onFiltersChange={fetchAuditLogs}
+                  onLoadMore={loadMoreAuditLogs}
+                  hasMore={auditHasMore}
+                  loadingMore={auditLoadingMore}
                 />
               )}
               {activeTab === 'produtos' && <CatalogoView produtos={produtos} onRefresh={fetchData} onExport={handleExportProdutos} />}
