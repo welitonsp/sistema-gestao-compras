@@ -340,3 +340,104 @@ async def test_export_audit_logs_sanitiza_csv_injection_e_isola_departamento(cli
     assert "'-10+20" in content
     assert "'@SUM(1+1)" in content
     assert "Other Department Leak" not in content
+
+
+@pytest.mark.asyncio
+async def test_list_audit_logs_filtra_operacao_busca_e_isola_departamento(client):
+    other_dept_id = uuid4()
+    async with SessionLocal() as db:
+        db.add_all(
+            [
+                AuditLog(
+                    department_id=TEST_DEPT_ID,
+                    usuario="audit-h10q-user",
+                    operacao="AUDIT_CHAT_BLOCKED",
+                    entidade="AuditChat",
+                    entidade_id="blocked-h10q-visible",
+                    detalhes='{"reason": "blocked-h10q-safe"}',
+                    ip_origem="127.0.0.1",
+                ),
+                AuditLog(
+                    department_id=TEST_DEPT_ID,
+                    usuario="audit-h10q-user",
+                    operacao="LOGIN",
+                    entidade="Session",
+                    entidade_id="blocked-h10q-login",
+                    detalhes="blocked-h10q-safe",
+                    ip_origem="127.0.0.1",
+                ),
+                AuditLog(
+                    department_id=other_dept_id,
+                    usuario="audit-h10q-other",
+                    operacao="AUDIT_CHAT_BLOCKED",
+                    entidade="AuditChat",
+                    entidade_id="blocked-h10q-other",
+                    detalhes="blocked-h10q-safe",
+                    ip_origem="127.0.0.2",
+                ),
+            ]
+        )
+        await db.commit()
+
+    response = await client.get(
+        "/api/v1/dashboard/audit-logs"
+        "?operation=AUDIT_CHAT_BLOCKED&q=blocked-h10q-safe&limit=20"
+    )
+
+    assert response.status_code == 200
+    logs = response.json()
+    assert len(logs) == 1
+    assert logs[0]["operacao"] == "AUDIT_CHAT_BLOCKED"
+    assert logs[0]["entidade_id"] == "blocked-h10q-visible"
+    assert "blocked-h10q-other" not in str(logs)
+    assert "blocked-h10q-login" not in str(logs)
+
+
+@pytest.mark.asyncio
+async def test_export_audit_logs_respeita_filtros_operacao_e_busca(client):
+    other_dept_id = uuid4()
+    async with SessionLocal() as db:
+        db.add_all(
+            [
+                AuditLog(
+                    department_id=TEST_DEPT_ID,
+                    usuario="audit-export-h10q",
+                    operacao="AUDIT_CHAT_BLOCKED",
+                    entidade="AuditChat",
+                    entidade_id="export-h10q-visible",
+                    detalhes='{"reason": "export-h10q-safe"}',
+                    ip_origem="127.0.0.1",
+                ),
+                AuditLog(
+                    department_id=TEST_DEPT_ID,
+                    usuario="audit-export-h10q",
+                    operacao="IMPORT",
+                    entidade="NotaFiscal",
+                    entidade_id="export-h10q-import",
+                    detalhes="export-h10q-safe",
+                    ip_origem="127.0.0.1",
+                ),
+                AuditLog(
+                    department_id=other_dept_id,
+                    usuario="audit-export-h10q-other",
+                    operacao="AUDIT_CHAT_BLOCKED",
+                    entidade="AuditChat",
+                    entidade_id="export-h10q-other",
+                    detalhes="export-h10q-safe",
+                    ip_origem="127.0.0.2",
+                ),
+            ]
+        )
+        await db.commit()
+
+    response = await client.get(
+        "/api/v1/dashboard/audit-logs/export"
+        "?operation=AUDIT_CHAT_BLOCKED&q=export-h10q-safe"
+    )
+
+    assert response.status_code == 200
+    content = response.text
+    assert "audit-export-h10q;AUDIT_CHAT_BLOCKED;AuditChat" in content
+    assert "export-h10q-safe" in content
+    assert "export-h10q-import" not in content
+    assert "export-h10q-other" not in content
