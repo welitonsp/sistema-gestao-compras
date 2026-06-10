@@ -20,6 +20,7 @@ Checkpoint para evitar retrabalho em fases já encerradas:
 - **CSV sanitization (H9F):** centralizada em `backend/core/csv_utils.py` e aplicada aos exports conhecidos, incluindo Dashboard, catálogo, auditoria e mapeamentos de canonização.
 - **AuditLog hardening (H10B):** detalhes de auditoria passam por redação central em `backend/core/security.py`, com allow-list e proteção contra serialização bruta futura.
 - **ClassificacaoCache e autocura tenant-aware (H10A-H10E):** cache, exemplos verificados, importação SEFAZ, importação manual, contexto de categorias de IA e sugestões de autocura respeitam `department_id` quando disponível, com fallback global explícito apenas quando não há tenant.
+- **Chat de auditoria read-only (H10F):** o assistente IA bloqueia intenções de alteração de catálogo e valida de forma deterministica que SQL gerado seja uma única consulta somente leitura.
 
 Não refazer sem nova motivação técnica:
 
@@ -29,6 +30,7 @@ Não refazer sem nova motivação técnica:
 - não voltar a gravar `AuditLog.detalhes` com payload bruto;
 - não tratar `ClassificacaoCache` como global quando houver `department_id`;
 - não mostrar sugestões de autocura de outro departamento para usuários `MANAGER`;
+- não permitir mutações de catálogo pelo chat de auditoria;
 - não alterar fisicamente `Produto`, `ItemNotaFiscal`, `HistoricoPreco`, `descricao_original` ou EAN fiscal para canonização.
 
 Referência arquitetural: [docs/PRODUCT_CANONIZATION_ARCHITECTURE.md](docs/PRODUCT_CANONIZATION_ARCHITECTURE.md).
