@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   FileText, ShieldCheck, User as UserIcon, Calendar, 
   ArrowRight, Search, Filter, Download, MoreHorizontal,
-  Globe, RotateCcw
+  Globe, RotateCcw, ShieldAlert
 } from 'lucide-react';
 import { AuditLog } from '../types/api';
 import { Skeleton } from '../components/Skeleton';
@@ -13,6 +13,7 @@ interface AuditoriaViewProps {
 }
 
 const operationLabel = (operation: string) => {
+  if (operation === 'AUDIT_CHAT_BLOCKED') return 'CHAT BLOQUEADO';
   if (operation === 'PRODUCT_CANONIZATION_REVERTED') return 'CANONIZACAO REVERTIDA';
   if (operation === 'PRODUCT_CANONIZED') return 'CANONIZACAO';
   if (operation === 'CATEGORY_CONFIRMED') return 'CATEGORIA CONFIRMADA';
@@ -20,6 +21,9 @@ const operationLabel = (operation: string) => {
 };
 
 const operationClass = (operation: string) => {
+  if (operation === 'AUDIT_CHAT_BLOCKED') {
+    return 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300';
+  }
   if (operation === 'PRODUCT_CANONIZATION_REVERTED') {
     return 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300';
   }
@@ -38,6 +42,30 @@ const operationClass = (operation: string) => {
   return 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400';
 };
 
+const safeJsonDetails = (detailsText: string | null): Record<string, unknown> | null => {
+  try {
+    const details = JSON.parse(detailsText || '{}');
+    return details && typeof details === 'object' && !Array.isArray(details)
+      ? details as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+const detailString = (details: Record<string, unknown>, key: string): string | null => {
+  const value = details[key];
+  return typeof value === 'string' && value.trim() ? value : null;
+};
+
+const auditChatBlockedSummary = (log: AuditLog): string | null => {
+  if (log.operacao !== 'AUDIT_CHAT_BLOCKED') return null;
+
+  const details = safeJsonDetails(log.detalhes);
+  const reason = details ? detailString(details, 'reason') : null;
+  return reason ? `Bloqueio de segurança: ${reason}` : 'Bloqueio de segurança do chat de auditoria';
+};
+
 const canonicalDetailsSummary = (log: AuditLog): string | null => {
   if (
     log.operacao !== 'PRODUCT_CANONIZATION_REVERTED'
@@ -46,20 +74,24 @@ const canonicalDetailsSummary = (log: AuditLog): string | null => {
     return null;
   }
 
-  try {
-    const details = JSON.parse(log.detalhes || '{}') as {
-      ean_original?: string;
-      ean_canonico?: string;
-      reason?: string | null;
-    };
+  const details = safeJsonDetails(log.detalhes) as {
+    ean_original?: string;
+    ean_canonico?: string;
+    reason?: string | null;
+  } | null;
+  if (details) {
     if (!details.ean_original || !details.ean_canonico) return null;
 
     const base = `EAN ${details.ean_original} -> ${details.ean_canonico}`;
     return details.reason ? `${base} · ${details.reason}` : base;
-  } catch {
-    return null;
   }
+
+  return null;
 };
+
+const detailsSummary = (log: AuditLog): string | null => (
+  auditChatBlockedSummary(log) || canonicalDetailsSummary(log)
+);
 
 export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) => {
   const handleShare = async () => {
@@ -148,8 +180,9 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) 
                 </tr>
               ) : (
                 logs.map((log, i) => {
-                  const detailsSummary = canonicalDetailsSummary(log);
+                  const summary = detailsSummary(log);
                   const isCanonizationRevert = log.operacao === 'PRODUCT_CANONIZATION_REVERTED';
+                  const isAuditChatBlocked = log.operacao === 'AUDIT_CHAT_BLOCKED';
 
                   return (
                   <tr key={i} className="group hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
@@ -173,6 +206,7 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) 
                     <td className="px-8 py-5">
                       <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-tight ${operationClass(log.operacao)}`}>
                         {isCanonizationRevert && <RotateCcw size={12} aria-hidden="true" />}
+                        {isAuditChatBlocked && <ShieldAlert size={12} aria-hidden="true" />}
                         {operationLabel(log.operacao)}
                       </span>
                     </td>
@@ -185,17 +219,23 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) 
                             {log.entidade_id}
                           </span>
                         </div>
-                        {detailsSummary && (
+                        {summary && (
                           <p className="max-w-md text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                            {detailsSummary}
+                            {summary}
                           </p>
                         )}
                       </div>
                     </td>
                     <td className="px-8 py-5">
                       <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-200 dark:shadow-none" />
-                        <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase">Sucesso</span>
+                        <div className={`h-1.5 w-1.5 rounded-full shadow-sm dark:shadow-none ${
+                          isAuditChatBlocked
+                            ? 'bg-rose-500 shadow-rose-200'
+                            : 'bg-emerald-500 shadow-emerald-200'
+                        }`} />
+                        <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase">
+                          {isAuditChatBlocked ? 'Bloqueado' : 'Sucesso'}
+                        </span>
                       </div>
                     </td>
                     <td className="px-8 py-5 text-right">
