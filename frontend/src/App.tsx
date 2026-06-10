@@ -113,6 +113,10 @@ export default function App() {
 
   if (!isAuthenticated) return <Login />;
 
+  const canUseAuditChat =
+    authUser?.role === 'admin' ||
+    ((authUser?.role === 'auditor' || authUser?.role === 'manager') && Boolean(authUser.department_id));
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex transition-colors duration-300">
       {/* Overlay for mobile sidebar */}
@@ -256,7 +260,7 @@ export default function App() {
         </div>
 
         {/* AI Chatbot Overlay */}
-        <AuditChatbot />
+        {canUseAuditChat && <AuditChatbot />}
       </main>
 
       {statusMessage && <StatusMessage message={statusMessage} />}

@@ -4,6 +4,7 @@ import { apiClient } from './client';
 interface AuthUser {
   username: string;
   role: string;
+  department_id: string | null;
 }
 
 interface AuthContextType {
@@ -25,6 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const authenticatedUser = {
         username: userData.username,
         role: userData.role,
+        department_id: userData.department_id,
       };
       setUser(authenticatedUser);
       return authenticatedUser;
