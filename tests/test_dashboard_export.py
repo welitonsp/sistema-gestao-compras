@@ -441,3 +441,34 @@ async def test_export_audit_logs_respeita_filtros_operacao_e_busca(client):
     assert "export-h10q-safe" in content
     assert "export-h10q-import" not in content
     assert "export-h10q-other" not in content
+
+
+@pytest.mark.asyncio
+async def test_list_audit_logs_respeita_limit_offset(client):
+    async with SessionLocal() as db:
+        db.add_all(
+            [
+                AuditLog(
+                    department_id=TEST_DEPT_ID,
+                    usuario="audit-page-h10r",
+                    operacao="LOGIN",
+                    entidade="Session",
+                    entidade_id=f"audit-page-h10r-{idx}",
+                    detalhes="pagination-safe",
+                    ip_origem="127.0.0.1",
+                )
+                for idx in range(3)
+            ]
+        )
+        await db.commit()
+
+    first = await client.get("/api/v1/dashboard/audit-logs?q=audit-page-h10r&limit=1&offset=0")
+    second = await client.get("/api/v1/dashboard/audit-logs?q=audit-page-h10r&limit=1&offset=1")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    first_logs = first.json()
+    second_logs = second.json()
+    assert len(first_logs) == 1
+    assert len(second_logs) == 1
+    assert first_logs[0]["id"] != second_logs[0]["id"]

@@ -12,6 +12,9 @@ interface AuditoriaViewProps {
   logs: AuditLog[] | null;
   onExport?: (filters?: AuditLogFilters) => void;
   onFiltersChange?: (filters: AuditLogFilters) => void;
+  onLoadMore?: (filters: AuditLogFilters) => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
 }
 
 const SECURITY_OPERATION = 'AUDIT_CHAT_BLOCKED';
@@ -120,7 +123,14 @@ const serverOperationFilter = (operationFilter: string): string | undefined => {
   return operationFilter;
 };
 
-export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport, onFiltersChange }) => {
+export const AuditoriaView: React.FC<AuditoriaViewProps> = ({
+  logs,
+  onExport,
+  onFiltersChange,
+  onLoadMore,
+  hasMore = false,
+  loadingMore = false,
+}) => {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [operationFilter, setOperationFilter] = React.useState('all');
   const [selectedLog, setSelectedLog] = React.useState<AuditLog | null>(null);
@@ -244,7 +254,7 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport, on
 
           <div className="flex items-center justify-between gap-3 lg:justify-end">
             <span className="text-xs font-bold text-slate-400 dark:text-slate-500">
-              {logs && filteredLogs ? `${filteredLogs.length} de ${logs.length} registros` : 'Carregando registros'}
+              {logs && filteredLogs ? `${filteredLogs.length} registros carregados` : 'Carregando registros'}
             </span>
             {hasActiveFilters && (
               <button
@@ -370,6 +380,18 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport, on
             </tbody>
           </table>
         </div>
+        {logs && hasMore && (
+          <div className="flex justify-center border-t border-slate-100 px-6 py-4 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => onLoadMore?.(serverFilters)}
+              disabled={loadingMore}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-900"
+            >
+              {loadingMore ? 'Carregando...' : 'Carregar mais registros'}
+            </button>
+          </div>
+        )}
       </div>
 
       {selectedLog && (
