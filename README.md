@@ -22,6 +22,7 @@ Checkpoint para evitar retrabalho em fases já encerradas:
 - **ClassificacaoCache e autocura tenant-aware (H10A-H10E):** cache, exemplos verificados, importação SEFAZ, importação manual, contexto de categorias de IA e sugestões de autocura respeitam `department_id` quando disponível, com fallback global explícito apenas quando não há tenant.
 - **Chat de auditoria read-only (H10F):** o assistente IA bloqueia intenções de alteração de catálogo e valida de forma deterministica que SQL gerado seja uma única consulta somente leitura.
 - **Chat de auditoria tenant-safe (H10G):** consultas geradas por IA são bloqueadas quando omitirem o `department_id` de usuários não-admin ou tentarem acessar identificadores fiscais/pessoais sensíveis.
+- **Chat de auditoria com RBAC (H10H):** acesso restrito a `ADMIN`, `AUDITOR` e `MANAGER`; usuários não-admin sem departamento são bloqueados antes de chamar a IA.
 
 Não refazer sem nova motivação técnica:
 
@@ -33,6 +34,7 @@ Não refazer sem nova motivação técnica:
 - não mostrar sugestões de autocura de outro departamento para usuários `MANAGER`;
 - não permitir mutações de catálogo pelo chat de auditoria;
 - não executar SQL do chat para usuários não-admin sem filtro explícito de `department_id`;
+- não expor o chat de auditoria para `OPERATOR` ou usuários não-admin sem departamento;
 - não alterar fisicamente `Produto`, `ItemNotaFiscal`, `HistoricoPreco`, `descricao_original` ou EAN fiscal para canonização.
 
 Referência arquitetural: [docs/PRODUCT_CANONIZATION_ARCHITECTURE.md](docs/PRODUCT_CANONIZATION_ARCHITECTURE.md).
