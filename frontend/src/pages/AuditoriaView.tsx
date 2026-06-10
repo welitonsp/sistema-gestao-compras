@@ -12,8 +12,10 @@ interface AuditoriaViewProps {
   onExport?: () => void;
 }
 
+const SECURITY_OPERATION = 'AUDIT_CHAT_BLOCKED';
+
 const operationLabel = (operation: string) => {
-  if (operation === 'AUDIT_CHAT_BLOCKED') return 'CHAT BLOQUEADO';
+  if (operation === SECURITY_OPERATION) return 'CHAT BLOQUEADO';
   if (operation === 'PRODUCT_CANONIZATION_REVERTED') return 'CANONIZACAO REVERTIDA';
   if (operation === 'PRODUCT_CANONIZED') return 'CANONIZACAO';
   if (operation === 'CATEGORY_CONFIRMED') return 'CATEGORIA CONFIRMADA';
@@ -21,7 +23,7 @@ const operationLabel = (operation: string) => {
 };
 
 const operationClass = (operation: string) => {
-  if (operation === 'AUDIT_CHAT_BLOCKED') {
+  if (operation === SECURITY_OPERATION) {
     return 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300';
   }
   if (operation === 'PRODUCT_CANONIZATION_REVERTED') {
@@ -59,7 +61,7 @@ const detailString = (details: Record<string, unknown>, key: string): string | n
 };
 
 const auditChatBlockedSummary = (log: AuditLog): string | null => {
-  if (log.operacao !== 'AUDIT_CHAT_BLOCKED') return null;
+  if (log.operacao !== SECURITY_OPERATION) return null;
 
   const details = safeJsonDetails(log.detalhes);
   const reason = details ? detailString(details, 'reason') : null;
@@ -93,7 +95,47 @@ const detailsSummary = (log: AuditLog): string | null => (
   auditChatBlockedSummary(log) || canonicalDetailsSummary(log)
 );
 
+const normalizeSearch = (value: string): string => value.trim().toLocaleLowerCase('pt-BR');
+
+const auditSearchText = (log: AuditLog): string => (
+  [
+    log.usuario,
+    log.operacao,
+    operationLabel(log.operacao),
+    log.entidade,
+    log.entidade_id,
+    log.ip_origem,
+    detailsSummary(log),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLocaleLowerCase('pt-BR')
+);
+
 export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) => {
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [operationFilter, setOperationFilter] = React.useState('all');
+
+  const operationOptions = React.useMemo(() => (
+    Array.from(new Set((logs || []).map((log) => log.operacao)))
+      .filter((operation) => operation !== SECURITY_OPERATION)
+      .sort()
+  ), [logs]);
+
+  const normalizedSearch = React.useMemo(() => normalizeSearch(searchTerm), [searchTerm]);
+  const filteredLogs = React.useMemo(() => {
+    if (!logs) return null;
+
+    return logs.filter((log) => {
+      const matchesOperation = operationFilter === 'all'
+        || (operationFilter === 'security' && log.operacao === SECURITY_OPERATION)
+        || log.operacao === operationFilter;
+      const matchesSearch = !normalizedSearch || auditSearchText(log).includes(normalizedSearch);
+      return matchesOperation && matchesSearch;
+    });
+  }, [logs, normalizedSearch, operationFilter]);
+  const hasActiveFilters = Boolean(normalizedSearch) || operationFilter !== 'all';
+
   const handleShare = async () => {
     if (navigator.share) {
       try {
@@ -119,13 +161,6 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) 
           <p className="text-slate-500 text-sm">Registro de todas as operações realizadas na sua conta.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button 
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-            aria-label="Filtrar histórico por período"
-          >
-            <Filter size={16} /> Filtrar
-          </button>
-          
           {/* Share Button (Chromium/Mobile optimized) */}
           <button 
             onClick={handleShare}
@@ -147,6 +182,55 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) 
 
       {/* Activity Timeline / Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden transition-colors">
+        <div className="flex flex-col gap-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_220px] lg:min-w-[560px]">
+            <label className="relative block">
+              <span className="sr-only">Buscar no histórico de auditoria</span>
+              <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+              <input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm font-medium text-slate-700 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:focus:border-indigo-700 dark:focus:ring-indigo-900/30"
+                placeholder="Buscar por usuário, operação ou item"
+                type="search"
+              />
+            </label>
+
+            <label className="relative block">
+              <span className="sr-only">Filtrar por operação</span>
+              <Filter size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+              <select
+                value={operationFilter}
+                onChange={(event) => setOperationFilter(event.target.value)}
+                className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm font-bold text-slate-600 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:focus:border-indigo-700 dark:focus:ring-indigo-900/30"
+              >
+                <option value="all">Todas as operações</option>
+                <option value="security">Bloqueios do chat</option>
+                {operationOptions.map((operation) => (
+                  <option key={operation} value={operation}>{operationLabel(operation)}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 lg:justify-end">
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-500">
+              {logs && filteredLogs ? `${filteredLogs.length} de ${logs.length} registros` : 'Carregando registros'}
+            </span>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setOperationFilter('all');
+                }}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-900"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -171,18 +255,20 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) 
                     <td className="px-8 py-5 text-right"><Skeleton className="h-8 w-8 rounded-lg ml-auto" /></td>
                   </tr>
                 ))
-              ) : logs.length === 0 ? (
+              ) : filteredLogs?.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-8 py-20 text-center text-slate-400 dark:text-slate-600">
                     <ShieldCheck size={40} className="mx-auto mb-4 opacity-20" />
-                    <p className="text-sm font-medium">Nenhum registro encontrado</p>
+                    <p className="text-sm font-medium">
+                      {logs.length === 0 ? 'Nenhum registro encontrado' : 'Nenhum registro corresponde aos filtros'}
+                    </p>
                   </td>
                 </tr>
               ) : (
-                logs.map((log, i) => {
+                filteredLogs?.map((log, i) => {
                   const summary = detailsSummary(log);
                   const isCanonizationRevert = log.operacao === 'PRODUCT_CANONIZATION_REVERTED';
-                  const isAuditChatBlocked = log.operacao === 'AUDIT_CHAT_BLOCKED';
+                  const isAuditChatBlocked = log.operacao === SECURITY_OPERATION;
 
                   return (
                   <tr key={i} className="group hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">

@@ -29,6 +29,7 @@ Checkpoint para evitar retrabalho em fases já encerradas:
 - **Chat de auditoria com limite de execução (H10L):** toda consulta validada é executada em subquery com `LIMIT 50` efetivo e timeout controlado.
 - **Chat de auditoria com rastreabilidade de bloqueios (H10M):** tentativas bloqueadas geram `AUDIT_CHAT_BLOCKED` sanitizado, sem mensagem bruta do usuário nem SQL bruto.
 - **Auditoria visual de bloqueios do chat (H10N):** a tela de Auditoria exibe `AUDIT_CHAT_BLOCKED` como bloqueio de segurança, com resumo sanitizado e sem payload bruto.
+- **Auditoria com filtros operacionais (H10O):** a tela de Auditoria permite busca local e filtro por operação, incluindo atalho para bloqueios do chat, sem expor detalhes brutos.
 
 Não refazer sem nova motivação técnica:
 
@@ -47,6 +48,7 @@ Não refazer sem nova motivação técnica:
 - não executar SQL do chat sem wrapper de limite e timeout;
 - não registrar bloqueios do chat com payload/mensagem/SQL bruto;
 - não exibir bloqueios do chat na Auditoria como sucesso operacional;
+- não remover filtros locais da Auditoria sem substituir por alternativa equivalente e segura;
 - não alterar fisicamente `Produto`, `ItemNotaFiscal`, `HistoricoPreco`, `descricao_original` ou EAN fiscal para canonização.
 
 Referência arquitetural: [docs/PRODUCT_CANONIZATION_ARCHITECTURE.md](docs/PRODUCT_CANONIZATION_ARCHITECTURE.md).
