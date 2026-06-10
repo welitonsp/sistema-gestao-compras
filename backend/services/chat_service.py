@@ -19,13 +19,14 @@ class AuditChatService:
     SCHEMA_CONTEXT = """
     Tabelas disponíveis para consulta:
     
-    1. 'users': Dados de usuários do sistema.
-    2. 'departments': Unidades (id, name). Valores comuns: 'Institucional'.
-    3. 'fornecedores': Empresas vendedoras (id, cnpj, razao_social). Ex: 'ATACADAO DIA A DIA S.A'.
-    4. 'produtos': Catálogo (ean, nome_limpo, marca, categoria). Categorias: 'LIMPEZA', 'ALIMENTOS BÁSICOS', 'BEBIDAS', etc.
-    5. 'notas_fiscais': Documentos (id, fornecedor_id, department_id, valor_total, data_emissao).
-    6. 'itens_notas_fiscais': Detalhes (nota_fiscal_id, ean, valor_unitario, valor_total, quantidade).
-    7. 'historico_precos': Histórico de preços por EAN.
+    1. 'departments': Unidades (id, name). Valores comuns: 'Institucional'.
+    2. 'fornecedores': Empresas vendedoras (id, razao_social). Ex: 'ATACADAO DIA A DIA S.A'.
+    3. 'produtos': Catálogo (ean, nome_limpo, marca, categoria). Categorias: 'LIMPEZA', 'ALIMENTOS BÁSICOS', 'BEBIDAS', etc.
+    4. 'notas_fiscais': Documentos (id, fornecedor_id, department_id, valor_total, data_emissao).
+    5. 'itens_notas_fiscais': Detalhes (nota_fiscal_id, ean, valor_unitario, valor_total, quantidade).
+    6. 'historico_precos': Histórico de preços por EAN.
+
+    Dados fiscais ou pessoais sensíveis não estão disponíveis para o chat.
     """
 
     def __init__(self, db: AsyncSession):
@@ -65,6 +66,17 @@ class AuditChatService:
                     "somente leitura. Reformule a pergunta para uma análise ou listagem."
                 ),
                 "error": "unsafe_sql_blocked",
+            }
+
+        safety_error = self._get_sql_safety_error(sql_query, department_id)
+        if safety_error:
+            logger.warning("Blocked audit chat SQL due to safety guard: %s", safety_error)
+            return {
+                "answer": (
+                    "Não executei a consulta gerada porque ela não passou nas regras de "
+                    "segurança e isolamento do chat de auditoria."
+                ),
+                "error": safety_error,
             }
 
         # 2. Execute SQL (ReadOnly)
@@ -122,8 +134,45 @@ class AuditChatService:
         )
         return forbidden.search(normalized) is None
 
+    @classmethod
+    def _get_sql_safety_error(cls, sql: str, department_id: Any | None) -> str | None:
+        """Return a stable error code when generated SQL violates chat safety rules."""
+
+        if cls._contains_sensitive_sql(sql):
+            return "sensitive_sql_blocked"
+
+        if department_id is not None and not cls._is_tenant_scoped_sql(sql, department_id):
+            return "tenant_scope_missing"
+
+        return None
+
+    @staticmethod
+    def _contains_sensitive_sql(sql: str) -> bool:
+        sensitive_identifiers = re.compile(
+            r"(?<![\w])("
+            r"users|cpf|cnpj|chave_acesso|qr_code|url_sefaz|xml|json_bruto|"
+            r"payload_bruto|payload_fiscal|raw_payload|hashed_password|email|"
+            r"access_token|refresh_token"
+            r")(?![\w])",
+            flags=re.IGNORECASE,
+        )
+        return sensitive_identifiers.search(sql) is not None
+
+    @staticmethod
+    def _is_tenant_scoped_sql(sql: str, department_id: Any) -> bool:
+        department = re.escape(str(department_id))
+        tenant_filter = re.compile(
+            rf"(?<![\w])(?:\w+\.)?department_id\s*=\s*['\"]?{department}['\"]?",
+            flags=re.IGNORECASE,
+        )
+        return tenant_filter.search(sql) is not None
+
     async def _generate_sql(self, prompt: str, department_id: Any | None) -> str:
-        tenant_constraint = f"Filtre os dados SEMPRE pelo department_id = '{department_id}' se a tabela possuir essa coluna." if department_id else ""
+        tenant_constraint = (
+            f"Filtre os dados SEMPRE com department_id = '{department_id}' em consultas de usuários não-admin."
+            if department_id
+            else "Usuário admin: não aplique filtro de department_id automaticamente."
+        )
         
         system_prompt = f"""
         Você é um Especialista em Banco de Dados PostgreSQL da Auditoria Governamental.
@@ -134,8 +183,9 @@ class AuditChatService:
         REGRAS CRÍTICAS:
         1. Use APENAS SELECT. Nunca use comandos de modificação.
         2. {tenant_constraint}
-        3. Retorne EXCLUSIVAMENTE o código SQL, sem markdown, sem explicações.
-        4. Sempre limite a 50 resultados para performance.
+        3. Nunca selecione CPF, CNPJ, chave fiscal, QR Code, URL SEFAZ, XML, JSON bruto, payload fiscal ou dados de usuários.
+        4. Retorne EXCLUSIVAMENTE o código SQL, sem markdown, sem explicações.
+        5. Sempre limite a 50 resultados para performance.
         """
         
         chat_completion = await self.client.chat.completions.create(

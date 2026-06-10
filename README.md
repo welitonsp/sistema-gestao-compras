@@ -21,6 +21,7 @@ Checkpoint para evitar retrabalho em fases já encerradas:
 - **AuditLog hardening (H10B):** detalhes de auditoria passam por redação central em `backend/core/security.py`, com allow-list e proteção contra serialização bruta futura.
 - **ClassificacaoCache e autocura tenant-aware (H10A-H10E):** cache, exemplos verificados, importação SEFAZ, importação manual, contexto de categorias de IA e sugestões de autocura respeitam `department_id` quando disponível, com fallback global explícito apenas quando não há tenant.
 - **Chat de auditoria read-only (H10F):** o assistente IA bloqueia intenções de alteração de catálogo e valida de forma deterministica que SQL gerado seja uma única consulta somente leitura.
+- **Chat de auditoria tenant-safe (H10G):** consultas geradas por IA são bloqueadas quando omitirem o `department_id` de usuários não-admin ou tentarem acessar identificadores fiscais/pessoais sensíveis.
 
 Não refazer sem nova motivação técnica:
 
@@ -31,6 +32,7 @@ Não refazer sem nova motivação técnica:
 - não tratar `ClassificacaoCache` como global quando houver `department_id`;
 - não mostrar sugestões de autocura de outro departamento para usuários `MANAGER`;
 - não permitir mutações de catálogo pelo chat de auditoria;
+- não executar SQL do chat para usuários não-admin sem filtro explícito de `department_id`;
 - não alterar fisicamente `Produto`, `ItemNotaFiscal`, `HistoricoPreco`, `descricao_original` ou EAN fiscal para canonização.
 
 Referência arquitetural: [docs/PRODUCT_CANONIZATION_ARCHITECTURE.md](docs/PRODUCT_CANONIZATION_ARCHITECTURE.md).
