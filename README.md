@@ -26,6 +26,7 @@ Checkpoint para evitar retrabalho em fases já encerradas:
 - **Chat de auditoria no frontend (H10I):** botão do Auditor AI só aparece para perfis autorizados e com escopo de departamento quando necessário.
 - **Chat de auditoria com SQL allow-list (H10J):** SQL gerado por IA só executa com tabelas/colunas permitidas, sem `SELECT *` e sem tabelas administrativas/fiscais sensíveis.
 - **Chat de auditoria com saída sanitizada (H10K):** `data_summary`, erro técnico e resposta textual passam por redação defensiva antes de voltar ao frontend.
+- **Chat de auditoria com limite de execução (H10L):** toda consulta validada é executada em subquery com `LIMIT 50` efetivo e timeout controlado.
 
 Não refazer sem nova motivação técnica:
 
@@ -41,6 +42,7 @@ Não refazer sem nova motivação técnica:
 - não renderizar o botão do Auditor AI para perfis sem permissão;
 - não permitir novas tabelas/colunas no chat de auditoria sem atualizar a allow-list e os testes;
 - não retornar dados brutos do chat de auditoria sem passar pela sanitização defensiva;
+- não executar SQL do chat sem wrapper de limite e timeout;
 - não alterar fisicamente `Produto`, `ItemNotaFiscal`, `HistoricoPreco`, `descricao_original` ou EAN fiscal para canonização.
 
 Referência arquitetural: [docs/PRODUCT_CANONIZATION_ARCHITECTURE.md](docs/PRODUCT_CANONIZATION_ARCHITECTURE.md).

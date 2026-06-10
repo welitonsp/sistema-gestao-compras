@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -90,7 +91,8 @@ async def test_audit_chat_executes_single_select_query() -> None:
     assert result["answer"] == "Total encontrado: 12,30."
     assert (
         result["query_used"]
-        == "SELECT 12.30 AS total FROM notas_fiscais WHERE department_id = 'dept-a'"
+        == "SELECT * FROM (SELECT 12.30 AS total FROM notas_fiscais "
+        "WHERE department_id = 'dept-a') AS audit_chat_limited LIMIT 50"
     )
     service.db.execute.assert_awaited_once()
 
@@ -174,6 +176,59 @@ async def test_audit_chat_allows_admin_select_without_department_filter() -> Non
 
     assert result["answer"] == "Resultado administrativo."
     service.db.execute.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_audit_chat_executes_wrapped_limited_query_without_generated_limit() -> None:
+    service = _service()
+
+    async def fake_identify_intent(message: str) -> dict:
+        return {"action": "QUERY"}
+
+    async def fake_generate_sql(message: str, department_id: str | None) -> str:
+        return "SELECT valor_total FROM notas_fiscais WHERE department_id = 'dept-a'"
+
+    async def fake_explain_data(question: str, data: list[dict]) -> str:
+        return "Consulta limitada."
+
+    service._identify_intent = fake_identify_intent
+    service._generate_sql = fake_generate_sql
+    service._explain_data = fake_explain_data
+    service.db.execute.return_value = SimpleNamespace(fetchall=lambda: [])
+
+    result = await service.chat("Liste notas", department_id="dept-a")
+
+    assert (
+        result["query_used"]
+        == "SELECT * FROM (SELECT valor_total FROM notas_fiscais "
+        "WHERE department_id = 'dept-a') AS audit_chat_limited LIMIT 50"
+    )
+    executed = service.db.execute.await_args.args[0]
+    assert str(executed) == result["query_used"]
+
+
+@pytest.mark.anyio
+async def test_audit_chat_timeout_returns_stable_error() -> None:
+    service = _service()
+    service.QUERY_TIMEOUT_SECONDS = 0.001
+
+    async def fake_identify_intent(message: str) -> dict:
+        return {"action": "QUERY"}
+
+    async def fake_generate_sql(message: str, department_id: str | None) -> str:
+        return "SELECT valor_total FROM notas_fiscais WHERE department_id = 'dept-a'"
+
+    async def slow_execute(sql):
+        await asyncio.sleep(1)
+
+    service._identify_intent = fake_identify_intent
+    service._generate_sql = fake_generate_sql
+    service.db.execute = slow_execute
+
+    result = await service.chat("Liste notas", department_id="dept-a")
+
+    assert result["error"] == "query_timeout"
+    assert result["answer"] == "A consulta demorou demais e foi interrompida. Tente uma pergunta mais específica."
 
 
 @pytest.mark.anyio
@@ -367,6 +422,16 @@ def test_sql_allowlist_allows_cte_over_allowed_tables() -> None:
     )
 
     assert AuditChatService._get_allowlist_error(sql) is None
+
+
+def test_execution_sql_wrapper_enforces_outer_limit() -> None:
+    sql = "SELECT valor_total FROM notas_fiscais LIMIT 1000;"
+
+    assert (
+        AuditChatService._limit_sql_for_execution(sql)
+        == "SELECT * FROM (SELECT valor_total FROM notas_fiscais LIMIT 1000) "
+        "AS audit_chat_limited LIMIT 50"
+    )
 
 
 @pytest.mark.parametrize(
