@@ -16,15 +16,43 @@ logger = get_logger("services.chat")
 class AuditChatService:
     """Service to handle natural language queries over the procurement database using Groq."""
 
+    ALLOWED_SQL_COLUMNS = {
+        "departments": {"id", "name"},
+        "fornecedores": {"id", "razao_social", "nome_fantasia"},
+        "produtos": {"ean", "nome_limpo", "marca", "categoria", "unidade"},
+        "notas_fiscais": {
+            "id",
+            "fornecedor_id",
+            "department_id",
+            "numero_nota",
+            "data_emissao",
+            "valor_total",
+            "status",
+        },
+        "itens_notas_fiscais": {
+            "nota_fiscal_id",
+            "ean",
+            "quantidade",
+            "valor_unitario",
+            "valor_total",
+        },
+        "historico_precos": {
+            "ean",
+            "data_compra",
+            "preco_unitario",
+            "fornecedor_id",
+        },
+    }
+
     SCHEMA_CONTEXT = """
     Tabelas disponíveis para consulta:
     
-    1. 'departments': Unidades (id, name). Valores comuns: 'Institucional'.
-    2. 'fornecedores': Empresas vendedoras (id, razao_social). Ex: 'ATACADAO DIA A DIA S.A'.
-    3. 'produtos': Catálogo (ean, nome_limpo, marca, categoria). Categorias: 'LIMPEZA', 'ALIMENTOS BÁSICOS', 'BEBIDAS', etc.
-    4. 'notas_fiscais': Documentos (id, fornecedor_id, department_id, valor_total, data_emissao).
-    5. 'itens_notas_fiscais': Detalhes (nota_fiscal_id, ean, valor_unitario, valor_total, quantidade).
-    6. 'historico_precos': Histórico de preços por EAN.
+    1. 'departments': id, name.
+    2. 'fornecedores': id, razao_social, nome_fantasia.
+    3. 'produtos': ean, nome_limpo, marca, categoria, unidade.
+    4. 'notas_fiscais': id, fornecedor_id, department_id, numero_nota, data_emissao, valor_total, status.
+    5. 'itens_notas_fiscais': nota_fiscal_id, ean, quantidade, valor_unitario, valor_total.
+    6. 'historico_precos': ean, data_compra, preco_unitario, fornecedor_id.
 
     Dados fiscais ou pessoais sensíveis não estão disponíveis para o chat.
     """
@@ -141,6 +169,10 @@ class AuditChatService:
         if cls._contains_sensitive_sql(sql):
             return "sensitive_sql_blocked"
 
+        scope_error = cls._get_allowlist_error(sql)
+        if scope_error:
+            return scope_error
+
         if department_id is not None and not cls._is_tenant_scoped_sql(sql, department_id):
             return "tenant_scope_missing"
 
@@ -157,6 +189,83 @@ class AuditChatService:
             flags=re.IGNORECASE,
         )
         return sensitive_identifiers.search(sql) is not None
+
+    @classmethod
+    def _get_allowlist_error(cls, sql: str) -> str | None:
+        wildcard_pattern = r"\bselect\s+\*|\bselect\b[\s\S]*\b\w+\.\*"
+        if re.search(wildcard_pattern, sql, flags=re.IGNORECASE):
+            return "wildcard_sql_blocked"
+
+        aliases = cls._extract_table_aliases(sql)
+        if not aliases:
+            return "table_not_allowed"
+
+        for table_name in set(aliases.values()):
+            if table_name == "__cte__":
+                continue
+            if table_name not in cls.ALLOWED_SQL_COLUMNS:
+                return "table_not_allowed"
+
+        for qualifier, column in re.findall(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\b", sql):
+            table_name = aliases.get(qualifier.lower())
+            if table_name is None:
+                return "table_not_allowed"
+            if table_name == "__cte__":
+                continue
+            if column.lower() not in cls.ALLOWED_SQL_COLUMNS[table_name]:
+                return "column_not_allowed"
+
+        return None
+
+    @classmethod
+    def _extract_table_aliases(cls, sql: str) -> dict[str, str]:
+        aliases: dict[str, str] = {}
+        cte_names = cls._extract_cte_names(sql)
+        reserved = {
+            "where",
+            "join",
+            "left",
+            "right",
+            "inner",
+            "outer",
+            "full",
+            "cross",
+            "on",
+            "group",
+            "order",
+            "limit",
+            "offset",
+            "having",
+            "union",
+        }
+        table_pattern = re.compile(
+            r"\b(?:from|join)\s+([A-Za-z_][\w.]*)"
+            r"(?:\s+(?:as\s+)?([A-Za-z_]\w*))?",
+            flags=re.IGNORECASE,
+        )
+
+        for raw_table, raw_alias in table_pattern.findall(sql):
+            table_name = raw_table.split(".")[-1].lower()
+            aliases[table_name] = "__cte__" if table_name in cte_names else table_name
+            alias = raw_alias.lower() if raw_alias else ""
+            if alias and alias not in reserved:
+                aliases[alias] = "__cte__" if table_name in cte_names else table_name
+
+        return aliases
+
+    @staticmethod
+    def _extract_cte_names(sql: str) -> set[str]:
+        if not re.match(r"^\s*with\b", sql, flags=re.IGNORECASE):
+            return set()
+
+        return {
+            match.group(1).lower()
+            for match in re.finditer(
+                r"(?:\bwith|,)\s+([A-Za-z_]\w*)\s+as\s*\(",
+                sql,
+                flags=re.IGNORECASE,
+            )
+        }
 
     @staticmethod
     def _is_tenant_scoped_sql(sql: str, department_id: Any) -> bool:
@@ -183,9 +292,11 @@ class AuditChatService:
         REGRAS CRÍTICAS:
         1. Use APENAS SELECT. Nunca use comandos de modificação.
         2. {tenant_constraint}
-        3. Nunca selecione CPF, CNPJ, chave fiscal, QR Code, URL SEFAZ, XML, JSON bruto, payload fiscal ou dados de usuários.
-        4. Retorne EXCLUSIVAMENTE o código SQL, sem markdown, sem explicações.
-        5. Sempre limite a 50 resultados para performance.
+        3. Use somente as tabelas e colunas listadas acima.
+        4. Nunca use SELECT *.
+        5. Nunca selecione CPF, CNPJ, chave fiscal, QR Code, URL SEFAZ, XML, JSON bruto, payload fiscal ou dados de usuários.
+        6. Retorne EXCLUSIVAMENTE o código SQL, sem markdown, sem explicações.
+        7. Sempre limite a 50 resultados para performance.
         """
         
         chat_completion = await self.client.chat.completions.create(
