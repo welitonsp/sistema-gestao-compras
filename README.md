@@ -33,6 +33,7 @@ Checkpoint para evitar retrabalho em fases já encerradas:
 - **Auditoria com detalhes seguros (H10P):** o botão de detalhes abre um modal com metadados e resumo sanitizado, sem renderizar `AuditLog.detalhes` bruto.
 - **Auditoria com filtros server-side (H10Q):** listagem e export CSV de auditoria aceitam filtros por operação e busca textual, preservando isolamento por departamento.
 - **Auditoria com paginação incremental (H10R):** a UI carrega a auditoria em páginas e permite buscar mais registros preservando filtros ativos.
+- **Auditoria com filtro por período (H10S):** listagem e export CSV de auditoria aceitam `start_date`/`end_date`, com validação de intervalo e preservação de filtros ativos.
 
 Não refazer sem nova motivação técnica:
 
@@ -55,6 +56,7 @@ Não refazer sem nova motivação técnica:
 - não renderizar `AuditLog.detalhes` bruto em modal, tabela, export ou chat;
 - não fazer export de auditoria ignorando filtros ativos de operação/busca;
 - não substituir paginação incremental da Auditoria por carregamento ilimitado em memória;
+- não filtrar auditoria por datas usando `created_at` sem validar intervalo inicial/final;
 - não alterar fisicamente `Produto`, `ItemNotaFiscal`, `HistoricoPreco`, `descricao_original` ou EAN fiscal para canonização.
 
 Referência arquitetural: [docs/PRODUCT_CANONIZATION_ARCHITECTURE.md](docs/PRODUCT_CANONIZATION_ARCHITECTURE.md).

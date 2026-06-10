@@ -33,11 +33,15 @@ const buildAuditLogsEndpoint = (base: string, filters: AuditLogFilters = {}, lim
   const params = new URLSearchParams();
   const search = filters.q?.trim();
   const operation = filters.operation?.trim();
+  const startDate = filters.start_date?.trim();
+  const endDate = filters.end_date?.trim();
 
   if (limit) params.set('limit', String(limit));
   if (offset) params.set('offset', String(offset));
   if (search) params.set('q', search);
   if (operation && operation !== 'all') params.set('operation', operation);
+  if (startDate) params.set('start_date', startDate);
+  if (endDate) params.set('end_date', endDate);
 
   const query = params.toString();
   return query ? `${base}?${query}` : base;

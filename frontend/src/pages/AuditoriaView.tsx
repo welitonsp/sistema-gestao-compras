@@ -133,6 +133,8 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [operationFilter, setOperationFilter] = React.useState('all');
+  const [startDate, setStartDate] = React.useState('');
+  const [endDate, setEndDate] = React.useState('');
   const [selectedLog, setSelectedLog] = React.useState<AuditLog | null>(null);
   const didMountFilters = React.useRef(false);
 
@@ -151,14 +153,19 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({
         || (operationFilter === 'security' && log.operacao === SECURITY_OPERATION)
         || log.operacao === operationFilter;
       const matchesSearch = !normalizedSearch || auditSearchText(log).includes(normalizedSearch);
-      return matchesOperation && matchesSearch;
+      const logDate = log.criado_em?.slice(0, 10) || '';
+      const matchesStart = !startDate || logDate >= startDate;
+      const matchesEnd = !endDate || logDate <= endDate;
+      return matchesOperation && matchesSearch && matchesStart && matchesEnd;
     });
-  }, [logs, normalizedSearch, operationFilter]);
-  const hasActiveFilters = Boolean(normalizedSearch) || operationFilter !== 'all';
+  }, [endDate, logs, normalizedSearch, operationFilter, startDate]);
+  const hasActiveFilters = Boolean(normalizedSearch) || operationFilter !== 'all' || Boolean(startDate) || Boolean(endDate);
   const serverFilters = React.useMemo<AuditLogFilters>(() => ({
     q: searchTerm,
     operation: serverOperationFilter(operationFilter),
-  }), [operationFilter, searchTerm]);
+    start_date: startDate,
+    end_date: endDate,
+  }), [endDate, operationFilter, searchTerm, startDate]);
   const selectedLogSummary = selectedLog ? detailsSummary(selectedLog) : null;
   const selectedLogIsBlocked = selectedLog?.operacao === SECURITY_OPERATION;
 
@@ -222,7 +229,7 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({
       {/* Activity Timeline / Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden transition-colors">
         <div className="flex flex-col gap-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_220px] lg:min-w-[560px]">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_220px_160px_160px] xl:min-w-[920px]">
             <label className="relative block">
               <span className="sr-only">Buscar no histórico de auditoria</span>
               <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
@@ -250,6 +257,30 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({
                 ))}
               </select>
             </label>
+
+            <label className="relative block">
+              <span className="sr-only">Data inicial</span>
+              <Calendar size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+              <input
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm font-bold text-slate-600 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:focus:border-indigo-700 dark:focus:ring-indigo-900/30"
+                type="date"
+                max={endDate || undefined}
+              />
+            </label>
+
+            <label className="relative block">
+              <span className="sr-only">Data final</span>
+              <Calendar size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+              <input
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm font-bold text-slate-600 outline-none transition focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:focus:border-indigo-700 dark:focus:ring-indigo-900/30"
+                type="date"
+                min={startDate || undefined}
+              />
+            </label>
           </div>
 
           <div className="flex items-center justify-between gap-3 lg:justify-end">
@@ -262,6 +293,8 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({
                 onClick={() => {
                   setSearchTerm('');
                   setOperationFilter('all');
+                  setStartDate('');
+                  setEndDate('');
                 }}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-900"
               >
