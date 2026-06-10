@@ -273,6 +273,25 @@ async def exportar_audit_logs(
 
 
 @router.get(
+    "/audit-logs/operations",
+    summary="Listar operações de auditoria disponíveis",
+)
+async def listar_audit_log_operations(
+    db: DbSession,
+    user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.AUDITOR, UserRole.MANAGER]))],
+) -> list[str]:
+    """Retorna operações existentes na trilha de auditoria com isolamento de departamento."""
+
+    stmt = select(AuditLog.operacao).distinct().where(AuditLog.operacao.is_not(None))
+    if user.role != UserRole.ADMIN:
+        stmt = stmt.where(AuditLog.department_id == user.department_id)
+
+    stmt = stmt.order_by(AuditLog.operacao)
+    result = await db.execute(stmt)
+    return [operation for operation in result.scalars().all() if operation]
+
+
+@router.get(
     "/audit-logs",
     summary="Listar logs de auditoria",
 )
