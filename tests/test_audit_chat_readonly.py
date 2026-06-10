@@ -176,6 +176,63 @@ async def test_audit_chat_allows_admin_select_without_department_filter() -> Non
     service.db.execute.assert_awaited_once()
 
 
+@pytest.mark.anyio
+async def test_audit_chat_blocks_unknown_table_even_for_select() -> None:
+    service = _service()
+
+    async def fake_identify_intent(message: str) -> dict:
+        return {"action": "QUERY"}
+
+    async def fake_generate_sql(message: str, department_id: str | None) -> str:
+        return "SELECT detalhes FROM audit_logs LIMIT 50"
+
+    service._identify_intent = fake_identify_intent
+    service._generate_sql = fake_generate_sql
+
+    result = await service.chat("Liste auditoria", department_id=None)
+
+    assert result["error"] == "table_not_allowed"
+    service.db.execute.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_audit_chat_blocks_disallowed_qualified_column() -> None:
+    service = _service()
+
+    async def fake_identify_intent(message: str) -> dict:
+        return {"action": "QUERY"}
+
+    async def fake_generate_sql(message: str, department_id: str | None) -> str:
+        return "SELECT p.created_at FROM produtos p LIMIT 50"
+
+    service._identify_intent = fake_identify_intent
+    service._generate_sql = fake_generate_sql
+
+    result = await service.chat("Liste criacao", department_id=None)
+
+    assert result["error"] == "column_not_allowed"
+    service.db.execute.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_audit_chat_blocks_select_wildcard() -> None:
+    service = _service()
+
+    async def fake_identify_intent(message: str) -> dict:
+        return {"action": "QUERY"}
+
+    async def fake_generate_sql(message: str, department_id: str | None) -> str:
+        return "SELECT * FROM produtos LIMIT 50"
+
+    service._identify_intent = fake_identify_intent
+    service._generate_sql = fake_generate_sql
+
+    result = await service.chat("Liste produtos", department_id=None)
+
+    assert result["error"] == "wildcard_sql_blocked"
+    service.db.execute.assert_not_called()
+
+
 def test_read_only_sql_validator_accepts_select_and_with() -> None:
     assert AuditChatService._is_read_only_sql("SELECT * FROM produtos;")
     assert AuditChatService._is_read_only_sql(
@@ -221,3 +278,53 @@ def test_tenant_scope_validator_requires_exact_department_filter() -> None:
         "SELECT valor_total FROM notas_fiscais WHERE department_id = 'dept-b'",
         "dept-a",
     )
+
+
+def test_sql_allowlist_accepts_known_tables_columns_and_aliases() -> None:
+    sql = (
+        "SELECT nf.valor_total, f.razao_social "
+        "FROM notas_fiscais nf "
+        "JOIN fornecedores f ON f.id = nf.fornecedor_id "
+        "WHERE nf.department_id = 'dept-a' "
+        "LIMIT 50"
+    )
+
+    assert AuditChatService._get_allowlist_error(sql) is None
+
+
+def test_sql_allowlist_allows_count_star_aggregate() -> None:
+    sql = (
+        "SELECT COUNT(*) AS total "
+        "FROM notas_fiscais nf "
+        "WHERE nf.department_id = 'dept-a'"
+    )
+
+    assert AuditChatService._get_allowlist_error(sql) is None
+
+
+def test_sql_allowlist_allows_cte_over_allowed_tables() -> None:
+    sql = (
+        "WITH totais AS ("
+        "SELECT nf.department_id, SUM(nf.valor_total) AS total "
+        "FROM notas_fiscais nf "
+        "WHERE nf.department_id = 'dept-a' "
+        "GROUP BY nf.department_id"
+        ") "
+        "SELECT totais.total FROM totais"
+    )
+
+    assert AuditChatService._get_allowlist_error(sql) is None
+
+
+@pytest.mark.parametrize(
+    ("sql", "error"),
+    [
+        ("SELECT * FROM produtos", "wildcard_sql_blocked"),
+        ("SELECT p.* FROM produtos p", "wildcard_sql_blocked"),
+        ("SELECT detalhes FROM audit_logs", "table_not_allowed"),
+        ("SELECT p.created_at FROM produtos p", "column_not_allowed"),
+        ("SELECT u.username FROM users u", "sensitive_sql_blocked"),
+    ],
+)
+def test_sql_safety_validator_blocks_queries_outside_allowlist(sql: str, error: str) -> None:
+    assert AuditChatService._get_sql_safety_error(sql, department_id=None) == error
