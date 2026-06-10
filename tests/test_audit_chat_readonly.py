@@ -233,6 +233,59 @@ async def test_audit_chat_blocks_select_wildcard() -> None:
     service.db.execute.assert_not_called()
 
 
+@pytest.mark.anyio
+async def test_audit_chat_sanitizes_summary_and_explanation_payload() -> None:
+    service = _service()
+
+    async def fake_identify_intent(message: str) -> dict:
+        return {"action": "QUERY"}
+
+    async def fake_generate_sql(message: str, department_id: str | None) -> str:
+        return "SELECT f.razao_social FROM fornecedores f LIMIT 50"
+
+    async def fake_explain_data(question: str, data: list[dict]) -> str:
+        assert data == [
+            {
+                "razao_social": "Fornecedor [redacted]",
+                "valor_total": 10.5,
+            }
+        ]
+        return (
+            "Fornecedor 12.345.678/0001-99 com chave "
+            "12345678901234567890123456789012345678901234"
+        )
+
+    fake_result = SimpleNamespace(
+        fetchall=lambda: [
+            SimpleNamespace(
+                _mapping={
+                    "razao_social": "Fornecedor 12.345.678/0001-99",
+                    "cnpj": "12345678000199",
+                    "chave_acesso": "12345678901234567890123456789012345678901234",
+                    "valor_total": Decimal("10.50"),
+                }
+            )
+        ]
+    )
+
+    service._identify_intent = fake_identify_intent
+    service._generate_sql = fake_generate_sql
+    service._explain_data = fake_explain_data
+    service.db.execute.return_value = fake_result
+
+    result = await service.chat("Liste fornecedores", department_id=None)
+
+    assert result["data_summary"] == [
+        {
+            "razao_social": "Fornecedor [redacted]",
+            "valor_total": 10.5,
+        }
+    ]
+    assert "12.345.678/0001-99" not in result["answer"]
+    assert "12345678901234567890123456789012345678901234" not in result["answer"]
+    assert result["answer"] == "Fornecedor [redacted] com chave [redacted]"
+
+
 def test_read_only_sql_validator_accepts_select_and_with() -> None:
     assert AuditChatService._is_read_only_sql("SELECT * FROM produtos;")
     assert AuditChatService._is_read_only_sql(
@@ -328,3 +381,24 @@ def test_sql_allowlist_allows_cte_over_allowed_tables() -> None:
 )
 def test_sql_safety_validator_blocks_queries_outside_allowlist(sql: str, error: str) -> None:
     assert AuditChatService._get_sql_safety_error(sql, department_id=None) == error
+
+
+def test_chat_row_sanitizer_drops_sensitive_keys_and_redacts_values() -> None:
+    rows = [
+        {
+            "produto": "Item seguro",
+            "cnpj_fornecedor": "12345678000199",
+            "chave_nfe": "12345678901234567890123456789012345678901234",
+            "url_sefaz": "https://nfe.sefaz.go.gov.br/consulta",
+            "observacao": "CPF 123.456.789-00",
+            "total": 12.3,
+        }
+    ]
+
+    assert AuditChatService._sanitize_chat_rows(rows) == [
+        {
+            "produto": "Item seguro",
+            "observacao": "CPF [redacted]",
+            "total": 12.3,
+        }
+    ]
