@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from groq import AsyncGroq
 from core.logger import get_logger
 from backend.core.config import settings
+from backend.core.security import PII_PATTERNS
 
 logger = get_logger("services.chat")
 
@@ -43,6 +44,27 @@ class AuditChatService:
             "fornecedor_id",
         },
     }
+    SENSITIVE_RESULT_KEYS = (
+        "cpf",
+        "cnpj",
+        "chave",
+        "chave_acesso",
+        "qr",
+        "qr_code",
+        "sefaz",
+        "url_sefaz",
+        "xml",
+        "json_bruto",
+        "payload_bruto",
+        "payload_fiscal",
+        "raw_payload",
+        "hashed_password",
+        "email",
+        "access_token",
+        "refresh_token",
+        "descricao_original",
+        "detalhes",
+    )
 
     SCHEMA_CONTEXT = """
     Tabelas disponíveis para consulta:
@@ -122,17 +144,18 @@ class AuditChatService:
             logger.error(f"SQL Execution failed: {e}")
             return {
                 "answer": "Desculpe, tive um problema técnico ao consultar os dados. Pode tentar reformular a pergunta?",
-                "error": str(e),
+                "error": self._redact_chat_text(str(e)),
                 "query_used": sql_query
             }
 
         # 3. Explain result
-        answer = await self._explain_data(message, data)
+        safe_data = self._sanitize_chat_rows(data)
+        answer = self._redact_chat_text(await self._explain_data(message, safe_data))
         
         return {
             "answer": answer,
             "query_used": sql_query,
-            "data_summary": data[:5]
+            "data_summary": safe_data[:5]
         }
 
     @staticmethod
@@ -275,6 +298,45 @@ class AuditChatService:
             flags=re.IGNORECASE,
         )
         return tenant_filter.search(sql) is not None
+
+    @classmethod
+    def _sanitize_chat_rows(cls, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [cls._sanitize_chat_row(row) for row in rows[:20]]
+
+    @classmethod
+    def _sanitize_chat_row(cls, row: dict[str, Any]) -> dict[str, Any]:
+        safe_row: dict[str, Any] = {}
+        for key, value in row.items():
+            if cls._is_sensitive_result_key(key):
+                continue
+            safe_row[key] = cls._sanitize_chat_value(value)
+        return safe_row
+
+    @classmethod
+    def _sanitize_chat_value(cls, value: Any) -> Any:
+        if value is None or isinstance(value, (int, float, bool)):
+            return value
+        if isinstance(value, Decimal):
+            return float(value)
+        if isinstance(value, dict):
+            return cls._sanitize_chat_row(value)
+        if isinstance(value, list):
+            return [cls._sanitize_chat_value(item) for item in value[:20]]
+        return cls._redact_chat_text(str(value))
+
+    @classmethod
+    def _is_sensitive_result_key(cls, key: str) -> bool:
+        lowered_key = key.lower()
+        return any(term in lowered_key for term in cls.SENSITIVE_RESULT_KEYS)
+
+    @staticmethod
+    def _redact_chat_text(text: str) -> str:
+        redacted = text
+        for pattern in PII_PATTERNS:
+            redacted = pattern.sub("[redacted]", redacted)
+        if len(redacted) > 500:
+            return redacted[:497] + "..."
+        return redacted
 
     async def _generate_sql(self, prompt: str, department_id: Any | None) -> str:
         tenant_constraint = (
