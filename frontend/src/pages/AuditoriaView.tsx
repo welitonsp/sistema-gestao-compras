@@ -10,6 +10,7 @@ import { Skeleton } from '../components/Skeleton';
 
 interface AuditoriaViewProps {
   logs: AuditLog[] | null;
+  operations?: string[];
   onExport?: (filters?: AuditLogFilters) => void;
   onFiltersChange?: (filters: AuditLogFilters) => void;
   onLoadMore?: (filters: AuditLogFilters) => void;
@@ -125,6 +126,7 @@ const serverOperationFilter = (operationFilter: string): string | undefined => {
 
 export const AuditoriaView: React.FC<AuditoriaViewProps> = ({
   logs,
+  operations = [],
   onExport,
   onFiltersChange,
   onLoadMore,
@@ -139,10 +141,13 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({
   const didMountFilters = React.useRef(false);
 
   const operationOptions = React.useMemo(() => (
-    Array.from(new Set((logs || []).map((log) => log.operacao)))
+    Array.from(new Set([
+      ...operations,
+      ...(logs || []).map((log) => log.operacao),
+    ]))
       .filter((operation) => operation !== SECURITY_OPERATION)
       .sort()
-  ), [logs]);
+  ), [logs, operations]);
 
   const normalizedSearch = React.useMemo(() => normalizeSearch(searchTerm), [searchTerm]);
   const filteredLogs = React.useMemo(() => {

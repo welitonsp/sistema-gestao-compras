@@ -521,3 +521,39 @@ async def test_audit_logs_filtra_por_periodo_e_valida_intervalo(client):
     assert export.status_code == 200
     assert "audit-date-h10s-visible" in export.text
     assert "audit-date-h10s-old" not in export.text
+
+
+@pytest.mark.asyncio
+async def test_audit_log_operations_respeita_isolamento_departamento(client):
+    other_dept_id = uuid4()
+    async with SessionLocal() as db:
+        db.add_all(
+            [
+                AuditLog(
+                    department_id=TEST_DEPT_ID,
+                    usuario="audit-ops-h10t",
+                    operacao="H10T_VISIBLE_OPERATION",
+                    entidade="AuditLog",
+                    entidade_id="audit-ops-h10t-visible",
+                    detalhes="ops-safe",
+                    ip_origem="127.0.0.1",
+                ),
+                AuditLog(
+                    department_id=other_dept_id,
+                    usuario="audit-ops-h10t-other",
+                    operacao="H10T_OTHER_DEPT_OPERATION",
+                    entidade="AuditLog",
+                    entidade_id="audit-ops-h10t-other",
+                    detalhes="ops-safe",
+                    ip_origem="127.0.0.2",
+                ),
+            ]
+        )
+        await db.commit()
+
+    response = await client.get("/api/v1/dashboard/audit-logs/operations")
+
+    assert response.status_code == 200
+    operations = response.json()
+    assert "H10T_VISIBLE_OPERATION" in operations
+    assert "H10T_OTHER_DEPT_OPERATION" not in operations

@@ -53,6 +53,7 @@ export default function App() {
   const [data, setData] = useState<DashboardResumo | null>(null);
   const [alerts, setAlertas] = useState<AlertaPreco[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[] | null>(null);
+  const [auditOperations, setAuditOperations] = useState<string[]>([]);
   const [auditHasMore, setAuditHasMore] = useState(false);
   const [auditLoadingMore, setAuditLoadingMore] = useState(false);
   const [produtos, setProdutos] = useState<Produto[]>([]);
@@ -64,16 +65,18 @@ export default function App() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [resumo, alertas, logs, prods] = await Promise.all([
+      const [resumo, alertas, logs, operations, prods] = await Promise.all([
         apiClient.get<DashboardResumo>('/dashboard/resumo'),
         apiClient.get<{ alertas: AlertaPreco[] }>('/dashboard/alertas'),
         apiClient.get<AuditLog[]>(buildAuditLogsEndpoint('/dashboard/audit-logs', {}, AUDIT_LOG_PAGE_SIZE)),
+        apiClient.get<string[]>('/dashboard/audit-logs/operations'),
         apiClient.get<Produto[]>('/produtos'),
       ]);
       
       setData(resumo);
       setAlertas(alertas.alertas);
       setAuditLogs(logs);
+      setAuditOperations(operations);
       setAuditHasMore(logs.length === AUDIT_LOG_PAGE_SIZE);
       setProdutos(prods);
       
@@ -311,6 +314,7 @@ export default function App() {
               {activeTab === 'auditoria' && (
                 <AuditoriaView
                   logs={auditLogs}
+                  operations={auditOperations}
                   onExport={handleExportAudit}
                   onFiltersChange={fetchAuditLogs}
                   onLoadMore={loadMoreAuditLogs}
