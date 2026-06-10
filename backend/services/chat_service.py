@@ -1,6 +1,7 @@
 """Professional AI Chat Service for natural language procurement analysis."""
 
 from __future__ import annotations
+import asyncio
 import json
 import re
 from decimal import Decimal
@@ -16,6 +17,9 @@ logger = get_logger("services.chat")
 
 class AuditChatService:
     """Service to handle natural language queries over the procurement database using Groq."""
+
+    MAX_QUERY_ROWS = 50
+    QUERY_TIMEOUT_SECONDS = 10
 
     ALLOWED_SQL_COLUMNS = {
         "departments": {"id", "name"},
@@ -129,9 +133,14 @@ class AuditChatService:
                 "error": safety_error,
             }
 
+        execution_sql = self._limit_sql_for_execution(sql_query)
+
         # 2. Execute SQL (ReadOnly)
         try:
-            result = await self.db.execute(text(sql_query))
+            result = await asyncio.wait_for(
+                self.db.execute(text(execution_sql)),
+                timeout=self.QUERY_TIMEOUT_SECONDS,
+            )
             # Converte Decimal para float para serialização JSON
             data = []
             for row in result.fetchall():
@@ -140,12 +149,19 @@ class AuditChatService:
                     if isinstance(v, Decimal):
                         row_dict[k] = float(v)
                 data.append(row_dict)
+        except asyncio.TimeoutError:
+            logger.warning("Audit chat SQL execution timed out.")
+            return {
+                "answer": "A consulta demorou demais e foi interrompida. Tente uma pergunta mais específica.",
+                "error": "query_timeout",
+                "query_used": execution_sql,
+            }
         except Exception as e:
             logger.error(f"SQL Execution failed: {e}")
             return {
                 "answer": "Desculpe, tive um problema técnico ao consultar os dados. Pode tentar reformular a pergunta?",
                 "error": self._redact_chat_text(str(e)),
-                "query_used": sql_query
+                "query_used": execution_sql
             }
 
         # 3. Explain result
@@ -154,7 +170,7 @@ class AuditChatService:
         
         return {
             "answer": answer,
-            "query_used": sql_query,
+            "query_used": execution_sql,
             "data_summary": safe_data[:5]
         }
 
@@ -298,6 +314,11 @@ class AuditChatService:
             flags=re.IGNORECASE,
         )
         return tenant_filter.search(sql) is not None
+
+    @classmethod
+    def _limit_sql_for_execution(cls, sql: str) -> str:
+        clean_sql = sql.strip().rstrip(";")
+        return f"SELECT * FROM ({clean_sql}) AS audit_chat_limited LIMIT {cls.MAX_QUERY_ROWS}"
 
     @classmethod
     def _sanitize_chat_rows(cls, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
