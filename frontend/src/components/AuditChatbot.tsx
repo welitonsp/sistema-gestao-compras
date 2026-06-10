@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, MessageSquare, X, Minus, Bot, User, Loader2, Database, Sparkles } from 'lucide-react';
-import { apiClient } from '../api/client';
+import { ApiError, apiClient } from '../api/client';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -43,7 +43,10 @@ export const AuditChatbot: React.FC = () => {
         query: data.query_used
       }]);
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Desculpe, tive um problema ao processar sua pergunta.' }]);
+      const content = err instanceof ApiError && err.status === 403
+        ? err.message
+        : 'Desculpe, tive um problema ao processar sua pergunta.';
+      setMessages(prev => [...prev, { role: 'assistant', content }]);
     } finally {
       setLoading(false);
     }
