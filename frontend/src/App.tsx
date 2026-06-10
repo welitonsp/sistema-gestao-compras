@@ -9,7 +9,7 @@ import { apiClient } from './api/client';
 import { useAuth } from './api/authContext';
 import Login from './Login';
 import { 
-  DashboardResumo, AlertaPreco, AuditLog, Produto, 
+  DashboardResumo, AlertaPreco, AuditLog, AuditLogFilters, Produto,
   ForecastInfo, AnomaliaEstatistica, User, Department 
 } from './types/api';
 
@@ -28,12 +28,25 @@ const ImportarNotaView = lazy(() => import('./pages/ImportarNotaView').then(m =>
 
 type Tab = 'dashboard' | 'importar' | 'auditoria' | 'produtos' | 'gestao' | 'insights';
 
+const buildAuditLogsEndpoint = (base: string, filters: AuditLogFilters = {}, limit?: number) => {
+  const params = new URLSearchParams();
+  const search = filters.q?.trim();
+  const operation = filters.operation?.trim();
+
+  if (limit) params.set('limit', String(limit));
+  if (search) params.set('q', search);
+  if (operation && operation !== 'all') params.set('operation', operation);
+
+  const query = params.toString();
+  return query ? `${base}?${query}` : base;
+};
+
 export default function App() {
   const { isAuthenticated, logout, user: authUser } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [data, setData] = useState<DashboardResumo | null>(null);
   const [alerts, setAlertas] = useState<AlertaPreco[]>([]);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[] | null>(null);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -46,7 +59,7 @@ export default function App() {
       const [resumo, alertas, logs, prods] = await Promise.all([
         apiClient.get<DashboardResumo>('/dashboard/resumo'),
         apiClient.get<{ alertas: AlertaPreco[] }>('/dashboard/alertas'),
-        apiClient.get<AuditLog[]>('/dashboard/audit-logs'),
+        apiClient.get<AuditLog[]>(buildAuditLogsEndpoint('/dashboard/audit-logs', {}, 100)),
         apiClient.get<Produto[]>('/produtos'),
       ]);
       
@@ -71,6 +84,20 @@ export default function App() {
       setLoading(false);
     }
   }, [authUser]);
+
+  const fetchAuditLogs = useCallback(async (filters: AuditLogFilters = {}) => {
+    try {
+      setAuditLogs(null);
+      const logs = await apiClient.get<AuditLog[]>(
+        buildAuditLogsEndpoint('/dashboard/audit-logs', filters, 100)
+      );
+      setAuditLogs(logs);
+    } catch (err) {
+      console.error(err);
+      setStatusMessage('Falha ao filtrar auditoria. Verifique sua conexão.');
+      setTimeout(() => setStatusMessage(''), 5000);
+    }
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -103,8 +130,8 @@ export default function App() {
     }
   }, [isAuthenticated, fetchData]);
 
-  const handleExportAudit = () => {
-    window.location.href = '/api/v1/dashboard/audit-logs/export';
+  const handleExportAudit = (filters: AuditLogFilters = {}) => {
+    window.location.href = `/api/v1${buildAuditLogsEndpoint('/dashboard/audit-logs/export', filters)}`;
   };
 
   const handleExportProdutos = () => {
@@ -252,7 +279,13 @@ export default function App() {
               {activeTab === 'dashboard' && <DashboardView data={data} alerts={alerts} produtosCount={produtos.length} />}
               {activeTab === 'insights' && <InsightsView />}
               {activeTab === 'importar' && <ImportarNotaView onImported={fetchData} />}
-              {activeTab === 'auditoria' && <AuditoriaView logs={auditLogs} onExport={handleExportAudit} />}
+              {activeTab === 'auditoria' && (
+                <AuditoriaView
+                  logs={auditLogs}
+                  onExport={handleExportAudit}
+                  onFiltersChange={fetchAuditLogs}
+                />
+              )}
               {activeTab === 'produtos' && <CatalogoView produtos={produtos} onRefresh={fetchData} onExport={handleExportProdutos} />}
               {activeTab === 'gestao' && <GestaoView users={users} departments={departments} onRefresh={fetchData} />}
             </div>

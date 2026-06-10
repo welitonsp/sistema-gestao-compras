@@ -5,11 +5,13 @@ import {
   Globe, RotateCcw, ShieldAlert, X
 } from 'lucide-react';
 import { AuditLog } from '../types/api';
+import type { AuditLogFilters } from '../types/api';
 import { Skeleton } from '../components/Skeleton';
 
 interface AuditoriaViewProps {
   logs: AuditLog[] | null;
-  onExport?: () => void;
+  onExport?: (filters?: AuditLogFilters) => void;
+  onFiltersChange?: (filters: AuditLogFilters) => void;
 }
 
 const SECURITY_OPERATION = 'AUDIT_CHAT_BLOCKED';
@@ -112,10 +114,17 @@ const auditSearchText = (log: AuditLog): string => (
     .toLocaleLowerCase('pt-BR')
 );
 
-export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) => {
+const serverOperationFilter = (operationFilter: string): string | undefined => {
+  if (operationFilter === 'all') return undefined;
+  if (operationFilter === 'security') return SECURITY_OPERATION;
+  return operationFilter;
+};
+
+export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport, onFiltersChange }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [operationFilter, setOperationFilter] = React.useState('all');
   const [selectedLog, setSelectedLog] = React.useState<AuditLog | null>(null);
+  const didMountFilters = React.useRef(false);
 
   const operationOptions = React.useMemo(() => (
     Array.from(new Set((logs || []).map((log) => log.operacao)))
@@ -136,8 +145,25 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) 
     });
   }, [logs, normalizedSearch, operationFilter]);
   const hasActiveFilters = Boolean(normalizedSearch) || operationFilter !== 'all';
+  const serverFilters = React.useMemo<AuditLogFilters>(() => ({
+    q: searchTerm,
+    operation: serverOperationFilter(operationFilter),
+  }), [operationFilter, searchTerm]);
   const selectedLogSummary = selectedLog ? detailsSummary(selectedLog) : null;
   const selectedLogIsBlocked = selectedLog?.operacao === SECURITY_OPERATION;
+
+  React.useEffect(() => {
+    if (!onFiltersChange) return;
+    if (!didMountFilters.current) {
+      didMountFilters.current = true;
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      onFiltersChange(serverFilters);
+    }, 350);
+    return () => window.clearTimeout(timeout);
+  }, [onFiltersChange, serverFilters]);
 
   const handleShare = async () => {
     if (navigator.share) {
@@ -174,7 +200,7 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) 
           </button>
 
           <button 
-            onClick={onExport}
+            onClick={() => onExport?.(serverFilters)}
             className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 rounded-xl text-xs font-bold text-white hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
             aria-label="Exportar histórico em formato CSV"
           >

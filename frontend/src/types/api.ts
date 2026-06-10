@@ -433,6 +433,11 @@ export interface AuditLog {
   criado_em: string;
 }
 
+export interface AuditLogFilters {
+  q?: string;
+  operation?: string;
+}
+
 export interface Produto {
   ean: string;
   nome_limpo: string;

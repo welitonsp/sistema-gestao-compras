@@ -18,7 +18,7 @@ from backend.schemas.dashboard import (
     SupplierDrilldownResponse,
 )
 from backend.services.insights_processor import PriceInsightsService
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, or_
 from backend.api.dependencies import DbSession, CurrentUser, RoleChecker
 from backend.models.compras import (
     HistoricoPreco,
@@ -35,6 +35,7 @@ from fastapi.responses import StreamingResponse
 router = APIRouter(prefix="/dashboard", tags=["Dashboard & Insights"])
 
 ACTIVE_INVOICE_STATUS = "active"
+AUDIT_LOG_SEARCH_MAX_LENGTH = 120
 
 
 class ExportDataset(str, Enum):
@@ -42,6 +43,48 @@ class ExportDataset(str, Enum):
     top_fornecedores = "top_fornecedores"
     evolucao_mensal = "evolucao_mensal"
     alertas = "alertas"
+
+
+def _normalize_audit_filter(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _apply_audit_log_filters(
+    stmt,
+    user: User,
+    operation: str | None = None,
+    q: str | None = None,
+):
+    """Apply tenant, operation and safe text filters to audit log queries."""
+    if user.role != UserRole.ADMIN:
+        stmt = stmt.where(AuditLog.department_id == user.department_id)
+
+    normalized_operation = _normalize_audit_filter(operation)
+    if normalized_operation:
+        stmt = stmt.where(AuditLog.operacao == normalized_operation)
+
+    normalized_query = _normalize_audit_filter(q)
+    if normalized_query:
+        like = f"%{_escape_like(normalized_query)}%"
+        stmt = stmt.where(
+            or_(
+                AuditLog.usuario.ilike(like, escape="\\"),
+                AuditLog.operacao.ilike(like, escape="\\"),
+                AuditLog.entidade.ilike(like, escape="\\"),
+                AuditLog.entidade_id.ilike(like, escape="\\"),
+                AuditLog.detalhes.ilike(like, escape="\\"),
+                AuditLog.ip_origem.ilike(like, escape="\\"),
+            )
+        )
+
+    return stmt
 
 
 @router.get(
@@ -159,6 +202,8 @@ async def stream_notifications(user: CurrentUser):
 async def exportar_audit_logs(
     db: DbSession,
     user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.AUDITOR, UserRole.MANAGER]))],
+    operation: str | None = Query(None, max_length=50, description="Filtrar por operação"),
+    q: str | None = Query(None, max_length=AUDIT_LOG_SEARCH_MAX_LENGTH, description="Busca textual segura"),
 ) -> StreamingResponse:
     """Exporta a trilha de auditoria via streaming para suportar grandes volumes (Zero-OOM)."""
 
@@ -178,9 +223,12 @@ async def exportar_audit_logs(
         )
 
         # Stream do Banco via Async iterator do SQLAlchemy
-        stmt = select(AuditLog)
-        if user.role != UserRole.ADMIN:
-            stmt = stmt.where(AuditLog.department_id == user.department_id)
+        stmt = _apply_audit_log_filters(
+            select(AuditLog),
+            user,
+            operation=operation,
+            q=q,
+        )
         stmt = stmt.order_by(desc(AuditLog.created_at))
         result = await db.stream(stmt)  # Uso de stream() para carregar em chunks do DB
 
@@ -214,17 +262,19 @@ async def exportar_audit_logs(
 async def listar_audit_logs(
     db: DbSession,
     user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.AUDITOR, UserRole.MANAGER]))],
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    operation: str | None = Query(None, max_length=50, description="Filtrar por operação"),
+    q: str | None = Query(None, max_length=AUDIT_LOG_SEARCH_MAX_LENGTH, description="Busca textual segura"),
 ) -> list[dict[str, Any]]:
     """Retorna a trilha de auditoria do sistema com isolamento de departamento."""
 
-    stmt = select(AuditLog)
-
-    # RLS: Se não for ADMIN global, filtra pelo departamento do usuário
-    if user.role != UserRole.ADMIN:
-        stmt = stmt.where(AuditLog.department_id == user.department_id)
-
+    stmt = _apply_audit_log_filters(
+        select(AuditLog),
+        user,
+        operation=operation,
+        q=q,
+    )
     stmt = stmt.order_by(desc(AuditLog.created_at)).limit(limit).offset(offset)
     result = await db.execute(stmt)
     logs = result.scalars().all()

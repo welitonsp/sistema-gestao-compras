@@ -31,6 +31,7 @@ Checkpoint para evitar retrabalho em fases já encerradas:
 - **Auditoria visual de bloqueios do chat (H10N):** a tela de Auditoria exibe `AUDIT_CHAT_BLOCKED` como bloqueio de segurança, com resumo sanitizado e sem payload bruto.
 - **Auditoria com filtros operacionais (H10O):** a tela de Auditoria permite busca local e filtro por operação, incluindo atalho para bloqueios do chat, sem expor detalhes brutos.
 - **Auditoria com detalhes seguros (H10P):** o botão de detalhes abre um modal com metadados e resumo sanitizado, sem renderizar `AuditLog.detalhes` bruto.
+- **Auditoria com filtros server-side (H10Q):** listagem e export CSV de auditoria aceitam filtros por operação e busca textual, preservando isolamento por departamento.
 
 Não refazer sem nova motivação técnica:
 
@@ -51,6 +52,7 @@ Não refazer sem nova motivação técnica:
 - não exibir bloqueios do chat na Auditoria como sucesso operacional;
 - não remover filtros locais da Auditoria sem substituir por alternativa equivalente e segura;
 - não renderizar `AuditLog.detalhes` bruto em modal, tabela, export ou chat;
+- não fazer export de auditoria ignorando filtros ativos de operação/busca;
 - não alterar fisicamente `Produto`, `ItemNotaFiscal`, `HistoricoPreco`, `descricao_original` ou EAN fiscal para canonização.
 
 Referência arquitetural: [docs/PRODUCT_CANONIZATION_ARCHITECTURE.md](docs/PRODUCT_CANONIZATION_ARCHITECTURE.md).
