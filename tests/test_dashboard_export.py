@@ -1,5 +1,5 @@
 import pytest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from sqlalchemy import delete
 from backend.models.compras import (
@@ -472,3 +472,52 @@ async def test_list_audit_logs_respeita_limit_offset(client):
     assert len(first_logs) == 1
     assert len(second_logs) == 1
     assert first_logs[0]["id"] != second_logs[0]["id"]
+
+
+@pytest.mark.asyncio
+async def test_audit_logs_filtra_por_periodo_e_valida_intervalo(client):
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    async with SessionLocal() as db:
+        older = AuditLog(
+            department_id=TEST_DEPT_ID,
+            usuario="audit-date-h10s-old",
+            operacao="LOGIN",
+            entidade="Session",
+            entidade_id="audit-date-h10s-old",
+            detalhes="date-filter-safe",
+            ip_origem="127.0.0.1",
+        )
+        visible = AuditLog(
+            department_id=TEST_DEPT_ID,
+            usuario="audit-date-h10s-visible",
+            operacao="LOGIN",
+            entidade="Session",
+            entidade_id="audit-date-h10s-visible",
+            detalhes="date-filter-safe",
+            ip_origem="127.0.0.1",
+        )
+        db.add_all([older, visible])
+        await db.flush()
+        older.created_at = datetime.combine(yesterday, datetime.min.time())
+        visible.created_at = datetime.combine(today, datetime.min.time())
+        await db.commit()
+
+    response = await client.get(
+        f"/api/v1/dashboard/audit-logs?q=date-filter-safe&start_date={today}&end_date={today}"
+    )
+    invalid = await client.get(
+        f"/api/v1/dashboard/audit-logs?start_date={today}&end_date={yesterday}"
+    )
+    export = await client.get(
+        f"/api/v1/dashboard/audit-logs/export?q=date-filter-safe&start_date={today}&end_date={today}"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["entidade_id"] == "audit-date-h10s-visible"
+    assert invalid.status_code == 400
+    assert export.status_code == 200
+    assert "audit-date-h10s-visible" in export.text
+    assert "audit-date-h10s-old" not in export.text

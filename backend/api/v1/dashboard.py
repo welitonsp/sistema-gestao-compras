@@ -1,7 +1,7 @@
 """Routes for dashboard and price insights."""
 
 from enum import Enum
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Any, Annotated
 from fastapi import APIRouter, HTTPException, Query, status, Depends
 from fastapi.responses import StreamingResponse
@@ -61,8 +61,16 @@ def _apply_audit_log_filters(
     user: User,
     operation: str | None = None,
     q: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
 ):
     """Apply tenant, operation and safe text filters to audit log queries."""
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Data inicial nao pode ser maior que a data final.",
+        )
+
     if user.role != UserRole.ADMIN:
         stmt = stmt.where(AuditLog.department_id == user.department_id)
 
@@ -83,6 +91,11 @@ def _apply_audit_log_filters(
                 AuditLog.ip_origem.ilike(like, escape="\\"),
             )
         )
+
+    if start_date:
+        stmt = stmt.where(AuditLog.created_at >= datetime.combine(start_date, time.min))
+    if end_date:
+        stmt = stmt.where(AuditLog.created_at <= datetime.combine(end_date, time.max))
 
     return stmt
 
@@ -204,6 +217,8 @@ async def exportar_audit_logs(
     user: Annotated[User, Depends(RoleChecker([UserRole.ADMIN, UserRole.AUDITOR, UserRole.MANAGER]))],
     operation: str | None = Query(None, max_length=50, description="Filtrar por operação"),
     q: str | None = Query(None, max_length=AUDIT_LOG_SEARCH_MAX_LENGTH, description="Busca textual segura"),
+    start_date: date | None = Query(None, description="Data inicial"),
+    end_date: date | None = Query(None, description="Data final"),
 ) -> StreamingResponse:
     """Exporta a trilha de auditoria via streaming para suportar grandes volumes (Zero-OOM)."""
 
@@ -228,6 +243,8 @@ async def exportar_audit_logs(
             user,
             operation=operation,
             q=q,
+            start_date=start_date,
+            end_date=end_date,
         )
         stmt = stmt.order_by(desc(AuditLog.created_at))
         result = await db.stream(stmt)  # Uso de stream() para carregar em chunks do DB
@@ -266,6 +283,8 @@ async def listar_audit_logs(
     offset: int = Query(0, ge=0),
     operation: str | None = Query(None, max_length=50, description="Filtrar por operação"),
     q: str | None = Query(None, max_length=AUDIT_LOG_SEARCH_MAX_LENGTH, description="Busca textual segura"),
+    start_date: date | None = Query(None, description="Data inicial"),
+    end_date: date | None = Query(None, description="Data final"),
 ) -> list[dict[str, Any]]:
     """Retorna a trilha de auditoria do sistema com isolamento de departamento."""
 
@@ -274,6 +293,8 @@ async def listar_audit_logs(
         user,
         operation=operation,
         q=q,
+        start_date=start_date,
+        end_date=end_date,
     )
     stmt = stmt.order_by(desc(AuditLog.created_at)).limit(limit).offset(offset)
     result = await db.execute(stmt)

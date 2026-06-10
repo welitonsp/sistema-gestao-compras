@@ -436,6 +436,8 @@ export interface AuditLog {
 export interface AuditLogFilters {
   q?: string;
   operation?: string;
+  start_date?: string;
+  end_date?: string;
 }
 
 export interface Produto {
