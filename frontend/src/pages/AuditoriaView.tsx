@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   FileText, ShieldCheck, User as UserIcon, Calendar, 
   ArrowRight, Search, Filter, Download, MoreHorizontal,
-  Globe, RotateCcw, ShieldAlert
+  Globe, RotateCcw, ShieldAlert, X
 } from 'lucide-react';
 import { AuditLog } from '../types/api';
 import { Skeleton } from '../components/Skeleton';
@@ -115,6 +115,7 @@ const auditSearchText = (log: AuditLog): string => (
 export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [operationFilter, setOperationFilter] = React.useState('all');
+  const [selectedLog, setSelectedLog] = React.useState<AuditLog | null>(null);
 
   const operationOptions = React.useMemo(() => (
     Array.from(new Set((logs || []).map((log) => log.operacao)))
@@ -135,6 +136,8 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) 
     });
   }, [logs, normalizedSearch, operationFilter]);
   const hasActiveFilters = Boolean(normalizedSearch) || operationFilter !== 'all';
+  const selectedLogSummary = selectedLog ? detailsSummary(selectedLog) : null;
+  const selectedLogIsBlocked = selectedLog?.operacao === SECURITY_OPERATION;
 
   const handleShare = async () => {
     if (navigator.share) {
@@ -326,6 +329,8 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) 
                     </td>
                     <td className="px-8 py-5 text-right">
                       <button 
+                        type="button"
+                        onClick={() => setSelectedLog(log)}
                         className="p-2 text-slate-300 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all opacity-0 group-hover:opacity-100"
                         aria-label="Ver detalhes do log"
                       >
@@ -340,6 +345,76 @@ export const AuditoriaView: React.FC<AuditoriaViewProps> = ({ logs, onExport }) 
           </table>
         </div>
       </div>
+
+      {selectedLog && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 px-4 py-6 backdrop-blur-sm sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="audit-log-detail-title"
+        >
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5 dark:border-slate-800">
+              <div className="space-y-2">
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-tight ${operationClass(selectedLog.operacao)}`}>
+                  {selectedLog.operacao === 'PRODUCT_CANONIZATION_REVERTED' && <RotateCcw size={12} aria-hidden="true" />}
+                  {selectedLogIsBlocked && <ShieldAlert size={12} aria-hidden="true" />}
+                  {operationLabel(selectedLog.operacao)}
+                </span>
+                <h3 id="audit-log-detail-title" className="text-lg font-bold text-slate-800 dark:text-slate-100">
+                  Detalhes do registro
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedLog(null)}
+                className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                aria-label="Fechar detalhes do log"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid gap-4 px-6 py-5 sm:grid-cols-2">
+              <div>
+                <p className="text-[11px] font-bold uppercase text-slate-400 dark:text-slate-500">Data e Hora</p>
+                <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  {new Date(selectedLog.criado_em || Date.now()).toLocaleString('pt-BR')}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase text-slate-400 dark:text-slate-500">Status</p>
+                <p className={`mt-1 text-sm font-bold ${selectedLogIsBlocked ? 'text-rose-600 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'}`}>
+                  {selectedLogIsBlocked ? 'Bloqueado' : 'Sucesso'}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase text-slate-400 dark:text-slate-500">Usuário</p>
+                <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{selectedLog.usuario}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase text-slate-400 dark:text-slate-500">Origem</p>
+                <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{selectedLog.ip_origem || 'Pessoal'}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase text-slate-400 dark:text-slate-500">Entidade</p>
+                <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{selectedLog.entidade}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase text-slate-400 dark:text-slate-500">Item</p>
+                <p className="mt-1 break-all font-mono text-xs font-semibold text-slate-500 dark:text-slate-400">{selectedLog.entidade_id}</p>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 px-6 py-5 dark:border-slate-800">
+              <p className="text-[11px] font-bold uppercase text-slate-400 dark:text-slate-500">Resumo seguro</p>
+              <p className="mt-2 rounded-xl bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600 dark:bg-slate-950 dark:text-slate-300">
+                {selectedLogSummary || 'Sem resumo adicional para este registro.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
