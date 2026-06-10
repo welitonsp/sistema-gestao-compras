@@ -27,6 +27,7 @@ Checkpoint para evitar retrabalho em fases já encerradas:
 - **Chat de auditoria com SQL allow-list (H10J):** SQL gerado por IA só executa com tabelas/colunas permitidas, sem `SELECT *` e sem tabelas administrativas/fiscais sensíveis.
 - **Chat de auditoria com saída sanitizada (H10K):** `data_summary`, erro técnico e resposta textual passam por redação defensiva antes de voltar ao frontend.
 - **Chat de auditoria com limite de execução (H10L):** toda consulta validada é executada em subquery com `LIMIT 50` efetivo e timeout controlado.
+- **Chat de auditoria com rastreabilidade de bloqueios (H10M):** tentativas bloqueadas geram `AUDIT_CHAT_BLOCKED` sanitizado, sem mensagem bruta do usuário nem SQL bruto.
 
 Não refazer sem nova motivação técnica:
 
@@ -43,6 +44,7 @@ Não refazer sem nova motivação técnica:
 - não permitir novas tabelas/colunas no chat de auditoria sem atualizar a allow-list e os testes;
 - não retornar dados brutos do chat de auditoria sem passar pela sanitização defensiva;
 - não executar SQL do chat sem wrapper de limite e timeout;
+- não registrar bloqueios do chat com payload/mensagem/SQL bruto;
 - não alterar fisicamente `Produto`, `ItemNotaFiscal`, `HistoricoPreco`, `descricao_original` ou EAN fiscal para canonização.
 
 Referência arquitetural: [docs/PRODUCT_CANONIZATION_ARCHITECTURE.md](docs/PRODUCT_CANONIZATION_ARCHITECTURE.md).
