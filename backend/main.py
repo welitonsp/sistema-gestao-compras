@@ -23,6 +23,7 @@ from backend.api.v1.produtos import router as produtos_router
 from backend.api.v1.users import router as users_router
 from backend.api.v1.webhooks import router as webhooks_router
 from backend.api.v1.chat import router as chat_router
+from backend.api.v1.agent import router as agent_router
 from backend.api.v1.integrations import router as integrations_router
 from backend.core.config import settings
 from core.logger import get_logger
@@ -154,6 +155,7 @@ api_v1_router.include_router(produtos_router)
 api_v1_router.include_router(users_router)
 api_v1_router.include_router(webhooks_router)
 api_v1_router.include_router(chat_router)
+api_v1_router.include_router(agent_router)
 api_v1_router.include_router(integrations_router)
 def create_application() -> FastAPI:
     """Create and configure the FastAPI application instance."""
